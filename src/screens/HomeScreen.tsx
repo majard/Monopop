@@ -148,7 +148,7 @@ export default function HomeScreen() {
             Importar
           </Button>
 
-          <SortMenu setSortOrder={handleSortOrderChange} sortOrder={sortOrder} />
+          <SortMenu setSortOrder={handleSortOrderChange} />
         </View>
       </View>
       <DraggableFlatList

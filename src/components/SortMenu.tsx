@@ -5,11 +5,10 @@ import { SortOrder } from '../utils/sortUtils';
 import { createHomeScreenStyles } from '../styles/HomeScreenStyles';
 
 interface SortMenuProps {
-  sortOrder: SortOrder;
   setSortOrder: (order: SortOrder) => void;
 }
 
-export const SortMenu = ({ sortOrder, setSortOrder }: SortMenuProps) => {
+export const SortMenu = ({ setSortOrder }: SortMenuProps) => {
   const [menuVisible, setMenuVisible] = useState(false);
   const openMenu = () => setMenuVisible(true);
   const closeMenu = () => setMenuVisible(false);
