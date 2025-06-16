@@ -4,7 +4,6 @@ import * as Clipboard from "expo-clipboard";
 import {
   Button,
   useTheme,
-  FAB,
 } from "react-native-paper";
 import {
   useNavigation,
@@ -31,6 +30,7 @@ import { useList } from "../hooks/useList";
 import { SortMenu } from "../components/SortMenu";
 import { ProductCard } from "../components/ProductCard";
 import { EditableName } from "../components/EditableName";
+import { AddItemButton } from "../components/AddItemButton";
 
 type HomeScreenNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
@@ -159,12 +159,7 @@ export default function HomeScreen() {
         contentContainerStyle={styles.list}
         testID="draggable-flatlist"
       />
-      <FAB
-        style={styles.fab}
-        icon="plus"
-        onPress={() => navigation.navigate("AddProduct", { listId })}
-        label="Adicionar Produto"
-      />
+      <AddItemButton onPress={() => navigation.navigate("AddProduct", { listId })} label="Adicionar Produto" />
       <ImportModal
         isImportModalVisible={isImportModalVisible}
         setIsImportModalVisible={setIsImportModalVisible}
