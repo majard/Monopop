@@ -1,4 +1,3 @@
-import React from 'react';
 import { View, Pressable } from 'react-native';
 import {
   TextInput as PaperTextInput,
@@ -27,11 +26,11 @@ interface ProductCardProps {
   isActive: boolean;
 }
 
-export const ProductCard: React.FC<ProductCardProps> = ({
+export const ProductCard = ({
   item,
   drag,
   isActive,
-}) => {
+}: ProductCardProps) => {
   const navigation = useNavigation<ProductCardNavigationProp>();
   const theme = useTheme();
   const styles = createHomeScreenStyles(theme);

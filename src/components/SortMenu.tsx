@@ -1,5 +1,5 @@
 // components/SortMenu.tsx
-import React from 'react';
+import {useState} from 'react';
 import { Button, Menu, Divider, useTheme } from 'react-native-paper';
 import { SortOrder } from '../utils/sortUtils';
 import { createHomeScreenStyles } from '../styles/HomeScreenStyles';
@@ -9,8 +9,8 @@ interface SortMenuProps {
   setSortOrder: (order: SortOrder) => void;
 }
 
-export const SortMenu: React.FC<SortMenuProps> = ({ setSortOrder }) => {
-  const [menuVisible, setMenuVisible] = React.useState(false);
+export const SortMenu = ({ sortOrder, setSortOrder }: SortMenuProps) => {
+  const [menuVisible, setMenuVisible] = useState(false);
   const openMenu = () => setMenuVisible(true);
   const closeMenu = () => setMenuVisible(false);
 

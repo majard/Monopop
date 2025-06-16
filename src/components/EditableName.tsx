@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { View } from 'react-native';
 import { IconButton, TextInput, Text, useTheme } from 'react-native-paper';
 
@@ -8,11 +8,11 @@ interface EditableNameProps {
     handleDelete: () => void;
 }
 
-export const EditableName: React.FC<EditableNameProps> = ({
+export const EditableName = ({
     name,
     handleSave,
     handleDelete,
-}) => {
+}: EditableNameProps) => {
     const theme = useTheme();
     const [isEditing, setIsEditing] = useState(false);
     const [input, setInput] = useState(name);
