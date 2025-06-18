@@ -1,15 +1,13 @@
 // hooks/useProducts.ts
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { getProducts, updateProductOrder, saveProductHistory, Product } from "../database/database";
 import { sortProducts, SortOrder } from "../utils/sortUtils";
 import { preprocessName, calculateSimilarity } from "../utils/similarityUtils";
-// Removed Alert import as it's now handled by useProduct for deletes
 
 const searchSimilarityThreshold = 0.4;
 
 export default function useProducts(listId: number, sortOrder: SortOrder, searchQuery: string) {
   const [products, setProducts] = useState<Product[]>([]);
-  // Removed updateTimeoutRef, isAdjusting, adjustmentId, adjustmentIncrement, continuousAdjustmentIntervalRef, continuousAdjustmentInitialTimeoutRef as they are now in useProduct
 
   // --- Filtering Logic (memoized for performance) ---
   const filteredProducts = useCallback(() => {
@@ -50,10 +48,10 @@ export default function useProducts(listId: number, sortOrder: SortOrder, search
   }, [loadProducts]);
 
   // --- Product Order Handling Logic ---
-  const handleProductOrderChange = useCallback(async ({ data }: { data: Product[] }) => {
-    setProducts(data); // Update UI immediately
+  const handleProductOrderChange = useCallback(async (newOrder: Product[]) => {
+    setProducts(newOrder); // Update UI immediately
     try {
-      const updates = data.map((product, index) => ({
+      const updates = newOrder.map((product, index) => ({
         id: product.id,
         order: index,
       }));
@@ -75,7 +73,6 @@ export default function useProducts(listId: number, sortOrder: SortOrder, search
     setProducts, // Potentially useful if external state manipulation is needed (e.g., import)
     loadProducts, // Expose for manual refresh
     handleProductOrderChange,
-    saveProductHistory, // Still a list-wide action
-    // updateProductQuantity, confirmRemoveProduct, startContinuousAdjustment, stopContinuousAdjustment are removed
+    saveProductHistory, 
   };
 }

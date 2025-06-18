@@ -50,6 +50,8 @@ export default function HomeScreen() {
     products,
     loadProducts,
     saveProductHistory,
+    handleProductOrderChange,
+    filteredProducts,
   } = useProducts(listId, sortOrder, searchQuery);
 
   const {
@@ -126,9 +128,8 @@ export default function HomeScreen() {
       </View>
       
       <ProductList
-        listId={listId}
-        sortOrder={sortOrder}
-        searchQuery={searchQuery}
+        products={filteredProducts}
+        handleProductOrderChange={handleProductOrderChange}
       />
       <AddItemButton onPress={() => navigation.navigate("AddProduct", { listId })} label="Adicionar Produto" />
       <ImportModal
