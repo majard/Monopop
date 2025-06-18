@@ -15,10 +15,6 @@ import {
   NativeStackScreenProps,
 } from "@react-navigation/native-stack";
 import { SafeAreaView } from "react-native-safe-area-context";
-import DraggableFlatList, {
-  ScaleDecorator,
-} from "react-native-draggable-flatlist";
-import { Product } from "../database/database";
 import { RootStackParamList } from "../types/navigation";
 import { createHomeScreenStyles } from "../styles/HomeScreenStyles";
 import { generateStockListText } from "../utils/stringUtils";
@@ -28,9 +24,9 @@ import { SortOrder } from "../utils/sortUtils";
 import SearchBar from "../components/SearchBar";
 import { useList } from "../hooks/useList";
 import { SortMenu } from "../components/SortMenu";
-import { ProductCard } from "../components/ProductCard";
 import { EditableName } from "../components/EditableName";
 import { AddItemButton } from "../components/AddItemButton";
+import ProductList from "../components/ProductList";
 
 type HomeScreenNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
@@ -52,9 +48,7 @@ export default function HomeScreen() {
 
   const {
     products,
-    filteredProducts,
     loadProducts,
-    handleProductOrderChange,
     saveProductHistory,
   } = useProducts(listId, sortOrder, searchQuery);
 
@@ -94,27 +88,6 @@ export default function HomeScreen() {
     }
   };
 
-  const renderItem = useCallback(
-    ({
-      item,
-      drag,
-      isActive,
-    }: {
-      item: Product;
-      drag: () => void;
-      isActive: boolean;
-    }) => (
-      <ScaleDecorator>
-        <ProductCard
-          item={item}
-          drag={drag}
-          isActive={isActive}
-        />
-      </ScaleDecorator>
-    ),
-    []
-  );
-
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -151,13 +124,11 @@ export default function HomeScreen() {
           <SortMenu setSortOrder={handleSortOrderChange} />
         </View>
       </View>
-      <DraggableFlatList
-        data={filteredProducts}
-        onDragEnd={handleProductOrderChange}
-        keyExtractor={(item) => item.id.toString()}
-        renderItem={renderItem}
-        contentContainerStyle={styles.list}
-        testID="draggable-flatlist"
+      
+      <ProductList
+        listId={listId}
+        sortOrder={sortOrder}
+        searchQuery={searchQuery}
       />
       <AddItemButton onPress={() => navigation.navigate("AddProduct", { listId })} label="Adicionar Produto" />
       <ImportModal
