@@ -1,3 +1,5 @@
+import { Product } from "../database/database";
+
 export const getEmojiForProduct = (name: string): string => {
     const nameLower = name.toLowerCase();
     if (nameLower.includes("batata")) return "🥔";
@@ -29,4 +31,19 @@ export const getEmojiForList = (name: string): string => {
   if (nameLower.includes("farmácia")) return "💊";
   if (nameLower.includes("pet")) return "🐾";
   return "📝";
+};
+
+export const generateStockListText = (products: Product[]): string => {
+  const today = new Date();
+  const dateStr = today.toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+  });
+  let text = `Boa noite! ${dateStr}\n\n`;
+  text += "Aqui está a lista de produção do dia:\n\n";
+  products.forEach((product) => {
+    const emoji = getEmojiForProduct(product.name);
+    text += `- ${product.name}: ${product.quantity} ${emoji}\n`;
+  });
+  return text;
 };

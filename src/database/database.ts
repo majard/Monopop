@@ -243,7 +243,6 @@ export const getLists = (): Promise<List[]> => {
   return new Promise(async (resolve, reject) => {
     try {
       const database = getDb();
-      console.log("gettin lists fr");
       const result = database.getAllSync(
         "SELECT * FROM lists ORDER BY `order` ASC;"
       );

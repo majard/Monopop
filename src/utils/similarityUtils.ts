@@ -1,5 +1,9 @@
 import { Product } from "../database/database";
 
+
+
+const commonOmittedWords = ["de", "do", "da", "e", "com"];
+
 export const preprocessName = (name: string): string => {
   return name
     .toLowerCase()
