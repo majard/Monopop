@@ -15,7 +15,9 @@ export const initializeDatabase = async (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL UNIQUE,
             quantity INTEGER NOT NULL,
-            \`order\` INTEGER NOT NULL DEFAULT 0
+            \`order\` INTEGER NOT NULL DEFAULT 0,
+            listId INTEGER NOT NULL DEFAULT 1,
+            FOREIGN KEY(listId) REFERENCES lists(id) ON DELETE CASCADE
           );
         `),
         db.runAsync(`
@@ -28,9 +30,16 @@ export const initializeDatabase = async (
             FOREIGN KEY(productId) REFERENCES products(id) ON DELETE CASCADE
           );
         `),
+        db.runAsync(`
+          CREATE TABLE IF NOT EXISTS lists (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            \`order\` INTEGER NOT NULL DEFAULT 0
+          );
+        `),
       ]);
     } catch (error) {
-      console.error('Error creating initial tables:', error);
+      console.error("Error creating initial tables:", error);
       throw error; // Re-throw the error to indicate initialization failure
     }
   }
@@ -51,6 +60,7 @@ export interface Product {
   name: string;
   quantity: number;
   order: number;
+  listId: number;
 }
 
 export interface QuantityHistory {
@@ -60,12 +70,19 @@ export interface QuantityHistory {
   date: string;
 }
 
+export interface List {
+  id: number;
+  name: string;
+  order: number;
+}
+
 const expectedSchemas = {
   products: [
     { name: "id", type: "INTEGER PRIMARY KEY AUTOINCREMENT" },
     { name: "name", type: "TEXT NOT NULL UNIQUE" },
     { name: "quantity", type: "INTEGER NOT NULL" },
     { name: "order", type: "INTEGER NOT NULL", default: 0 },
+    { name: "listId", type: "INTEGER NOT NULL", default: 1 },
   ],
   quantity_history: [
     { name: "id", type: "INTEGER PRIMARY KEY AUTOINCREMENT" },
@@ -73,6 +90,11 @@ const expectedSchemas = {
     { name: "quantity", type: "INTEGER NOT NULL" },
     { name: "date", type: "TEXT NOT NULL" },
     { name: "UNIQUE", type: "(productId, date)" },
+  ],
+  lists: [
+    { name: "id", type: "INTEGER PRIMARY KEY AUTOINCREMENT", default: 1 },
+    { name: "name", type: "TEXT NOT NULL UNIQUE" },
+    { name: "order", type: "INTEGER NOT NULL", default: 0 },
   ],
 };
 
@@ -129,7 +151,6 @@ const repairDatabaseSchema = (tableName: string) => {
     const existingColumns = getExistingColumns(tableName);
     columns.forEach((expectedColumn) => {
       if (!existingColumns.includes(expectedColumn.name)) {
-
         addMissingColumn(
           tableName,
           expectedColumn.name,
@@ -141,25 +162,48 @@ const repairDatabaseSchema = (tableName: string) => {
   }
 };
 
-export const createProduct = (
+export const addList = async (
   name: string,
-  quantity: number
-): Promise<void> => {
-  return new Promise((resolve, reject) => {
-    try {
-      getDb().execSync(
-        `INSERT INTO products (name, quantity) VALUES ('${name.trim()}', ${quantity});`
-      );
-      resolve();
-    } catch (error) {
-      reject(error);
+  order: number = 0
+): Promise<number> => {
+  const db = getDb();
+  try {
+    // Checa se já existe uma lista com o mesmo nome
+    const existingList = db.getFirstSync<{ id: number }>(
+      "SELECT id FROM lists WHERE name = ?",
+      [name.trim()]
+    );
+
+    if (existingList) {
+      return existingList.id;
     }
-  });
+
+    // Insere nova lista
+    await db.runAsync("INSERT INTO lists (name, `order`) VALUES (?, ?);", [
+      name.trim(),
+      order,
+    ]);
+
+    // Retorna o ID da lista inserida
+    const lastInserted = db.getFirstSync<{ id: number }>(
+      "SELECT last_insert_rowid() as id;"
+    );
+
+    if (lastInserted?.id) {
+      return lastInserted.id;
+    } else {
+      throw new Error("Falha ao obter ID da lista inserida.");
+    }
+  } catch (error: any) {
+    console.error("Erro ao adicionar lista:", error);
+    throw new Error(error.message || "Erro desconhecido.");
+  }
 };
 
 export const addProduct = async (
   name: string,
-  quantity: number
+  quantity: number,
+  listId?: number
 ): Promise<number> => {
   const db = getDb();
   try {
@@ -174,8 +218,8 @@ export const addProduct = async (
     }
     // Insert the new product using a parameterized query
     await db.runAsync(
-      "INSERT INTO products (name, quantity) VALUES (?, ?)",
-      [name.trim(), quantity] // Pass name and quantity as parameters
+      "INSERT INTO products (name, quantity, listId) VALUES (?, ?, ?)",
+      [name.trim(), quantity, listId ?? 1] // Pass name and quantity as parameters
     );
 
     // Get the last inserted ID
@@ -195,12 +239,28 @@ export const addProduct = async (
   }
 };
 
-export const getProducts = (): Promise<Product[]> => {
+export const getLists = (): Promise<List[]> => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      const database = getDb();
+      console.log("gettin lists fr");
+      const result = database.getAllSync(
+        "SELECT * FROM lists ORDER BY `order` ASC;"
+      );
+      resolve(result as List[]);
+    } catch (error) {
+      reject(error);
+    }
+  });
+};
+
+export const getProducts = (listId: number): Promise<Product[]> => {
   return new Promise(async (resolve, reject) => {
     try {
       const database = getDb();
       const result = database.getAllSync(
-        "SELECT * FROM products ORDER BY `order` ASC;"
+        "SELECT * FROM products WHERE listId = ? ORDER BY `order` ASC;",
+        [listId]
       );
       resolve(result as Product[]);
     } catch (error: any) {
@@ -248,7 +308,7 @@ export const getProductHistory = (
         params = [product.id];
       }
       const genericRows: any[] = database.getAllSync(query, params);
-      const result: QuantityHistory[] = genericRows.map(row => ({
+      const result: QuantityHistory[] = genericRows.map((row) => ({
         id: row.id,
         productId: row.productId,
         quantity: row.quantity,
@@ -329,7 +389,7 @@ export const deleteProduct = async (id: number): Promise<void> => {
       await getDb().runAsync("DELETE FROM products WHERE id = ?", id);
       resolve();
     } catch (error) {
-      console.log('error:', error)
+      console.log("error:", error);
       reject(error);
     }
   });
@@ -348,7 +408,8 @@ export const updateProductOrder = (
       updates.forEach(({ id, order }) => {
         database.runAsync(
           "UPDATE products SET `order` = ? WHERE id = ?",
-          order, id
+          order,
+          id
         );
       });
 
@@ -394,7 +455,7 @@ export const saveProductHistoryForSingleProduct = async (
       const database = getDb();
       const dateToSave = date.toISOString();
       database.runAsync(
-        `INSERT INTO quantity_history (productId, quantity, date) VALUES (?, ?, ?);`, 
+        `INSERT INTO quantity_history (productId, quantity, date) VALUES (?, ?, ?);`,
         [productId, quantity, dateToSave]
       );
       resolve();
@@ -459,4 +520,64 @@ export const consolidateProductHistory = async (
     await getDb().execSync("ROLLBACK;");
     throw error;
   }
+};
+
+export const getListById = (id: number): Promise<List | undefined> => {
+  return new Promise((resolve, reject) => {
+    try {
+      const database = getDb();
+      const result = database.getFirstSync(
+        "SELECT * FROM lists WHERE id = ?;",
+        [id]
+      );
+      resolve(result as List | undefined);
+    } catch (error) {
+      reject(error);
+    }
+  });
+};
+
+export const updateListName = (id: number, name: string): Promise<void> => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      const database = getDb();
+      await database.runAsync(
+        `UPDATE lists SET name = ? WHERE id = ?;`,
+        [name.trim(), id]
+      );
+      resolve();
+    } catch (error) {
+      console.error("Error updating list name:", error);
+      reject(error);
+    }
+  });
+};
+
+export const deleteList = (id: number): Promise<void> => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      const database = getDb();
+      await database.runAsync(`DELETE FROM lists WHERE id = ?;`, [id]);
+      resolve();
+    } catch (error) {
+      console.error("Error deleting list:", error);
+      reject(error);
+    }
+  });
+};
+
+export const updateProductList = (productId: number, newListId: number): Promise<void> => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      const database = getDb();
+      await database.runAsync(
+        `UPDATE products SET listId = ? WHERE id = ?;`,
+        [newListId, productId]
+      );
+      resolve();
+    } catch (error) {
+      console.error("Error updating product listId:", error);
+      reject(error);
+    }
+  });
 };

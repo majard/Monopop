@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   StyleSheet,
@@ -21,8 +21,15 @@ import {
   Menu,
   Divider,
 } from "react-native-paper";
-import { useNavigation, useRoute } from "@react-navigation/native";
-import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import {
+  useNavigation,
+  useRoute,
+  useFocusEffect,
+} from "@react-navigation/native";
+import {
+  NativeStackNavigationProp,
+  NativeStackScreenProps,
+} from "@react-navigation/native-stack";
 import { SafeAreaView } from "react-native-safe-area-context";
 import DraggableFlatList, {
   ScaleDecorator,
@@ -41,6 +48,9 @@ import {
   addProduct,
   consolidateProductHistory,
   QuantityHistory,
+  getListById,
+  updateListName,
+  deleteList,
 } from "../database/database";
 import { calculateSimilarity, preprocessName } from "../utils/similarityUtils";
 import { RootStackParamList } from "../types/navigation";
@@ -51,6 +61,7 @@ type HomeScreenNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
   "Home"
 >;
+type HomeScreenProps = NativeStackScreenProps<RootStackParamList, "Home">;
 
 type Styles = {
   container: ViewStyle;
@@ -108,12 +119,16 @@ const debounce = (func, delay) => {
 };
 
 export default function HomeScreen() {
+  const route = useRoute<HomeScreenProps["route"]>();
+  const listId = route.params?.listId ?? 1;
+  const [listName, setListName] = useState("");
+  const [isEditingListName, setIsEditingListName] = useState(false);
+  const [listNameInput, setListNameInput] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
   const [isAdjusting, setIsAdjusting] = useState(false);
   const [adjustmentId, setAdjustmentId] = useState<number | null>(null);
   const [adjustmentIncrement, setAdjustmentIncrement] = useState(false);
   const navigation = useNavigation<HomeScreenNavigationProp>();
-  const route = useRoute();
   const theme = useTheme();
   const [isMounted, setIsMounted] = useState(true);
   const [sortOrder, setSortOrder] = useState<
@@ -132,6 +147,8 @@ export default function HomeScreen() {
     remainingProducts: { originalName: string; quantity: number }[];
     similarProducts: Product[];
   } | null>(null);
+
+  console.log("listId:", listId);
 
   const openMenu = () => setMenuVisible(true);
   const closeMenu = () => setMenuVisible(false);
@@ -176,7 +193,7 @@ export default function HomeScreen() {
 
   const loadProducts = async () => {
     try {
-      const loadedProducts = await getProducts();
+      const loadedProducts = await getProducts(listId);
       if (isMounted) {
         setProducts(loadedProducts);
       }
@@ -211,7 +228,7 @@ export default function HomeScreen() {
   useEffect(() => {
     const loadAndSortProducts = async () => {
       try {
-        const loadedProducts = await getProducts();
+        const loadedProducts = await getProducts(listId);
         if (isMounted) {
           const sortedProducts = sortProducts(loadedProducts);
           setProducts([...sortedProducts]);
@@ -229,16 +246,11 @@ export default function HomeScreen() {
     };
   }, []);
 
-  useEffect(() => {
-    const unsubscribe = navigation.addListener("focus", () => {
-      const params = route.params as { shouldRefresh?: boolean };
-      if (params?.shouldRefresh) {
-        loadProducts();
-        navigation.setParams({ shouldRefresh: false });
-      }
-    });
-    return unsubscribe;
-  }, [navigation, route.params]);
+  useFocusEffect(
+    useCallback(() => {
+      loadProducts();
+    }, [])
+  );
 
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
@@ -506,7 +518,7 @@ export default function HomeScreen() {
     }
 
     const [currentProduct, ...rest] = remainingProducts;
-    const existingProducts = await getProducts();
+    const existingProducts = await getProducts(listId);
     // First, check for exact name matches (case-insensitive)
     const exactMatch = existingProducts.find(
       (p) => p.name.toLowerCase() === currentProduct.originalName.toLowerCase()
@@ -565,7 +577,7 @@ export default function HomeScreen() {
   ) => {
     try {
       // Check for exact name match again (case-insensitive)
-      const existingProducts = await getProducts();
+      const existingProducts = await getProducts(listId);
       const productHistory = await getProductHistory(product.originalName);
       const exactMatch = existingProducts.find(
         (p) => p.name.toLowerCase() === product.originalName.toLowerCase()
@@ -580,7 +592,8 @@ export default function HomeScreen() {
       // No exact match found, create new product
       const productId = await addProduct(
         product.originalName,
-        product.quantity
+        product.quantity,
+        listId
       );
 
       if (importDate && !checkDateExists(productHistory, importDate)) {
@@ -603,7 +616,7 @@ export default function HomeScreen() {
       const lines = text.split("\n");
       const importDate = parseImportDate(lines);
       const importedProducts = parseImportProducts(lines);
-      const existingProducts = await getProducts();
+      const existingProducts = await getProducts(listId);
 
       await processNextProduct(importedProducts, importDate);
     } catch (error) {
@@ -644,7 +657,7 @@ export default function HomeScreen() {
   const handleAcceptAllSimilar = async () => {
     try {
       if (!currentImportItem) return;
-      const existingProducts = await getProducts();
+      const existingProducts = await getProducts(listId);
 
       // Get all remaining products that have similar matches
       const productsToUpdate = currentImportItem.remainingProducts.filter(
@@ -853,7 +866,6 @@ export default function HomeScreen() {
                         <Pressable
                           key={product.id}
                           onPress={() => {
-
                             const updatedSimilarProducts = [
                               product,
                               ...similarProducts.filter(
@@ -1061,9 +1073,77 @@ export default function HomeScreen() {
 
   const styles = createHomeScreenStyles(theme);
 
+  useEffect(() => {
+    getListById(listId).then((list) => {
+      if (list) setListName(list.name);
+    });
+  }, [listId]);
+
+  const handleListNameEdit = () => {
+    setIsEditingListName(true);
+    setListNameInput(listName);
+  };
+
+  const handleListNameSave = async () => {
+    if (listNameInput.trim()) {
+      await updateListName(listId, listNameInput.trim());
+      setListName(listNameInput.trim());
+      setIsEditingListName(false);
+    }
+  };
+
+  const handleListDelete = async () => {
+    Alert.alert("Excluir Lista", "Tem certeza que deseja excluir esta lista?", [
+      { text: "Cancelar", style: "cancel" },
+      {
+        text: "Excluir",
+        style: "destructive",
+        onPress: async () => {
+          await deleteList(listId);
+          navigation.goBack();
+        },
+      },
+    ]);
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
+        <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 4 }}>
+          {isEditingListName ? (
+            <>
+              <PaperTextInput
+                value={listNameInput}
+                onChangeText={setListNameInput}
+                style={{ flex: 1, marginRight: 8 }}
+                mode="outlined"
+                dense
+              />
+              <IconButton icon="check" iconColor={theme.colors.primary} onPress={handleListNameSave} />
+              <IconButton
+                icon="close"
+                iconColor={theme.colors.error}
+                onPress={() => setIsEditingListName(false)}
+              />
+            </>
+          ) : (
+            <>
+              <Text variant="titleLarge" style={{ flex: 1 }}>
+                {listName}
+              </Text>
+              <IconButton
+                icon="pencil"
+                iconColor={theme.colors.primary}
+                onPress={handleListNameEdit}
+              />
+            </>
+          )}
+          <IconButton
+            icon="delete"
+            iconColor={theme.colors.error}
+            onPress={handleListDelete}
+          />
+        </View>
         <View style={styles.searchContainer}>
           <PaperTextInput
             placeholder="Buscar produtos..."
@@ -1164,7 +1244,7 @@ export default function HomeScreen() {
       <FAB
         style={styles.fab}
         icon="plus"
-        onPress={() => navigation.navigate("AddProduct")}
+        onPress={() => navigation.navigate("AddProduct", { listId })}
         label="Adicionar Produto"
       />
       <View>

@@ -6,6 +6,7 @@ import {
   ScrollView,
   SafeAreaView,
   Alert,
+  Modal,
 } from "react-native";
 import {
   TextInput as PaperTextInput,
@@ -28,8 +29,11 @@ import {
   QuantityHistory,
   updateProductName,
   deleteProduct,
+  getLists,
+  updateProductList,
 } from "../database/database";
 import { RootStackParamList } from "../types/navigation";
+import { getEmojiForList } from "../utils/stringUtils";
 
 type EditProductScreenNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
@@ -49,7 +53,9 @@ export default function EditProductScreen() {
   const theme = useTheme();
   const [name, setName] = useState(product?.name || "");
   const [isEditingName, setIsEditingName] = useState(false);
-
+  const [lists, setLists] = useState<{ id: number; name: string }[]>([]);
+  const [listModalVisible, setListModalVisible] = useState(false);
+  const [selectedListId, setSelectedListId] = useState(product?.listId ?? 1);
 
   useEffect(() => {
     if (product) {
@@ -57,8 +63,9 @@ export default function EditProductScreen() {
       setName(product.name);
       loadHistory();
     }
+    getLists().then(setLists);
+    setSelectedListId(product?.listId ?? 1);
   }, []);
-
 
   const loadHistory = async () => {
     if (product?.name) { // Ensure product and id exist before calling
@@ -75,7 +82,7 @@ export default function EditProductScreen() {
     if (product?.id) {
       try {
         await updateProduct(product.id, parseInt(quantity));
-        navigation.navigate("Home", { shouldRefresh: true });
+        navigation.goBack();
       } catch (error) {
         console.error("Erro ao atualizar produto:", error);
       }
@@ -109,7 +116,7 @@ export default function EditProductScreen() {
             onPress: async () => {
               try {
                 await deleteProduct(product.id);
-                navigation.navigate("Home", { shouldRefresh: true });
+                navigation.goBack();
               } catch (error) {
                 console.error("Erro ao deletar produto:", error);
               }
@@ -154,6 +161,15 @@ export default function EditProductScreen() {
     ],
   };
 
+  const handleChangeList = async (newListId: number) => {
+    if (product?.id && newListId !== selectedListId) {
+      await updateProductList(product.id, newListId);
+      setSelectedListId(newListId);
+      navigation.setParams({ product: { ...product, listId: newListId } });
+    }
+    setListModalVisible(false);
+  };
+
   return (
     <SafeAreaView style={{ flex: 1 }}>
       <ScrollView style={styles.container}>
@@ -166,7 +182,6 @@ export default function EditProductScreen() {
                 style={styles.nameInput}
                 mode="outlined"
                 testID="name-input"
-
               />
               <IconButton
                 icon="check"
@@ -208,6 +223,20 @@ export default function EditProductScreen() {
             testID="delete-button"
           />
         </View>
+
+        <Card style={styles.card}>
+          <Card.Content>
+            <PaperTextInput
+              label="Lista"
+              value={lists.find((l) => l.id === selectedListId)?.name || "Selecionar Lista"}
+              mode="outlined"
+              style={[styles.input, { flex: 1 }]}
+              editable={false}
+              right={<PaperTextInput.Icon icon="menu-down" onPress={() => setListModalVisible(true)} />}
+              pointerEvents="none"
+            />
+          </Card.Content>
+        </Card>
 
         <Card style={styles.card}>
           <Card.Content>
@@ -277,6 +306,37 @@ export default function EditProductScreen() {
             )}
           </Card.Content>
         </Card>
+
+        <Modal
+          visible={listModalVisible}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setListModalVisible(false)}
+        >
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'flex-end' }}>
+            <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 16, maxHeight: '60%' }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <Text style={{ fontSize: 18, fontWeight: 'bold' }}>Escolher Lista</Text>
+                <IconButton icon="close" onPress={() => setListModalVisible(false)} />
+              </View>
+              <ScrollView>
+                {lists.map((list) => (
+                  <Card
+                    key={list.id}
+                    onPress={() => handleChangeList(list.id)}
+                    style={{ marginBottom: 8, borderRadius: 8, backgroundColor: list.id === selectedListId ? '#e3f2fd' : '#f5f5f5' }}
+                  >
+                    <Card.Content style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Text style={{ fontSize: 22, marginRight: 12 }}>{getEmojiForList(list.name)}</Text>
+                      <Text style={{ fontSize: 16, flex: 1 }}>{list.name}</Text>
+                      {list.id === selectedListId && <IconButton icon="check" iconColor="#1976d2" size={20} />}
+                    </Card.Content>
+                  </Card>
+                ))}
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
       </ScrollView>
     </SafeAreaView>
   );
