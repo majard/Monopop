@@ -14,19 +14,43 @@ export const initializeDatabase = async (
           CREATE TABLE IF NOT EXISTS products (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL UNIQUE,
-            quantity INTEGER NOT NULL,
-            \`order\` INTEGER NOT NULL DEFAULT 0,
-            listId INTEGER NOT NULL DEFAULT 1,
-            FOREIGN KEY(listId) REFERENCES lists(id) ON DELETE CASCADE
+            categoryId INTEGER,
+            createdAt TEXT NOT NULL,
+            updatedAt TEXT NOT NULL,
+            FOREIGN KEY(categoryId) REFERENCES categories(id) ON DELETE SET NULL
           );
         `),
         db.runAsync(`
-          CREATE TABLE IF NOT EXISTS quantity_history (
+          CREATE TABLE IF NOT EXISTS categories (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE
+          );
+        `),
+        db.runAsync(`
+          CREATE TABLE IF NOT EXISTS inventory_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            listId INTEGER NOT NULL,
             productId INTEGER NOT NULL,
             quantity INTEGER NOT NULL,
+            sortOrder INTEGER NOT NULL DEFAULT 0,
+            notes TEXT,
+            updatedAt TEXT NOT NULL,
+            createdAt TEXT NOT NULL,
+            FOREIGN KEY(listId) REFERENCES lists(id) ON DELETE CASCADE,
+            FOREIGN KEY(productId) REFERENCES products(id) ON DELETE CASCADE
+          );
+        `),
+        db.runAsync(`
+          CREATE TABLE IF NOT EXISTS inventory_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            listId INTEGER NOT NULL,
+            productId INTEGER NOT NULL,
             date TEXT NOT NULL,
+            quantity INTEGER NOT NULL,
+            notes TEXT,
+            createdAt TEXT NOT NULL,
             UNIQUE(productId, date),
+            FOREIGN KEY(listId) REFERENCES lists(id) ON DELETE CASCADE,
             FOREIGN KEY(productId) REFERENCES products(id) ON DELETE CASCADE
           );
         `),
@@ -35,6 +59,22 @@ export const initializeDatabase = async (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL UNIQUE,
             \`order\` INTEGER NOT NULL DEFAULT 0
+          );
+        `),
+        db.runAsync(`
+          CREATE TABLE IF NOT EXISTS shopping_list_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            listId INTEGER NOT NULL,
+            productId INTEGER NOT NULL,
+            quantity INTEGER NOT NULL,
+            checked INTEGER NOT NULL DEFAULT 0, -- SQLite stores booleans as 0 or 1
+            price REAL,
+            sortOrder INTEGER NOT NULL DEFAULT 0,
+            notes TEXT,
+            createdAt TEXT NOT NULL,
+            updatedAt TEXT NOT NULL,
+            FOREIGN KEY(listId) REFERENCES lists(id) ON DELETE CASCADE,
+            FOREIGN KEY(productId) REFERENCES products(id) ON DELETE CASCADE
           );
         `),
       ]);
@@ -57,17 +97,36 @@ const getDb = (): SQLite.SQLiteDatabase => {
 
 export interface Product {
   id: number;
-  name: string;
-  quantity: number;
-  order: number;
-  listId: number;
+  name: string; // "Rice", "Coffee", "Shampoo"
+  categoryId?: number; // FK to Category
+  createdAt: string;
+  updatedAt: string;
 }
 
-export interface QuantityHistory {
+export interface Category {
   id: number;
-  productId: number;
+  name: string;
+}
+
+export interface InventoryItem {
+  id: number;
+  listId: number; // FK to Context
+  productId: number; // FK to Product (generic)
+  quantity: number; // Current quantity of the *generic Product* (e.g., 3 units of "Rice")
+  sortOrder: number;
+  notes?: string; // Notes about this inventory item
+  updatedAt: string; // When was this stock last updated?
+  createdAt: string;
+}
+
+export interface InventoryHistory {
+  id: number;
+  listId: number; // FK to List
+  productId: number; // FK to Product (generic)
+  date: string; // YYYY-MM-DD
   quantity: number;
-  date: string;
+  notes?: string; // Optional notes for the history entry
+  createdAt: string;
 }
 
 export interface List {
@@ -76,25 +135,67 @@ export interface List {
   order: number;
 }
 
+export interface ShoppingListItem {
+  id: number;
+  listId: number; // FK to List
+  productId: number; // FK to Product (generic)
+  quantity: number; // Desired quantity of the *generic Product*
+  checked: boolean; // True if item has been put in cart/purchased
+  price: number;
+  sortOrder: number;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 const expectedSchemas = {
   products: [
     { name: "id", type: "INTEGER PRIMARY KEY AUTOINCREMENT" },
     { name: "name", type: "TEXT NOT NULL UNIQUE" },
-    { name: "quantity", type: "INTEGER NOT NULL" },
-    { name: "order", type: "INTEGER NOT NULL", default: 0 },
-    { name: "listId", type: "INTEGER NOT NULL", default: 1 },
+    { name: "categoryId", type: "INTEGER" },
+    { name: "createdAt", type: "TEXT NOT NULL" },
+    { name: "updatedAt", type: "TEXT NOT NULL" },
   ],
-  quantity_history: [
+  categories: [
     { name: "id", type: "INTEGER PRIMARY KEY AUTOINCREMENT" },
+    { name: "name", type: "TEXT NOT NULL UNIQUE" },
+  ],
+  inventory_items: [
+    { name: "id", type: "INTEGER PRIMARY KEY AUTOINCREMENT" },
+    { name: "listId", type: "INTEGER NOT NULL" },
     { name: "productId", type: "INTEGER NOT NULL" },
     { name: "quantity", type: "INTEGER NOT NULL" },
+    { name: "sortOrder", type: "INTEGER NOT NULL", default: 0 },
+    { name: "notes", type: "TEXT" },
+    { name: "updatedAt", type: "TEXT NOT NULL" },
+    { name: "createdAt", type: "TEXT NOT NULL" },
+  ],
+  inventory_history: [
+    { name: "id", type: "INTEGER PRIMARY KEY AUTOINCREMENT" },
+    { name: "listId", type: "INTEGER NOT NULL" },
+    { name: "productId", type: "INTEGER NOT NULL" },
     { name: "date", type: "TEXT NOT NULL" },
+    { name: "quantity", type: "INTEGER NOT NULL" },
+    { name: "notes", type: "TEXT" },
+    { name: "createdAt", type: "TEXT NOT NULL" },
     { name: "UNIQUE", type: "(productId, date)" },
   ],
   lists: [
-    { name: "id", type: "INTEGER PRIMARY KEY AUTOINCREMENT", default: 1 },
+    { name: "id", type: "INTEGER PRIMARY KEY AUTOINCREMENT" },
     { name: "name", type: "TEXT NOT NULL UNIQUE" },
     { name: "order", type: "INTEGER NOT NULL", default: 0 },
+  ],
+  shopping_list_items: [
+    { name: "id", type: "INTEGER PRIMARY KEY AUTOINCREMENT" },
+    { name: "listId", type: "INTEGER NOT NULL" },
+    { name: "productId", type: "INTEGER NOT NULL" },
+    { name: "quantity", type: "INTEGER NOT NULL" },
+    { name: "checked", type: "INTEGER NOT NULL", default: 0 },
+    { name: "price", type: "REAL" },
+    { name: "sortOrder", type: "INTEGER NOT NULL", default: 0 },
+    { name: "notes", type: "TEXT" },
+    { name: "createdAt", type: "TEXT NOT NULL" },
+    { name: "updatedAt", type: "TEXT NOT NULL" },
   ],
 };
 
@@ -286,11 +387,11 @@ export const getProducts = (listId: number): Promise<Product[]> => {
 
 export const getProductHistory = (
   identifier: string
-): Promise<QuantityHistory[]> => {
+): Promise<InventoryHistory[]> => {
   return new Promise(async (resolve, reject) => {
     try {
       const database = getDb();
-      const query = `SELECT * FROM quantity_history WHERE productId = ? ORDER BY date DESC;`;
+      const query = `SELECT * FROM inventory_history WHERE productId = ? ORDER BY date DESC;`;
       let params: any[] = [];
 
       if (!isNaN(parseInt(identifier, 10))) {
@@ -307,12 +408,14 @@ export const getProductHistory = (
         params = [product.id];
       }
       const genericRows: any[] = database.getAllSync(query, params);
-      const result: QuantityHistory[] = genericRows.map((row) => ({
+      const result: InventoryHistory[] = genericRows.map((row) => ({
         id: row.id,
         productId: row.productId,
         quantity: row.quantity,
         date: row.date,
-        // Ensure all properties of QuantityHistory are here
+        listId: row.listId,
+        createdAt: row.createdAt,
+        notes: row.notes,
       }));
       resolve(result);
     } catch (error: any) {
@@ -360,16 +463,16 @@ export const saveProductHistory = async (
 
       latestProducts.forEach((product) => {
         const existingEntry = database.getFirstSync(
-          `SELECT id FROM quantity_history WHERE productId = ${product.id} AND date >= '${todayStart}' AND date < '${todayEnd}';`
+          `SELECT id FROM inventory_history WHERE productId = ${product.id} AND date >= '${todayStart}' AND date < '${todayEnd}';`
         ) as { id: number };
 
         if (existingEntry) {
           database.execSync(
-            `UPDATE quantity_history SET quantity = ${product.quantity}, date = '${dateToSave}' WHERE id = ${existingEntry.id};`
+            `UPDATE inventory_history SET quantity = ${product.quantity}, date = '${dateToSave}' WHERE id = ${existingEntry.id};`
           );
         } else {
           database.execSync(
-            `INSERT INTO quantity_history (productId, quantity, date) VALUES (${product.id}, ${product.quantity}, '${dateToSave}');`
+            `INSERT INTO inventory_history (productId, quantity, date) VALUES (${product.id}, ${product.quantity}, '${dateToSave}');`
           );
         }
       });
