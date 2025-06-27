@@ -23,10 +23,9 @@ import {
 } from "@react-navigation/native-stack";
 import { LineChart } from "react-native-chart-kit";
 import {
-  Product,
   updateProduct,
   getProductHistory,
-  QuantityHistory,
+  InventoryHistory,
   updateProductName,
   deleteProduct,
   getLists,
@@ -48,7 +47,7 @@ export default function EditProductScreen() {
   const route = useRoute<EditProductScreenProps["route"]>();
   const product = route.params?.product;
   const [quantity, setQuantity] = useState(product?.quantity?.toString() || "");
-  const [history, setHistory] = useState<QuantityHistory[]>([]);
+  const [history, setHistory] = useState<InventoryHistory[]>([]);
   const navigation = useNavigation<EditProductScreenNavigationProp>();
   const theme = useTheme();
   const [name, setName] = useState(product?.name || "");

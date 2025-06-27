@@ -16,7 +16,7 @@ import {
   getProductHistory,
   addProduct,
   consolidateProductHistory,
-  QuantityHistory,
+  InventoryHistory,
 } from "../database/database";
 const similarityThreshold = 0.5;
 
@@ -51,7 +51,7 @@ export default function ImportModal({
     setImportText("");
   };
 
-  const checkDateExists = (array: QuantityHistory[], targetDate: Date) => {
+  const checkDateExists = (array: InventoryHistory[], targetDate: Date) => {
     // Parse the target date
     const parsedTargetDate = parseISO(targetDate.toISOString());
     if (array.length === 0) return false;
@@ -63,8 +63,7 @@ export default function ImportModal({
     });
   };
 
-  
-  const getLastHistoryDate = async (productHistory: QuantityHistory[]) => {
+  const getLastHistoryDate = async (productHistory: InventoryHistory[]) => {
     if (productHistory.length === 0) return null;
     const sortedHistory = productHistory.sort(
       (a, b) => parseISO(b.date).getTime() - parseISO(a.date).getTime()
