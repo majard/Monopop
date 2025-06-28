@@ -1,5 +1,6 @@
 import * as SQLite from "expo-sqlite";
 import { Product, InventoryItem, InventoryHistory, List, ShoppingListItem } from "./models/models";
+import { CURRENT_DATABASE_VERSION, runMigrations } from "./migrations"; // Import migration logic
 
 let db: SQLite.SQLiteDatabase | null = null;
 
@@ -8,86 +9,29 @@ export const initializeDatabase = async (
 ): Promise<SQLite.SQLiteDatabase> => {
   if (!db) {
     db = await SQLite.openDatabaseAsync(databaseName);
-    // Create initial tables if they don't exist using runAsync
+
     try {
-      await Promise.all([
-        db.runAsync(`
-          CREATE TABLE IF NOT EXISTS products (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL UNIQUE,
-            categoryId INTEGER,
-            createdAt TEXT NOT NULL,
-            updatedAt TEXT NOT NULL,
-            FOREIGN KEY(categoryId) REFERENCES categories(id) ON DELETE SET NULL
-          );
-        `),
-        db.runAsync(`
-          CREATE TABLE IF NOT EXISTS categories (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL UNIQUE
-          );
-        `),
-        db.runAsync(`
-          CREATE TABLE IF NOT EXISTS inventory_items (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            listId INTEGER NOT NULL,
-            productId INTEGER NOT NULL,
-            quantity INTEGER NOT NULL,
-            sortOrder INTEGER NOT NULL DEFAULT 0,
-            notes TEXT,
-            updatedAt TEXT NOT NULL,
-            createdAt TEXT NOT NULL,
-            FOREIGN KEY(listId) REFERENCES lists(id) ON DELETE CASCADE,
-            FOREIGN KEY(productId) REFERENCES products(id) ON DELETE CASCADE
-          );
-        `),
-        db.runAsync(`
-          CREATE TABLE IF NOT EXISTS inventory_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            listId INTEGER NOT NULL,
-            productId INTEGER NOT NULL,
-            date TEXT NOT NULL,
-            quantity INTEGER NOT NULL,
-            notes TEXT,
-            createdAt TEXT NOT NULL,
-            UNIQUE(productId, date),
-            FOREIGN KEY(listId) REFERENCES lists(id) ON DELETE CASCADE,
-            FOREIGN KEY(productId) REFERENCES products(id) ON DELETE CASCADE
-          );
-        `),
-        db.runAsync(`
-          CREATE TABLE IF NOT EXISTS lists (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL UNIQUE,
-            \`order\` INTEGER NOT NULL DEFAULT 0
-          );
-        `),
-        db.runAsync(`
-          CREATE TABLE IF NOT EXISTS shopping_list_items (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            listId INTEGER NOT NULL,
-            productId INTEGER NOT NULL,
-            quantity INTEGER NOT NULL,
-            checked INTEGER NOT NULL DEFAULT 0, -- SQLite stores booleans as 0 or 1
-            price REAL,
-            sortOrder INTEGER NOT NULL DEFAULT 0,
-            notes TEXT,
-            createdAt TEXT NOT NULL,
-            updatedAt TEXT NOT NULL,
-            FOREIGN KEY(listId) REFERENCES lists(id) ON DELETE CASCADE,
-            FOREIGN KEY(productId) REFERENCES products(id) ON DELETE CASCADE
-          );
-        `),
-      ]);
+      const result = db.getFirstSync<{ user_version: number }>('PRAGMA user_version;');
+      const currentVersion = result ? result.user_version : 0;
+
+      if (currentVersion < CURRENT_DATABASE_VERSION) {
+        console.log(`Migrating database from v${currentVersion} to v${CURRENT_DATABASE_VERSION}...`);
+        await runMigrations(db, currentVersion);
+        await db.runAsync(`PRAGMA user_version = ${CURRENT_DATABASE_VERSION};`);
+        console.log('Database migration complete.');
+      } else {
+        console.log('Database is already up to date.');
+      }
+
     } catch (error) {
-      console.error("Error creating initial tables:", error);
-      throw error; // Re-throw the error to indicate initialization failure
+      console.error("Error during database initialization or migration:", error);
+      throw error;
     }
   }
   return db;
 };
 
-const getDb = (): SQLite.SQLiteDatabase => {
+export const getDb = (): SQLite.SQLiteDatabase => {
   if (!db) {
     throw new Error(
       "Database has not been initialized. Call initializeDatabase() first."
@@ -95,6 +39,7 @@ const getDb = (): SQLite.SQLiteDatabase => {
   }
   return db;
 };
+
 
 export const addList = async (
   name: string,
