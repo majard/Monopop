@@ -4,7 +4,7 @@ import { Alert } from 'react-native';
 import HomeScreen from '../../screens/HomeScreen';
 import {
   getProducts,
-  updateProductQuantity,
+  updateInventoryItemQuantity,
   deleteProduct,
   updateProduct
 } from '../../database/database';
@@ -42,7 +42,7 @@ jest.mock('react-native-draggable-flatlist', () => {
 // Mock the database functions
 jest.mock('../../database/database', () => ({
   getProducts: jest.fn().mockResolvedValue([]),
-  updateProductQuantity: jest.fn().mockResolvedValue(undefined),
+  updateInventoryItemQuantity: jest.fn().mockResolvedValue(undefined),
   saveProductHistoryForSingleProduct: jest.fn().mockResolvedValue(undefined),
   deleteProduct: jest.fn().mockResolvedValue(undefined),
   updateProduct: jest.fn().mockResolvedValue(undefined),

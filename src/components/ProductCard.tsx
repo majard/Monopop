@@ -37,7 +37,7 @@ export const ProductCard = ({
 
   const {
     quantity,
-    updateProductQuantity,
+    updateInventoryItemQuantity,
     confirmRemoveProduct,
     startContinuousAdjustment,
     stopContinuousAdjustment,
@@ -85,7 +85,7 @@ export const ProductCard = ({
                   dense
                   value={quantity.toString()}
                   onChangeText={(value) =>
-                    updateProductQuantity(value === '' ? 0 : parseInt(value, 10))
+                    updateInventoryItemQuantity(value === '' ? 0 : parseInt(value, 10))
                   }
                   keyboardType="numeric"
                   style={styles.input}
@@ -96,14 +96,14 @@ export const ProductCard = ({
                 <IconButton
                   icon="minus"
                   size={20}
-                  onPress={() => updateProductQuantity(Math.max(0, quantity - 1))}
+                  onPress={() => updateInventoryItemQuantity(Math.max(0, quantity - 1))}
                   onLongPress={() => startContinuousAdjustment(false)}
                   onPressOut={stopContinuousAdjustment}
                 />
                 <IconButton
                   icon="plus"
                   size={20}
-                  onPress={() => updateProductQuantity(quantity + 1)}
+                  onPress={() => updateInventoryItemQuantity(quantity + 1)}
                   onLongPress={() => startContinuousAdjustment(true)}
                   onPressOut={stopContinuousAdjustment}
                   testID={`increment-button-${item.id}`}

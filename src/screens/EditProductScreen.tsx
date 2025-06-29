@@ -23,14 +23,14 @@ import {
 } from "@react-navigation/native-stack";
 import { LineChart } from "react-native-chart-kit";
 import {
-  updateProduct,
+  updateInventoryItemQuantity,
   getProductHistory,
-  InventoryHistory,
   updateProductName,
-  deleteProduct,
+  deleteInventoryItem,
   getLists,
   updateProductList,
 } from "../database/database";
+import { InventoryHistory } from "../database/models";
 import { RootStackParamList } from "../types/navigation";
 import { getEmojiForList } from "../utils/stringUtils";
 
@@ -80,7 +80,7 @@ export default function EditProductScreen() {
   const handleUpdate = async () => {
     if (product?.id) {
       try {
-        await updateProduct(product.id, parseInt(quantity));
+        await updateInventoryItemQuantity(product.id, parseInt(quantity));
         navigation.goBack();
       } catch (error) {
         console.error("Erro ao atualizar produto:", error);
@@ -114,7 +114,7 @@ export default function EditProductScreen() {
             text: "Excluir",
             onPress: async () => {
               try {
-                await deleteProduct(product.id);
+                await deleteInventoryItem(product.id);
                 navigation.goBack();
               } catch (error) {
                 console.error("Erro ao deletar produto:", error);

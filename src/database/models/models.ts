@@ -24,8 +24,7 @@ export interface Product {
   
   export interface InventoryHistory {
     id: number;
-    listId: number; // FK to List
-    productId: number; // FK to Product (generic)
+    inventoryItemId: number; // FK to InventoryItem
     date: string; // YYYY-MM-DD
     quantity: number;
     notes?: string; // Optional notes for the history entry

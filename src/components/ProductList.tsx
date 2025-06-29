@@ -5,11 +5,11 @@ import { ProductCard } from './ProductCard';
 import { useCallback } from 'react';
 import { createHomeScreenStyles } from '../styles/HomeScreenStyles';
 import { useTheme } from 'react-native-paper';
-import { Product } from '../database/database';
+import { InventoryItem } from '../database/models';
 
 interface ProductListProps {
-    products: Product[];
-    handleProductOrderChange: (newOrder: Product[]) => void;
+    products: InventoryItem[];
+    handleProductOrderChange: (newOrder: InventoryItem[]) => void;
 }
 
 export default function ProductList({  products, handleProductOrderChange }: ProductListProps) {
@@ -23,7 +23,7 @@ export default function ProductList({  products, handleProductOrderChange }: Pro
             drag,
             isActive,
         }: {
-            item: Product;
+            item: InventoryItem;
             drag: () => void;
             isActive: boolean;
         }) => (

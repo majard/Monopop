@@ -81,8 +81,6 @@ export const addList = async (
 
 export const addProduct = async (
   name: string,
-  quantity: number,
-  listId?: number
 ): Promise<number> => {
   const db = getDb();
   try {
@@ -98,6 +96,46 @@ export const addProduct = async (
     // Insert the new product using a parameterized query
     await db.runAsync(
       "INSERT INTO products (name, quantity, listId) VALUES (?, ?, ?)",
+      [name.trim(), quantity, listId ?? 1] // Pass name and quantity as parameters
+    );
+
+    // Get the last inserted ID
+    const lastInsertedRow = db.getFirstSync<{ id: number }>(
+      "SELECT last_insert_rowid() as id;"
+    );
+
+    if (lastInsertedRow && lastInsertedRow.id) {
+      return lastInsertedRow.id;
+    } else {
+      throw new Error("Failed to get inserted ID");
+    }
+  } catch (error) {
+    console.log("error", error);
+    console.error("Error adding product:", error);
+    throw new Error(error.message);
+  }
+};
+
+
+export const addInventoryItem = async (
+  name: string,
+  quantity: number,
+  listId?: number
+): Promise<number> => {
+  const db = getDb();
+  try {
+    // Check if the product already exists using a parameterized query
+    const existingProduct = db.getFirstSync<{ id: number }>(
+      "SELECT id FROM inventory_items WHERE name = ?",
+      [name] // Pass the name as a parameter
+    );
+
+    if (existingProduct) {
+      return existingProduct.id;
+    }
+    // Insert the new product using a parameterized query
+    await db.runAsync(
+      "INSERT INTO inventory_items (name, quantity, listId) VALUES (?, ?, ?)",
       [name.trim(), quantity, listId ?? 1] // Pass name and quantity as parameters
     );
 
@@ -148,11 +186,10 @@ export const getProducts = (listId: number): Promise<Product[]> => {
       ) {
         try {
           console.log("Repairing database schema for products table", error);
-          repairDatabaseSchema("products");
           const result = getDb().getAllSync(
             "SELECT * FROM products ORDER BY `order` ASC;"
           );
-          resolve(result as Product[]); // Retry after repair
+          resolve(result as Product[]);
         } catch (repairError) {
           reject(repairError);
         }
@@ -203,15 +240,32 @@ export const getProductHistory = (
   });
 };
 
-export const updateProduct = (id: number, quantity: number): Promise<void> => {
-  return new Promise((resolve, reject) => {
+export const getInventoryItems = (listId: number): Promise<InventoryItem[]> => {
+  return new Promise(async (resolve, reject) => {
     try {
-      getDb().execSync(
-        `UPDATE products SET quantity = ${quantity} WHERE id = ${id};`
+      const database = getDb();
+      const result = database.getAllSync(
+        "SELECT * FROM inventory_items WHERE listId = ? ORDER BY sortOrder ASC;",
+        [listId]
       );
-      resolve();
-    } catch (error) {
-      reject(error);
+      resolve(result as InventoryItem[]);
+    } catch (error: any) {
+      if (
+        error.message.includes("no such column") ||
+        error.message.includes("no such table")
+      ) {
+        try {
+          console.log("Repairing database schema for inventory_items table", error);
+          const result = getDb().getAllSync(
+            "SELECT * FROM inventory_items ORDER BY sortOrder ASC;"
+          );
+          resolve(result as InventoryItem[]);
+        } catch (repairError) {
+          reject(repairError);
+        }
+      } else {
+        reject(error);
+      }
     }
   });
 };
@@ -275,7 +329,19 @@ export const deleteProduct = async (id: number): Promise<void> => {
   });
 };
 
-export const updateProductOrder = (
+export const deleteInventoryItem = async (id: number): Promise<void> => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      await getDb().runAsync("DELETE FROM inventory_items WHERE id = ?", id);
+      resolve();
+    } catch (error) {
+      console.log("error:", error);
+      reject(error);
+    }
+  });
+};
+
+export const updateInventoryItemOrder = (
   updates: { id: number; order: number }[]
 ): Promise<void> => {
   return new Promise((resolve, reject) => {
@@ -287,7 +353,7 @@ export const updateProductOrder = (
 
       updates.forEach(({ id, order }) => {
         database.runAsync(
-          "UPDATE products SET `order` = ? WHERE id = ?",
+          "UPDATE inventory_items SET `order` = ? WHERE id = ?",
           order,
           id
         );
@@ -346,13 +412,13 @@ export const saveProductHistoryForSingleProduct = async (
   });
 };
 
-export const updateProductQuantity = async (
+export const updateInventoryItemQuantity = async (
   productId: number,
   newQuantity: number
 ): Promise<void> => {
   try {
     const database = getDb();
-    await database.runAsync("UPDATE products SET quantity = ? WHERE id = ?", [
+    await database.runAsync("UPDATE inventory_items SET quantity = ? WHERE id = ?", [
       newQuantity,
       productId,
     ]);

@@ -1,13 +1,14 @@
 // hooks/useProducts.ts
 import { useState, useEffect, useCallback } from "react";
-import { getProducts, updateProductOrder, saveProductHistory, Product } from "../database/database";
+import { getInventoryItems, updateInventoryItemOrder, saveProductHistory } from "../database/database";
 import { sortProducts, SortOrder } from "../utils/sortUtils";
 import { preprocessName, calculateSimilarity } from "../utils/similarityUtils";
+import { InventoryItem } from "../database/models";
 
 const searchSimilarityThreshold = 0.4;
 
 export default function useProducts(listId: number, sortOrder: SortOrder, searchQuery: string) {
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<InventoryItem[]>([]);
 
   // --- Filtering Logic (memoized for performance) ---
   const filteredProducts = useCallback(() => {
@@ -36,7 +37,7 @@ export default function useProducts(listId: number, sortOrder: SortOrder, search
   // --- Load Products Logic ---
   const loadProducts = useCallback(async () => {
     try {
-      const loaded = await getProducts(listId);
+      const loaded = await getInventoryItems(listId);
       setProducts(loaded);
     } catch (err) {
       console.error("Erro ao carregar produtos:", err);
@@ -48,14 +49,14 @@ export default function useProducts(listId: number, sortOrder: SortOrder, search
   }, [loadProducts]);
 
   // --- Product Order Handling Logic ---
-  const handleProductOrderChange = useCallback(async (newOrder: Product[]) => {
+  const handleProductOrderChange = useCallback(async (newOrder: InventoryItem[]) => {
     setProducts(newOrder); // Update UI immediately
     try {
-      const updates = newOrder.map((product, index) => ({
-        id: product.id,
+      const updates = newOrder.map((inventoryItem, index) => ({
+        id: inventoryItem.id,
         order: index,
       }));
-      await updateProductOrder(updates);
+      await updateInventoryItemOrder(updates);
     } catch (error) {
       console.error("Erro ao reordenar produtos:", error);
       loadProducts(); // Reload from DB if update fails
