@@ -27,22 +27,19 @@ export async function migrateToV2(db: SQLite.SQLiteDatabase) {
     await db.runAsync(`
         CREATE TABLE IF NOT EXISTS inventory_history (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
-          listId INTEGER NOT NULL,
-          productId INTEGER NOT NULL,
+          inventoryItemId INTEGER NOT NULL,
           date TEXT NOT NULL,
           quantity INTEGER NOT NULL,
           notes TEXT,
           createdAt TEXT NOT NULL,
-          UNIQUE(productId, date),
-          FOREIGN KEY(listId) REFERENCES lists(id) ON DELETE CASCADE,
-          FOREIGN KEY(productId) REFERENCES products(id) ON DELETE CASCADE
+          UNIQUE(inventoryItemId, date),
+          FOREIGN KEY(inventoryItemId) REFERENCES inventory_items(id) ON DELETE CASCADE,
         );
       `);
     await db.runAsync(`
         CREATE TABLE IF NOT EXISTS shopping_list_items (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
-          listId INTEGER NOT NULL,
-          productId INTEGER NOT NULL,
+          inventoryItemId INTEGER NOT NULL,
           quantity INTEGER NOT NULL,
           checked INTEGER NOT NULL DEFAULT 0,
           price REAL,
@@ -50,8 +47,7 @@ export async function migrateToV2(db: SQLite.SQLiteDatabase) {
           notes TEXT,
           createdAt TEXT NOT NULL,
           updatedAt TEXT NOT NULL,
-          FOREIGN KEY(listId) REFERENCES lists(id) ON DELETE CASCADE,
-          FOREIGN KEY(productId) REFERENCES products(id) ON DELETE CASCADE
+          FOREIGN KEY(inventoryItemId) REFERENCES inventory_items(id) ON DELETE CASCADE,
         );
       `);
 
@@ -116,16 +112,14 @@ export async function migrateToV2(db: SQLite.SQLiteDatabase) {
         // Migrate data from 'quantity_history_old_v1' to 'inventory_history'
         console.log("Migrating data from 'quantity_history_old_v1' to new 'inventory_history'.");
         await db.runAsync(`
-              INSERT INTO inventory_history (listId, productId, date, quantity, createdAt)
+              INSERT INTO inventory_history (inventoryItemId, date, quantity, createdAt)
               SELECT
-                  pov.listId,
-                  np.id,
+                  qhov.inventoryItemId,
                   qhov.date,
                   qhov.quantity,
                   strftime('%Y-%m-%dT%H:%M:%fZ','now')
               FROM quantity_history_old_v1 qhov
-              JOIN products_old_v1 pov ON qhov.productId = pov.id
-              JOIN products np ON pov.name = np.name;
+              JOIN inventory_items ON qhov.inventoryItemId = inventory_items.id;
           `);
     }
 
