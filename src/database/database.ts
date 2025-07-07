@@ -16,8 +16,9 @@ export const initializeDatabase = async (
 
       if (currentVersion < CURRENT_DATABASE_VERSION) {
         console.log(`Migrating database from v${currentVersion} to v${CURRENT_DATABASE_VERSION}...`);
+        // The transaction for migration is handled inside runMigrations now
         await runMigrations(db, currentVersion);
-        await db.runAsync(`PRAGMA user_version = ${CURRENT_DATABASE_VERSION};`);
+        // PRAGMA user_version is also handled inside runMigrations within the transaction
         console.log('Database migration complete.');
       } else {
         console.log('Database is already up to date.');
@@ -25,6 +26,7 @@ export const initializeDatabase = async (
 
     } catch (error) {
       console.error("Error during database initialization or migration:", error);
+      // It's crucial to throw the error to prevent the app from continuing with a potentially broken DB
       throw error;
     }
   }
@@ -48,7 +50,7 @@ export const addList = async (
 ): Promise<number> => {
   const db = getDb();
   try {
-    const existingList = db.getFirstSync<{ id: number }>(
+    const existingList = await db.getFirstAsync<{ id: number }>(
       "SELECT id FROM lists WHERE name = ?",
       [name.trim()]
     );
@@ -73,7 +75,7 @@ export const addList = async (
   }
 };
 
-export const getLists = async (): Promise<List[]> => { 
+export const getLists = async (): Promise<List[]> => {
   const db = getDb();
   try {
     const result = await db.getAllAsync<List>(
@@ -86,10 +88,10 @@ export const getLists = async (): Promise<List[]> => {
   }
 };
 
-export const getListById = async (id: number): Promise<List | undefined> => { // Changed to async/await
+export const getListById = async (id: number): Promise<List | undefined> => {
   const db = getDb();
   try {
-    const result = await db.getFirstAsync<List>( // Changed to async
+    const result = await db.getFirstAsync<List>(
       "SELECT * FROM lists WHERE id = ?;",
       [id]
     );
@@ -100,7 +102,7 @@ export const getListById = async (id: number): Promise<List | undefined> => { //
   }
 };
 
-export const updateListName = async (id: number, name: string): Promise<void> => { // Changed to async/await
+export const updateListName = async (id: number, name: string): Promise<void> => {
   const db = getDb();
   try {
     await db.runAsync(
@@ -113,7 +115,7 @@ export const updateListName = async (id: number, name: string): Promise<void> =>
   }
 };
 
-export const deleteList = async (id: number): Promise<void> => { // Changed to async/await
+export const deleteList = async (id: number): Promise<void> => {
   const db = getDb();
   try {
     await db.runAsync(`DELETE FROM lists WHERE id = ?;`, [id]);
@@ -123,14 +125,15 @@ export const deleteList = async (id: number): Promise<void> => { // Changed to a
   }
 };
 
-export const updateListOrder = async ( // New function to consolidate updateInventoryItemOrder's logic
+// Renamed and adjusted to fit lists table structure better if sorting is for lists
+export const updateListOrder = async (
   updates: { id: number; order: number }[]
 ): Promise<void> => {
   const db = getDb();
-  await db.withTransactionAsync(async () => { // Use transactionAsync for atomicity
+  await db.withTransactionAsync(async () => {
     for (const { id, order } of updates) {
       await db.runAsync(
-        "UPDATE lists SET `sortOrder` = ? WHERE id = ?",
+        "UPDATE lists SET `order` = ? WHERE id = ?", // Assuming 'order' column exists for lists
         [order, id]
       );
     }
@@ -147,7 +150,7 @@ export const addProduct = async (
   const db = getDb();
   const now = new Date().toISOString();
   try {
-    const existingProduct = db.getFirstSync<{ id: number }>(
+    const existingProduct = await db.getFirstAsync<{ id: number }>(
       "SELECT id FROM products WHERE name = ?",
       [name.trim()]
     );
@@ -176,7 +179,7 @@ export const getProducts = async (): Promise<Product[]> => {
   const db = getDb();
   try {
     const result = await db.getAllAsync<Product>(
-      "SELECT * FROM products ORDER BY name ASC;" 
+      "SELECT * FROM products ORDER BY name ASC;"
     );
     return result;
   } catch (error: any) {
@@ -185,7 +188,7 @@ export const getProducts = async (): Promise<Product[]> => {
   }
 };
 
-export const getProductById = async (id: number): Promise<Product | undefined> => { // Added get by ID
+export const getProductById = async (id: number): Promise<Product | undefined> => {
   const db = getDb();
   try {
     const result = await db.getFirstAsync<Product>(
@@ -340,7 +343,7 @@ export const updateInventoryItemProductList = async (
   }
 };
 
-// --- INVENTORY HISTORY CRUD OPERATIONS --- (Replacing quantity_history functions)
+// --- INVENTORY HISTORY CRUD OPERATIONS ---
 
 export const getInventoryHistory = async (
   inventoryItemId: number
@@ -360,7 +363,7 @@ export const getInventoryHistory = async (
   }
 };
 
-export const saveInventorySnapshotHistory = async ( // Renamed from saveProductHistory
+export const saveInventoryHistorySnapshot = async (
   inventoryItemId: number,
   overrideDate?: Date
 ): Promise<void> => {
@@ -370,34 +373,39 @@ export const saveInventorySnapshotHistory = async ( // Renamed from saveProductH
   const createdAt = now.toISOString();
 
   await db.withTransactionAsync(async () => {
-    // Get current inventory items for the given list
-    const currentInventory = await db.getAllAsync<{ productId: number; quantity: number }>(
-      `SELECT productId, quantity FROM inventory_items WHERE inventoryItemId = ?;`,
+    // Get the current quantity of the specific inventory item
+    const currentInventoryItem = await db.getFirstAsync<{ quantity: number }>(
+      `SELECT quantity FROM inventory_items WHERE id = ?;`,
       [inventoryItemId]
     );
 
-    for (const item of currentInventory) {
-      const existingEntry = await db.getFirstAsync<{ id: number }>(
-        `SELECT id FROM inventory_history WHERE inventoryItemId = ? AND date = ?;`,
-        [inventoryItemId, dateToSave]
-      );
+    if (!currentInventoryItem) {
+      console.warn(`Inventory item with ID ${inventoryItemId} not found. Cannot save history snapshot.`);
+      return; // Or throw an error, depending on desired behavior
+    }
 
-      if (existingEntry) {
-        await db.runAsync(
-          `UPDATE inventory_history SET quantity = ?, createdAt = ? WHERE id = ?;`,
-          [item.quantity, createdAt, existingEntry.id]
-        );
-      } else {
-        await db.runAsync(
-          `INSERT INTO inventory_history (inventoryItemId, quantity, date, createdAt) VALUES (?, ?, ?, ?);`,
-          [inventoryItemId, item.quantity, dateToSave, createdAt]
-        );
-      }
+    const existingEntry = await db.getFirstAsync<{ id: number }>(
+      `SELECT id FROM inventory_history WHERE inventoryItemId = ? AND date = ?;`,
+      [inventoryItemId, dateToSave]
+    );
+
+    if (existingEntry) {
+      // If entry exists for today, update its quantity
+      await db.runAsync(
+        `UPDATE inventory_history SET quantity = ?, createdAt = ? WHERE id = ?;`,
+        [currentInventoryItem.quantity, createdAt, existingEntry.id]
+      );
+    } else {
+      // Otherwise, insert a new entry
+      await db.runAsync(
+        `INSERT INTO inventory_history (inventoryItemId, quantity, date, createdAt) VALUES (?, ?, ?, ?);`,
+        [inventoryItemId, currentInventoryItem.quantity, dateToSave, createdAt]
+      );
     }
   });
 };
 
-export const addSingleInventoryHistoryEntry = async ( // Renamed from saveProductHistoryForSingleProduct
+export const addSingleInventoryHistoryEntry = async (
   inventoryItemId: number,
   quantity: number,
   date: Date,
@@ -427,38 +435,6 @@ export const addSingleInventoryHistoryEntry = async ( // Renamed from saveProduc
   });
 };
 
-export const consolidateProductHistory = async (
-  sourceProductId: number,
-  targetProductId: number,
-  listId: number // Added listId as inventory_history now requires it
-): Promise<void> => {
-  const db = getDb();
-  const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
-  const now = new Date().toISOString();
-
-  await db.withTransactionAsync(async () => {
-    // 1. Delete any existing history for target product for today in the specific list
-    await db.runAsync(
-      `DELETE FROM inventory_history WHERE productId = ? AND listId = ? AND date = ?;`,
-      [targetProductId, listId, today]
-    );
-
-    // 2. Transfer history from source to target, ensuring listId is consistent
-    await db.runAsync(`
-      INSERT INTO inventory_history (listId, productId, quantity, date, notes, createdAt)
-      SELECT ?, ?, quantity, date, notes, ?
-      FROM inventory_history
-      WHERE productId = ?;
-    `, [listId, targetProductId, now, sourceProductId]);
-
-    // 3. Delete the source product's history entries
-    await db.runAsync(`DELETE FROM inventory_history WHERE productId = ?;`, [sourceProductId]);
-
-    // 4. Delete the source product from the products table (this will cascade delete related inventory/shopping items)
-    await db.runAsync(`DELETE FROM products WHERE id = ?;`, [sourceProductId]);
-  });
-};
-
 // --- CATEGORY CRUD OPERATIONS ---
 
 export const addCategory = async (name: string): Promise<number> => {
@@ -473,7 +449,8 @@ export const addCategory = async (name: string): Promise<number> => {
       return existingCategory.id;
     }
 
-    const result = await db.runAsync("INSERT INTO categories (name) VALUES (?);", [name.trim()]);
+    const result = await db.runAsync("INSERT INTO categories (name, createdAt, updatedAt) VALUES (?, ?, ?);", 
+      [name.trim(), new Date().toISOString(), new Date().toISOString()]);
     if (result.lastInsertRowId) {
       return result.lastInsertRowId;
     } else {
@@ -496,34 +473,99 @@ export const getCategories = async (): Promise<Category[]> => {
   }
 };
 
+
 // --- SHOPPING LIST ITEM CRUD OPERATIONS ---
 
-export const addShoppingListItem = async (
+// Helper function to get or create a product and inventory item
+// This function encapsulates the "ensure product/inventory item exists" logic.
+const ensureProductAndInventoryItemExist = async (
+  db: SQLite.SQLiteDatabase,
   listId: number,
-  productId: number,
+  productName: string,
+  categoryId?: number,
+  initialInventoryQuantity: number = 0 // Default to 0 for inventory items created via shopping list
+): Promise<{ productId: number; inventoryItemId: number }> => {
+  let productId: number;
+  let inventoryItemId: number;
+  const now = new Date().toISOString();
+
+  // 1. Get or create Product
+  const existingProduct = await db.getFirstAsync<{ id: number }>(
+    `SELECT id FROM products WHERE name = ?;`,
+    [productName.trim()]
+  );
+
+  if (existingProduct) {
+    productId = existingProduct.id;
+  } else {
+    const productResult = await db.runAsync(
+      `INSERT INTO products (name, categoryId, createdAt, updatedAt) VALUES (?, ?, ?, ?);`,
+      [productName.trim(), categoryId, now, now]
+    );
+    if (!productResult.lastInsertRowId) {
+      throw new Error(`Failed to create product '${productName}'`);
+    }
+    productId = productResult.lastInsertRowId;
+  }
+
+  // 2. Get or create InventoryItem for the given listId and productId
+  const existingInventoryItem = await db.getFirstAsync<{ id: number }>(
+    `SELECT id FROM inventory_items WHERE listId = ? AND productId = ?;`,
+    [listId, productId]
+  );
+
+  if (existingInventoryItem) {
+    inventoryItemId = existingInventoryItem.id;
+  } else {
+    const inventoryResult = await db.runAsync(
+      `INSERT INTO inventory_items (listId, productId, quantity, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?);`,
+      [listId, productId, initialInventoryQuantity, now, now] // Set initial quantity to 0
+    );
+    if (!inventoryResult.lastInsertRowId) {
+      throw new Error(`Failed to create inventory item for product ${productName} in list ${listId}`);
+    }
+    inventoryItemId = inventoryResult.lastInsertRowId;
+  }
+
+  return { productId, inventoryItemId };
+};
+
+
+export const addShoppingListItem = async (
+  listId: number,       // Needed for ensureProductAndInventoryItemExist
+  productName: string,  // Added productName to allow creating product/inventory item if not exists
   quantity: number,
   price?: number,
   notes?: string,
-  sortOrder: number = 0
+  sortOrder: number = 0,
+  categoryId?: number // Added categoryId for new product creation
 ): Promise<number> => {
   const db = getDb();
   const now = new Date().toISOString();
+
   try {
-    const existingItem = await db.getFirstAsync<{ id: number }>(
-      `SELECT id FROM shopping_list_items WHERE listId = ? AND productId = ?;`,
-      [listId, productId]
+    // Ensure the Product and InventoryItem exist for this list
+    const { inventoryItemId } = await ensureProductAndInventoryItemExist(db, listId, productName, categoryId, 0);
+
+    // Check if a shopping list item for this specific inventoryItemId already exists
+    // (There should only be one shopping list item for a unique inventory item due to UNIQUE constraint)
+    const existingShoppingItem = await db.getFirstAsync<{ id: number }>(
+      `SELECT id FROM shopping_list_items WHERE inventoryItemId = ?;`,
+      [inventoryItemId]
     );
 
-    if (existingItem) {
+    if (existingShoppingItem) {
+      // If it exists, update its quantity and other details
       await db.runAsync(
         `UPDATE shopping_list_items SET quantity = ?, price = ?, notes = ?, updatedAt = ? WHERE id = ?;`,
-        [quantity, price, notes, now, existingItem.id]
+        [quantity, price, notes, now, existingShoppingItem.id]
       );
-      return existingItem.id;
+      return existingShoppingItem.id;
     } else {
+      // Insert new shopping list item linked to the inventoryItemId
       const result = await db.runAsync(
-        `INSERT INTO shopping_list_items (listId, productId, quantity, checked, price, sortOrder, notes, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`,
-        [listId, productId, quantity, 0, price, sortOrder, notes, now, now]
+        `INSERT INTO shopping_list_items (inventoryItemId, quantity, checked, price, sortOrder, notes, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?);`,
+        [inventoryItemId, quantity, 0, price, sortOrder, notes, now, now]
       );
       if (result.lastInsertRowId) {
         return result.lastInsertRowId;
@@ -537,13 +579,34 @@ export const addShoppingListItem = async (
   }
 };
 
+
 export const getShoppingListItemsByListId = async (listId: number): Promise<ShoppingListItem[]> => {
   const db = getDb();
   try {
+    // We need to JOIN to inventory_items to filter by listId,
+    // and then JOIN to products to get product details for display if needed
     const result = await db.getAllAsync<ShoppingListItem>(
-      `SELECT * FROM shopping_list_items WHERE listId = ? ORDER BY sortOrder ASC;`,
+      `SELECT
+          sli.id,
+          sli.inventoryItemId,
+          sli.quantity,
+          sli.checked,
+          sli.price,
+          sli.sortOrder,
+          sli.notes,
+          sli.createdAt,
+          sli.updatedAt,
+          p.name AS productName,       -- Add product name for convenience
+          ii.productId AS productId    -- Add productId for convenience
+       FROM shopping_list_items sli
+       JOIN inventory_items ii ON sli.inventoryItemId = ii.id
+       JOIN products p ON ii.productId = p.id
+       WHERE ii.listId = ?
+       ORDER BY sli.sortOrder ASC;`,
       [listId]
     );
+    // We might want to extend our ShoppingListItem model to include productName and productId
+    // if we return them directly from this query.
     return result;
   } catch (error) {
     console.error("Error getting shopping list items:", error);
@@ -552,7 +615,7 @@ export const getShoppingListItemsByListId = async (listId: number): Promise<Shop
 };
 
 export const updateShoppingListItem = async (
-  id: number,
+  id: number, // ShoppingListItem ID
   updates: { quantity?: number; checked?: boolean; price?: number; sortOrder?: number; notes?: string }
 ): Promise<void> => {
   const db = getDb();
@@ -585,4 +648,68 @@ export const deleteShoppingListItem = async (id: number): Promise<void> => {
     console.error("Error deleting shopping list item:", error);
     throw error;
   }
+};
+
+// --- NEW FUNCTIONALITY: Buy Shopping List Item (Integrates with Inventory) ---
+
+export const buyShoppingListItem = async (
+  shoppingListItemId: number,
+  purchasedQuantity?: number // Optional: if null/undefined, use the quantity from the shopping list item
+): Promise<void> => {
+  const db = getDb();
+  const now = new Date().toISOString();
+
+  await db.withTransactionAsync(async () => {
+    // 1. Get the shopping list item and its linked inventory_item
+    const shoppingItem = await db.getFirstAsync<{
+      inventoryItemId: number;
+      quantity: number; // Quantity desired on shopping list
+      checked: number; // SQLite returns 0 or 1 for boolean
+    }>(
+      `SELECT inventoryItemId, quantity, checked FROM shopping_list_items WHERE id = ?;`,
+      [shoppingListItemId]
+    );
+
+    if (!shoppingItem) {
+      throw new Error(`Shopping list item with ID ${shoppingListItemId} not found.`);
+    }
+
+    const { inventoryItemId } = shoppingItem;
+    const qtyToPurchase = purchasedQuantity !== undefined ? purchasedQuantity : shoppingItem.quantity;
+
+    // 2. Update the quantity in inventory_items
+    await db.runAsync(
+      `UPDATE inventory_items SET quantity = quantity + ?, updatedAt = ? WHERE id = ?;`,
+      [qtyToPurchase, now, inventoryItemId]
+    );
+
+    // 3. Add an entry to inventory_history for the purchase
+    // This records the *change* or the *new total*? Let's assume recording the *new total* after purchase.
+    // Or you could record the `qtyToPurchase` as a positive change.
+    // For consistency with saveInventoryHistorySnapshot, let's record the new total.
+    const updatedInventoryItem = await db.getFirstAsync<{ quantity: number }>(
+      `SELECT quantity FROM inventory_items WHERE id = ?;`,
+      [inventoryItemId]
+    );
+    if (updatedInventoryItem) {
+        await addSingleInventoryHistoryEntry( // Use the existing history function
+            inventoryItemId,
+            updatedInventoryItem.quantity,
+            new Date(now),
+            `Purchased ${qtyToPurchase} units (via Shopping List)`
+        );
+    }
+
+
+    // 4. Delete the shopping list item (or update its quantity/checked status)
+    // If you buy the full amount, delete it. If partial, reduce quantity.
+    if (qtyToPurchase >= shoppingItem.quantity) {
+      await db.runAsync(`DELETE FROM shopping_list_items WHERE id = ?;`, [shoppingListItemId]);
+    } else {
+      await db.runAsync(
+        `UPDATE shopping_list_items SET quantity = quantity - ?, updatedAt = ?, checked = 0 WHERE id = ?;`, // Reset checked if reducing quantity
+        [qtyToPurchase, now, shoppingListItemId]
+      );
+    }
+  });
 };
