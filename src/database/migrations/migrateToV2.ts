@@ -29,12 +29,11 @@ export async function migrateToV2(db: SQLite.SQLiteDatabase) {
     }
   }
 
-  // Get or create default list ID early, this requires 'lists' table to exist (which it does from V1)
-  const defaultListId = await getDefaultListId();
+  const defaultListId = await getDefaultListId(); // Get or create default list ID early
 
 
   // --- 1. Create ALL new tables with IF NOT EXISTS first ---
-  // This ensures all tables for V2 schema are present before any data operations.
+  // This ensures all target tables for V2 schema are present before any data operations.
 
   // Categories table
   await db.runAsync(`
@@ -117,28 +116,22 @@ export async function migrateToV2(db: SQLite.SQLiteDatabase) {
   // --- 2. Data Migration & Table Renames/Transforms ---
 
   // Flags for product migration state
-  let currentProductsTableExists = (await db.getFirstAsync(`SELECT name FROM sqlite_master WHERE type='table' AND name='products';`)) !== undefined;
-  let oldProductsTableExistsAsRenamed = (await db.getFirstAsync(`SELECT name FROM sqlite_master WHERE type='table' AND name='products_old_v1';`)) !== undefined;
+  let currentProductsTableExists = (await db.getFirstAsync(`SELECT name FROM sqlite_master WHERE type='table' AND name='products';`)) !== null;
+  let oldProductsTableExistsAsRenamed = (await db.getFirstAsync(`SELECT name FROM sqlite_master WHERE type='table' AND name='products_old_v1';`)) !== null;
   let newProductsTableIsPopulated = (await db.getFirstAsync(`SELECT COUNT(*) FROM products;`))?.['COUNT(*)'] > 0;
 
   // Handle renaming of original 'products' table to 'products_old_v1'
-  // This means if 'products' still exists in its V1 form and hasn't been renamed before, do it.
-  // And the new 'products' table shouldn't be populated yet (otherwise migration already completed).
   if (currentProductsTableExists && !oldProductsTableExistsAsRenamed && !newProductsTableIsPopulated) {
       console.log("Renaming old 'products' table to 'products_old_v1' for migration.");
       await db.runAsync(`ALTER TABLE products RENAME TO products_old_v1;`);
       oldProductsTableExistsAsRenamed = true; // Update flag
       currentProductsTableExists = false; // Original 'products' no longer exists by this name
   } else if (!currentProductsTableExists && oldProductsTableExistsAsRenamed && !newProductsTableIsPopulated) {
-      // This is a scenario where the rename happened, but the app crashed before data migration.
-      // The old products table is already renamed, but the new one isn't populated.
       console.log("'products' table already renamed to 'products_old_v1', proceeding with data migration.");
   }
 
 
   // Migrate data from 'products_old_v1' to new 'products'
-  // Only insert if products_old_v1 exists AND the new products table is NOT populated.
-  // We re-check population here as other logic might have run.
   newProductsTableIsPopulated = (await db.getFirstAsync(`SELECT COUNT(*) FROM products;`))?.['COUNT(*)'] > 0;
 
   if (oldProductsTableExistsAsRenamed && !newProductsTableIsPopulated) {
@@ -148,13 +141,11 @@ export async function migrateToV2(db: SQLite.SQLiteDatabase) {
           SELECT name, strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now')
           FROM products_old_v1;
       `);
-      newProductsTableIsPopulated = true; // Mark as populated after attempt
+      newProductsTableIsPopulated = true;
   }
 
   // Migrate data from 'products_old_v1' to 'inventory_items'
-  // Use the defaultListId
   const inventoryItemsCount = (await db.getFirstAsync(`SELECT COUNT(*) FROM inventory_items;`))?.['COUNT(*)'] || 0;
-  // Make sure to query products_old_v1 *only if it exists*.
   const oldProductsCount = oldProductsTableExistsAsRenamed ? (await db.getFirstAsync(`SELECT COUNT(*) FROM products_old_v1;`))?.['COUNT(*)'] || 0 : 0;
 
   if (oldProductsTableExistsAsRenamed && inventoryItemsCount < oldProductsCount) {
@@ -176,55 +167,90 @@ export async function migrateToV2(db: SQLite.SQLiteDatabase) {
 
   // --- IDEMPOTENT QUANTITY HISTORY MIGRATION ---
 
-  // Flags for quantity history migration state
-  let currentQuantityHistoryTableExists = (await db.getFirstAsync(`SELECT name FROM sqlite_master WHERE type='table' AND name='quantity_history';`)) !== undefined;
-  let oldQuantityHistoryTableExistsAsRenamed = (await db.getFirstAsync(`SELECT name FROM sqlite_master WHERE type='table' AND name='quantity_history_old_v1';`)) !== undefined;
-  let newInventoryHistoryIsPopulated = (await db.getFirstAsync(`SELECT COUNT(*) FROM inventory_history;`))?.['COUNT(*)'] > 0;
+  // Check if original 'quantity_history' table (from V1) exists.
+  // This is the absolute prerequisite for any rename or migration from it.
+  let originalQuantityHistoryExists = (await db.getFirstAsync(`SELECT name FROM sqlite_master WHERE type='table' AND name='quantity_history';`)) !== null;
+  // Check if the old table was already renamed in a previous run.
+  let oldQuantityHistoryTableExistsAsRenamed = (await db.getFirstAsync(`SELECT name FROM sqlite_master WHERE type='table' AND name='quantity_history_old_v1';`)) !== null;
+
+  console.log('oldqhov: ', await db.getFirstAsync(`SELECT name FROM sqlite_master WHERE type='table' AND name='quantity_history_old_v1';`))
+  // Combine these for the overall condition to proceed with QH migration logic
+  const shouldAttemptQuantityHistoryMigration = originalQuantityHistoryExists || oldQuantityHistoryTableExistsAsRenamed;
+
+  console.log("--- Quantity History Migration Status ---");
+  console.log("  Original 'quantity_history' (V1) exists:", originalQuantityHistoryExists);
+  console.log("  'quantity_history_old_v1' exists (renamed):", oldQuantityHistoryTableExistsAsRenamed);
+  console.log("  Proceed with QH migration logic:", shouldAttemptQuantityHistoryMigration);
 
 
-  // Handle renaming of original 'quantity_history' table to 'quantity_history_old_v1'
-  if (currentQuantityHistoryTableExists && !oldQuantityHistoryTableExistsAsRenamed && !newInventoryHistoryIsPopulated) {
-      console.log("Renaming old 'quantity_history' table to 'quantity_history_old_v1' for migration.");
-      await db.runAsync(`ALTER TABLE quantity_history RENAME TO quantity_history_old_v1;`);
-      oldQuantityHistoryTableExistsAsRenamed = true;
-      currentQuantityHistoryTableExists = false;
-  } else if (!currentQuantityHistoryTableExists && oldQuantityHistoryTableExistsAsRenamed && !newInventoryHistoryIsPopulated) {
-      // Already renamed, but new table not populated
-      console.log("'quantity_history' table already renamed to 'quantity_history_old_v1', proceeding with data migration.");
+  if (shouldAttemptQuantityHistoryMigration) {
+      let newInventoryHistoryIsPopulated = (await db.getFirstAsync(`SELECT COUNT(*) FROM inventory_history;`))?.['COUNT(*)'] > 0;
+      console.log("  New 'inventory_history' table is populated:", newInventoryHistoryIsPopulated);
+
+      // Handle renaming of original 'quantity_history' table to 'quantity_history_old_v1'
+      // This block only runs if the original V1 table exists and hasn't been renamed yet.
+      if (originalQuantityHistoryExists && !oldQuantityHistoryTableExistsAsRenamed && !newInventoryHistoryIsPopulated) {
+          console.log("  Renaming old 'quantity_history' table to 'quantity_history_old_v1' for migration.");
+          await db.runAsync(`ALTER TABLE quantity_history RENAME TO quantity_history_old_v1;`);
+          // Update flags after successful rename
+          oldQuantityHistoryTableExistsAsRenamed = true;
+          originalQuantityHistoryExists = false;
+      } else if (!originalQuantityHistoryExists && oldQuantityHistoryTableExistsAsRenamed && !newInventoryHistoryIsPopulated) {
+          // This scenario means it was renamed in a previous attempt, but data migration didn't complete
+          console.log("  'quantity_history' table already renamed to 'quantity_history_old_v1', proceeding with data migration.");
+      }
+      else if (originalQuantityHistoryExists && oldQuantityHistoryTableExistsAsRenamed && newInventoryHistoryIsPopulated) {
+          console.log("  'quantity_history' table already renamed to 'quantity_history_old_v1', proceeding with data migration.");
+      }
+
+      // Migrate data from 'quantity_history_old_v1' to new 'inventory_history'
+      newInventoryHistoryIsPopulated = (await db.getFirstAsync(`SELECT COUNT(*) FROM inventory_history;`))?.['COUNT(*)'] > 0;
+
+      // This is the crucial check: Only attempt the INSERT if the source table exists *and* the target is not populated.
+      if (oldQuantityHistoryTableExistsAsRenamed && !newInventoryHistoryIsPopulated) {
+          console.log("  Executing data migration from 'quantity_history_old_v1' to new 'inventory_history'.");
+          
+          console.log(await db.runAsync(`SELECT * FROM quantity_history_old_v1;`));
+          
+          console.log('quantity_history_old_v1 table is populated');
+          await db.runAsync(`
+              INSERT OR IGNORE INTO inventory_history (inventoryItemId, date, quantity, createdAt)
+              SELECT
+                  ii.id, -- Get the new inventoryItemId
+                  qhov.date,
+                  qhov.quantity,
+                  strftime('%Y-%m-%dT%H:%M:%fZ','now')
+              FROM quantity_history_old_v1 qhov
+              JOIN products_old_v1 pov ON qhov.productId = pov.id
+              JOIN products np ON pov.name = np.name
+              JOIN inventory_items ii ON ii.productId = np.id AND ii.listId = ?;
+          `, [defaultListId]);
+      } else {
+          console.log("  Skipping 'quantity_history' data migration. Conditions not met.");
+          if (!oldQuantityHistoryTableExistsAsRenamed) {
+              console.log("    Reason: 'quantity_history_old_v1' does not exist or was not renamed correctly.");
+          }
+          if (newInventoryHistoryIsPopulated) {
+              console.log("    Reason: 'inventory_history' is already populated.");
+          }
+      }
+  } else {
+      console.log("Skipping entire 'quantity_history' migration block because no original 'quantity_history' or renamed 'quantity_history_old_v1' table was found.");
+      // If for some reason quantity_history_old_v1 was left behind without original_qh_exists, clean it up.
+      if (oldQuantityHistoryTableExistsAsRenamed) {
+          console.log("  Cleaning up remnant 'quantity_history_old_v1' table from a prior partial failure.");
+          await db.runAsync(`DROP TABLE IF EXISTS quantity_history_old_v1;`);
+      }
   }
-
-
-  // Migrate data from 'quantity_history_old_v1' to new 'inventory_history'
-  // Only insert if products_old_v1 exists AND the new products table is NOT populated.
-  newInventoryHistoryIsPopulated = (await db.getFirstAsync(`SELECT COUNT(*) FROM inventory_history;`))?.['COUNT(*)'] > 0;
-  console.log("newInventoryHistoryIsPopulated:", newInventoryHistoryIsPopulated);
-  console.log("oldQuantityHistoryTableExistsAsRenamed:", oldQuantityHistoryTableExistsAsRenamed);
-  console.log("currentQuantityHistoryTableExists:", currentQuantityHistoryTableExists);
-
-  if (oldQuantityHistoryTableExistsAsRenamed && !newInventoryHistoryIsPopulated) {
-      console.log("Migrating data from 'quantity_history_old_v1' to new 'inventory_history'.");
-      await db.runAsync(`
-          INSERT OR IGNORE INTO inventory_history (inventoryItemId, date, quantity, createdAt)
-          SELECT
-              ii.id, -- Get the new inventoryItemId
-              qhov.date,
-              qhov.quantity,
-              strftime('%Y-%m-%dT%H:%M:%fZ','now')
-          FROM quantity_history_old_v1 qhov
-          JOIN products_old_v1 pov ON qhov.productId = pov.id
-          JOIN products np ON pov.name = np.name
-          JOIN inventory_items ii ON ii.productId = np.id AND ii.listId = ?;
-      `, [defaultListId]); // Pass defaultListId as a parameter
-  }
-
 
   // --- 3. Clean up old tables ---
-  // These drops should now be safe because the data migration is idempotent and complete
+  // Ensure these flags are up-to-date or re-queried if needed.
+  // In this structure, they should be accurate from the logic above.
   if (oldProductsTableExistsAsRenamed) {
       console.log("Dropping old 'products_old_v1' table.");
       await db.runAsync(`DROP TABLE IF EXISTS products_old_v1;`);
   }
-  if (oldQuantityHistoryTableExistsAsRenamed) {
+  if (oldQuantityHistoryTableExistsAsRenamed) { 
       console.log("Dropping old 'quantity_history_old_v1' table.");
       await db.runAsync(`DROP TABLE IF EXISTS quantity_history_old_v1;`);
   }
