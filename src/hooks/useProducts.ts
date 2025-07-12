@@ -1,6 +1,6 @@
 // hooks/useProducts.ts
 import { useState, useEffect, useCallback } from "react";
-import { getInventoryItems, updateInventoryItemOrder, saveProductHistory } from "../database/database";
+import { getInventoryItems, updateInventoryItemOrder, saveInventoryHistorySnapshot } from "../database/database";
 import { sortProducts, SortOrder } from "../utils/sortUtils";
 import { preprocessName, calculateSimilarity } from "../utils/similarityUtils";
 import { InventoryItem } from "../database/models";
@@ -38,6 +38,7 @@ export default function useProducts(listId: number, sortOrder: SortOrder, search
   const loadProducts = useCallback(async () => {
     try {
       const loaded = await getInventoryItems(listId);
+      console.log("Produtos carregados:", loaded);
       setProducts(loaded);
     } catch (err) {
       console.error("Erro ao carregar produtos:", err);
@@ -74,6 +75,6 @@ export default function useProducts(listId: number, sortOrder: SortOrder, search
     setProducts, // Potentially useful if external state manipulation is needed (e.g., import)
     loadProducts, // Expose for manual refresh
     handleProductOrderChange,
-    saveProductHistory, 
+    saveInventoryHistorySnapshot, 
   };
 }

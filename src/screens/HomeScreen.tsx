@@ -27,6 +27,7 @@ import { SortMenu } from "../components/SortMenu";
 import { EditableName } from "../components/EditableName";
 import { AddItemButton } from "../components/AddItemButton";
 import ProductList from "../components/ProductList";
+import { saveInventoryHistorySnapshot } from "../database/database";
 
 type HomeScreenNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
@@ -49,7 +50,7 @@ export default function HomeScreen() {
   const {
     products,
     loadProducts,
-    saveProductHistory,
+    saveInventoryHistorySnapshot,
     handleProductOrderChange,
     filteredProducts,
   } = useProducts(listId, sortOrder, searchQuery);
@@ -80,7 +81,7 @@ export default function HomeScreen() {
 
   const saveAndCopyStockList = async () => {
     try {
-      await saveProductHistory();
+      await saveInventoryHistorySnapshot();
       const text = generateStockListText(products);
       Clipboard.setStringAsync(text);
       Alert.alert("Sucesso", "Lista de estoque copiada para a área de transferência!");

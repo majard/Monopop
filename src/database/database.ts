@@ -274,7 +274,11 @@ export const getInventoryItems = async (listId: number): Promise<InventoryItem[]
   const db = getDb();
   try {
     const result = await db.getAllAsync<InventoryItem>(
-      "SELECT * FROM inventory_items WHERE listId = ? ORDER BY sortOrder ASC;",
+      `SELECT inventory_items.*, products.name, products.categoryId
+       FROM inventory_items
+       JOIN products ON inventory_items.productId = products.id
+       WHERE inventory_items.listId = ?
+       ORDER BY inventory_items.sortOrder ASC;`,
       [listId]
     );
     return result;
