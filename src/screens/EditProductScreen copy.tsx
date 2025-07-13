@@ -57,10 +57,9 @@ export default function EditProductScreen() {
   const [selectedListId, setSelectedListId] = useState(product?.listId ?? 1);
 
   useEffect(() => {
-    console.log('\n\nproduct', product);
     if (product) {
       setQuantity(product.quantity.toString());
-      setName(product.productName);
+      setName(product.name);
       loadHistory();
     }
     getLists().then(setLists);
@@ -68,9 +67,9 @@ export default function EditProductScreen() {
   }, []);
 
   const loadHistory = async () => {
-    if (product?.productName) { // Ensure product and id exist before calling
+    if (product?.name) { // Ensure product and id exist before calling
       try {
-        const data = await getInventoryHistory(product.productName.toString());
+        const data = await getInventoryHistory(product.name.toString());
         console.log('\n\ndata', data);
         setHistory(data || []); 
       } catch (error) {
@@ -195,7 +194,7 @@ export default function EditProductScreen() {
                 icon="close"
                 size={24}
                 onPress={() => {
-                  setName(product?.productName || "");
+                  setName(product?.name || "");
                   setIsEditingName(false);
                 }}
                 iconColor={theme.colors.error}
@@ -205,7 +204,7 @@ export default function EditProductScreen() {
           ) : (
             <View style={styles.nameContainer} testID="name-container">
               <Text variant="titleLarge" style={styles.title} testID="product-name">
-                {product?.productName}
+                {product?.name}
               </Text>
               <IconButton
                 icon="pencil"
