@@ -13,7 +13,7 @@ export default function useProducts(listId: number, sortOrder: SortOrder, search
   // --- Filtering Logic (memoized for performance) ---
   const filteredProducts = useCallback(() => {
     const filtered = products.filter((product) => {
-      const processedProductName = preprocessName(product.name);
+      const processedProductName = preprocessName(product.productName);
       const processedSearchQuery = preprocessName(searchQuery);
 
       if (!processedSearchQuery) {

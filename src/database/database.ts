@@ -274,11 +274,16 @@ export const getInventoryItems = async (listId: number): Promise<InventoryItem[]
   const db = getDb();
   try {
     const result = await db.getAllAsync<InventoryItem>(
-      `SELECT inventory_items.*, products.name, products.categoryId
-       FROM inventory_items
-       JOIN products ON inventory_items.productId = products.id
-       WHERE inventory_items.listId = ?
-       ORDER BY inventory_items.sortOrder ASC;`,
+      `SELECT
+      ii.*,
+      p.name AS productName,
+      p.categoryId,
+      c.name AS categoryName
+      FROM inventory_items ii
+      JOIN products p ON ii.productId = p.id
+      LEFT JOIN categories c ON p.categoryId = c.id
+      WHERE ii.listId = ?
+      ORDER BY ii.sortOrder ASC;`,
       [listId]
     );
     return result;
@@ -453,7 +458,7 @@ export const addCategory = async (name: string): Promise<number> => {
       return existingCategory.id;
     }
 
-    const result = await db.runAsync("INSERT INTO categories (name, createdAt, updatedAt) VALUES (?, ?, ?);", 
+    const result = await db.runAsync("INSERT INTO categories (name, createdAt, updatedAt) VALUES (?, ?, ?);",
       [name.trim(), new Date().toISOString(), new Date().toISOString()]);
     if (result.lastInsertRowId) {
       return result.lastInsertRowId;
@@ -696,12 +701,12 @@ export const buyShoppingListItem = async (
       [inventoryItemId]
     );
     if (updatedInventoryItem) {
-        await addSingleInventoryHistoryEntry( // Use the existing history function
-            inventoryItemId,
-            updatedInventoryItem.quantity,
-            new Date(now),
-            `Purchased ${qtyToPurchase} units (via Shopping List)`
-        );
+      await addSingleInventoryHistoryEntry( // Use the existing history function
+        inventoryItemId,
+        updatedInventoryItem.quantity,
+        new Date(now),
+        `Purchased ${qtyToPurchase} units (via Shopping List)`
+      );
     }
 
 

@@ -20,6 +20,9 @@ export interface InventoryItem {
   notes?: string; // Notes about this inventory item (optional as per DB schema)
   updatedAt: string; // When was this stock last updated?
   createdAt: string;
+  productName: string;
+  categoryId?: number | null;
+  categoryName?: string | null;
 }
 
 export interface InventoryHistory {

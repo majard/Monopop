@@ -9,7 +9,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import { InventoryItem } from '../database/database';
+import { Product } from '../database/database';
 import { RootStackParamList } from '../types/navigation';
 import { createHomeScreenStyles } from '../styles/HomeScreenStyles';
 import { getEmojiForProduct } from '../utils/stringUtils';
@@ -21,7 +21,7 @@ type ProductCardNavigationProp = NativeStackNavigationProp<
 >;
 
 interface ProductCardProps {
-  item: InventoryItem;
+  item: Product;
   drag: () => void;
   isActive: boolean;
 }
@@ -55,7 +55,7 @@ export const ProductCard = ({
           <View style={styles.cardHeader}>
             <View style={styles.dragHandle}>
               <Text variant="titleMedium">
-                {item.productName + ' ' + getEmojiForProduct(item.productName)}
+                {item.name + ' ' + getEmojiForProduct(item.name)}
               </Text>
             </View>
             <View style={styles.cardActions}>
