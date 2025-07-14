@@ -68,9 +68,10 @@ export default function EditProductScreen() {
   }, []);
 
   const loadHistory = async () => {
+    console.log('\n\n loading history product', product);
     if (product?.productName) { // Ensure product and id exist before calling
       try {
-        const data = await getInventoryHistory(product.productName.toString());
+        const data = await getInventoryHistory(product.id);
         console.log('\n\ndata', data);
         setHistory(data || []); 
       } catch (error) {
