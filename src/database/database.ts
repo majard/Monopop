@@ -293,20 +293,26 @@ export const getInventoryItems = async (listId: number): Promise<InventoryItem[]
   }
 };
 
-export const updateInventoryItemQuantity = async (
+export const updateInventoryItem= async (
   id: number,
-  newQuantity: number
+  newQuantity?: number,
+  newNotes?: string
 ): Promise<void> => {
   const db = getDb();
   const now = new Date().toISOString();
+  
+  let query = `UPDATE inventory_items SET updatedAt = ?`;
+  const params: (string | number | boolean | undefined)[] = [now];
+
+  if (newQuantity !== undefined) { query += `, quantity = ?`; params.push(newQuantity); }
+  if (newNotes !== undefined) { query += `, notes = ?`; params.push(newNotes); }
+
+  query += ` WHERE id = ?;`;
+  params.push(id);
   try {
-    await db.runAsync("UPDATE inventory_items SET quantity = ?, updatedAt = ? WHERE id = ?", [
-      newQuantity,
-      now,
-      id,
-    ]);
+    await db.runAsync(query, params);
   } catch (error) {
-    console.error("Error updating inventory item quantity:", error);
+    console.error("Error updating inventory item:", error);
     throw error;
   }
 };
@@ -335,7 +341,7 @@ export const deleteInventoryItem = async (id: number): Promise<void> => {
   }
 };
 
-export const updateInventoryItemProductList = async (
+export const updateInventoryItemList = async (
   inventoryItemId: number,
   newListId: number
 ): Promise<void> => {

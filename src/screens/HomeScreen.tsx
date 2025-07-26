@@ -26,7 +26,7 @@ import { useList } from "../hooks/useList";
 import { SortMenu } from "../components/SortMenu";
 import { EditableName } from "../components/EditableName";
 import { AddItemButton } from "../components/AddItemButton";
-import ProductList from "../components/ProductList";
+import InventoryList from "../components/InventoryList";
 import { saveInventoryHistorySnapshot } from "../database/database";
 
 type HomeScreenNavigationProp = NativeStackNavigationProp<
@@ -128,9 +128,9 @@ export default function HomeScreen() {
         </View>
       </View>
       
-      <ProductList
-        products={filteredProducts}
-        handleProductOrderChange={handleProductOrderChange}
+      <InventoryList
+        inventoryItems={filteredProducts}
+        handleInventoryItemOrderChange={handleProductOrderChange}
       />
       <AddItemButton onPress={() => navigation.navigate("AddProduct", { listId })} label="Adicionar Produto" />
       <ImportModal

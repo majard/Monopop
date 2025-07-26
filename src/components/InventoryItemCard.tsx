@@ -9,7 +9,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import { Product } from '../database/database';
+import { InventoryItem } from '../database/models';
 import { RootStackParamList } from '../types/navigation';
 import { createHomeScreenStyles } from '../styles/HomeScreenStyles';
 import { getEmojiForProduct } from '../utils/stringUtils';
@@ -17,21 +17,21 @@ import { useProduct } from '../hooks/useProduct';
 
 type ProductCardNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
-  'EditProduct'
+  'EditInventoryItem'
 >;
 
-interface ProductCardProps {
-  item: Product;
+interface InventoryItemCardProps {
+  inventoryItem: InventoryItem;
   drag: () => void;
   isActive: boolean;
 }
 
-export const ProductCard = ({
-  item,
+export const InventoryItemCard = ({
+  inventoryItem,
   drag,
   isActive,
-}: ProductCardProps) => {
-  const navigation = useNavigation<ProductCardNavigationProp>();
+}: InventoryItemCardProps) => {
+  const navigation = useNavigation<InventoryItemCardNavigationProp>();
   const theme = useTheme();
   const styles = createHomeScreenStyles(theme);
 
@@ -41,21 +41,21 @@ export const ProductCard = ({
     confirmRemoveProduct,
     startContinuousAdjustment,
     stopContinuousAdjustment,
-  } = useProduct({ productId: item.id, initialQuantity: item.quantity });
+  } = useProduct({ productId: inventoryItem.id, initialQuantity: inventoryItem.quantity });
 
 
   return (
     <Card style={[styles.card, { opacity: isActive ? 0.5 : 1 }]}>
       <Pressable
-        onPress={() => navigation.navigate('EditProduct', { product: item })}
+        onPress={() => navigation.navigate('EditInventoryItem', { inventoryItem: inventoryItem })}
         onLongPress={drag}
-        testID={`product-card-${item.id}`}
+        testID={`product-card-${inventoryItem.id}`}
       >
         <Card.Content>
           <View style={styles.cardHeader}>
             <View style={styles.dragHandle}>
               <Text variant="titleMedium">
-                {item.name + ' ' + getEmojiForProduct(item.name)}
+                {inventoryItem.productName + ' ' + getEmojiForProduct(inventoryItem.productName)}
               </Text>
             </View>
             <View style={styles.cardActions}>
@@ -63,7 +63,7 @@ export const ProductCard = ({
                 icon="pencil"
                 size={20}
                 onPress={() =>
-                  navigation.navigate('EditProduct', { product: item })
+                  navigation.navigate('EditInventoryItem', { inventoryItem: inventoryItem })
                 }
                 iconColor={theme.colors.primary}
               />
@@ -72,7 +72,7 @@ export const ProductCard = ({
                 size={20}
                 onPress={confirmRemoveProduct}
                 iconColor={theme.colors.error}
-                testID={`delete-button-${item.id}`}
+                testID={`delete-button-${inventoryItem.id}`}
               />
             </View>
           </View>
@@ -89,7 +89,7 @@ export const ProductCard = ({
                   }
                   keyboardType="numeric"
                   style={styles.input}
-                  testID={`quantity-text-input-${item.id}`}
+                  testID={`quantity-text-input-${inventoryItem.id}`}
                 />
               </View>
               <View style={styles.quantityButtons}>
@@ -106,7 +106,7 @@ export const ProductCard = ({
                   onPress={() => updateInventoryItemQuantity(quantity + 1)}
                   onLongPress={() => startContinuousAdjustment(true)}
                   onPressOut={stopContinuousAdjustment}
-                  testID={`increment-button-${item.id}`}
+                  testID={`increment-button-${inventoryItem.id}`}
                 />
               </View>
             </View>

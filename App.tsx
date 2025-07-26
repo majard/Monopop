@@ -8,7 +8,7 @@ import { StyleSheet } from 'react-native';
 import { initializeDatabase } from './src/database/database';
 import HomeScreen from './src/screens/HomeScreen';
 import AddProductScreen from './src/screens/AddProductScreen';
-import EditProductScreen from './src/screens/EditProductScreen';
+import EditInventoryItemScreen from './src/screens/EditInventoryItemScreen';
 import ListsScreen from './src/screens/ListsScreen';
 import AddListScreen from './src/screens/AddListScreen';
 
@@ -62,8 +62,8 @@ export default function App() {
                 options={{ title: 'Adicionar Produto', headerShown: false }}
               />
               <Stack.Screen 
-                name="EditProduct" 
-                component={EditProductScreen} 
+                name="EditInventoryItem" 
+                component={EditInventoryItemScreen}  
                 // header was interfering with the other views placement
                 options={{ title: 'Editar Produto', headerShown: false }}
               />

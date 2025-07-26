@@ -33,7 +33,6 @@ import {
 import { InventoryHistory } from "../database/models";
 import { RootStackParamList } from "../types/navigation";
 import { getEmojiForList } from "../utils/stringUtils";
-import { EditableName } from "../components/EditableName";
 
 type EditProductScreenNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
@@ -51,15 +50,16 @@ export default function EditProductScreen() {
   const [history, setHistory] = useState<InventoryHistory[]>([]);
   const navigation = useNavigation<EditProductScreenNavigationProp>();
   const theme = useTheme();
-  const [name, setName] = useState(product?.productName || "");
+  const [name, setName] = useState(product?.name || "");
+  const [isEditingName, setIsEditingName] = useState(false);
   const [lists, setLists] = useState<{ id: number; name: string }[]>([]);
   const [listModalVisible, setListModalVisible] = useState(false);
   const [selectedListId, setSelectedListId] = useState(product?.listId ?? 1);
 
   useEffect(() => {
-    console.log('\n\nproduct', product);
     if (product) {
       setQuantity(product.quantity.toString());
+      setName(product.name);
       loadHistory();
     }
     getLists().then(setLists);
@@ -67,10 +67,9 @@ export default function EditProductScreen() {
   }, []);
 
   const loadHistory = async () => {
-    console.log('\n\n loading history product', product);
-    if (product?.productName) { // Ensure product and id exist before calling
+    if (product?.name) { // Ensure product and id exist before calling
       try {
-        const data = await getInventoryHistory(product.id);
+        const data = await getInventoryHistory(product.name.toString());
         console.log('\n\ndata', data);
         setHistory(data || []); 
       } catch (error) {
@@ -90,11 +89,12 @@ export default function EditProductScreen() {
     }
   };
 
-  const handleNameUpdate = async (newName: string) => {
+  const handleNameUpdate = async () => {
     if (product?.id) {
       try {
-        setName(newName);
-        await updateProductName(product.productId, newName);
+        await updateProductName(product.id, name);
+        setIsEditingName(false);
+        navigation.setParams({ product: { ...product, name } });
       } catch (error) {
         console.error("Erro ao atualizar nome do produto:", error);
       }
@@ -173,7 +173,56 @@ export default function EditProductScreen() {
   return (
     <SafeAreaView style={{ flex: 1 }}>
       <ScrollView style={styles.container}>
-      <EditableName name={name} handleSave={handleNameUpdate} handleDelete={handleDelete}/>
+        <View style={styles.header}>
+          {isEditingName ? (
+            <View style={styles.nameEditContainer} testID="name-edit-container">
+              <PaperTextInput
+                value={name}
+                onChangeText={setName}
+                style={styles.nameInput}
+                mode="outlined"
+                testID="name-input"
+              />
+              <IconButton
+                icon="check"
+                size={24}
+                onPress={handleNameUpdate}
+                iconColor={theme.colors.primary}
+                testID="save-name-button"
+              />
+              <IconButton
+                icon="close"
+                size={24}
+                onPress={() => {
+                  setName(product?.name || "");
+                  setIsEditingName(false);
+                }}
+                iconColor={theme.colors.error}
+                testID="cancel-name-button"
+              />
+            </View>
+          ) : (
+            <View style={styles.nameContainer} testID="name-container">
+              <Text variant="titleLarge" style={styles.title} testID="product-name">
+                {product?.name}
+              </Text>
+              <IconButton
+                icon="pencil"
+                size={24}
+                onPress={() => setIsEditingName(true)}
+                iconColor={theme.colors.primary}
+                testID="edit-name-button"
+              />
+            </View>
+          )}
+          <IconButton
+            icon="delete"
+            size={24}
+            onPress={handleDelete}
+            iconColor={theme.colors.error}
+            testID="delete-button"
+          />
+        </View>
 
         <Card style={styles.card}>
           <Card.Content>

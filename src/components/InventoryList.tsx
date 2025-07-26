@@ -7,12 +7,12 @@ import { createHomeScreenStyles } from '../styles/HomeScreenStyles';
 import { useTheme } from 'react-native-paper';
 import { InventoryItem } from '../database/models';
 
-interface ProductListProps {
-    products: InventoryItem[];
-    handleProductOrderChange: (newOrder: InventoryItem[]) => void;
+interface InventoryListProps {
+    inventoryItems: InventoryItem[];
+    handleInventoryItemOrderChange: (newOrder: InventoryItem[]) => void;
 }
 
-export default function ProductList({  products, handleProductOrderChange }: ProductListProps) {
+export default function InventoryList({  inventoryItems, handleInventoryItemOrderChange }: InventoryListProps) {
     const theme = useTheme();
     const styles = createHomeScreenStyles(theme);
 
@@ -39,8 +39,8 @@ export default function ProductList({  products, handleProductOrderChange }: Pro
     );
     return (
         <DraggableFlatList
-            data={products}
-            onDragEnd={({data}) => handleProductOrderChange(data)}
+            data={inventoryItems}
+            onDragEnd={({data}) => handleInventoryItemOrderChange(data)}
             keyExtractor={(item) => item.id.toString()}
             renderItem={renderItem}
             contentContainerStyle={styles.list}
