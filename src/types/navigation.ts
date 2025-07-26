@@ -3,6 +3,7 @@ import { InventoryItem, Product } from '../database/models';
 export type RootStackParamList = {
   Home: { listId?: number };
   AddProduct: {listId: number};
+  AddInventoryItem: {listId: number};
   EditProduct: { product: Product };
   EditInventoryItem: {inventoryItem: InventoryItem}
   Lists: undefined;
