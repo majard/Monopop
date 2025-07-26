@@ -7,7 +7,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StyleSheet } from 'react-native';
 import { initializeDatabase } from './src/database/database';
 import HomeScreen from './src/screens/HomeScreen';
-import AddProductScreen from './src/screens/AddProductScreen';
+import AddProductScreen from './src/screens/AddInventoryItemScreen';
 import EditInventoryItemScreen from './src/screens/EditInventoryItemScreen';
 import ListsScreen from './src/screens/ListsScreen';
 import AddListScreen from './src/screens/AddListScreen';
@@ -71,6 +71,11 @@ export default function App() {
               name="AddList"
               options={{title: 'Adicionar Lista'}}
               component={AddListScreen}
+              />
+              <Stack.Screen
+              name="AddInventoryItem"
+              options={{title: 'Adicionar Produto ao Estoque'}}
+              component={AddInventoryItemScreen}
               />
             </Stack.Navigator>
           </NavigationContainer>

@@ -81,7 +81,10 @@ export default function HomeScreen() {
 
   const saveAndCopyStockList = async () => {
     try {
-      await saveInventoryHistorySnapshot();
+      for (const inventoryItem of inventoryItems) {
+        console.log("\n\n\nSaving history snapshot for inventory item:", inventoryItem.id);
+        await saveInventoryHistorySnapshot(inventoryItem.id);
+      }
       const text = generateStockListText(inventoryItems);
       Clipboard.setStringAsync(text);
       Alert.alert("Sucesso", "Lista de estoque copiada para a área de transferência!");

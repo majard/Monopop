@@ -1,4 +1,4 @@
-import { Product } from "../database/database";
+import { InventoryItem } from "../database/models";
 
 export const getEmojiForProduct = (name: string): string => {
     const nameLower = name.toLowerCase();
@@ -33,7 +33,7 @@ export const getEmojiForList = (name: string): string => {
   return "📝";
 };
 
-export const generateStockListText = (products: Product[]): string => {
+export const generateStockListText = (inventoryItems: InventoryItem[]): string => {
   const today = new Date();
   const dateStr = today.toLocaleDateString("pt-BR", {
     day: "2-digit",
@@ -41,9 +41,10 @@ export const generateStockListText = (products: Product[]): string => {
   });
   let text = `Boa noite! ${dateStr}\n\n`;
   text += "Aqui está a lista de produção do dia:\n\n";
-  products.forEach((product) => {
-    const emoji = getEmojiForProduct(product.name);
-    text += `- ${product.name}: ${product.quantity} ${emoji}\n`;
+  inventoryItems.forEach((inventoryItem) => {
+    const emoji = getEmojiForProduct(inventoryItem.productName);
+    text += `- ${inventoryItem.productName}: ${inventoryItem.quantity} ${emoji}\n`;
+    text += inventoryItem.notes ? `  -   ${inventoryItem.notes}\n` : "";
   });
   return text;
 };
