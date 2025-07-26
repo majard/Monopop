@@ -19,7 +19,7 @@ import { RootStackParamList } from "../types/navigation";
 import { createHomeScreenStyles } from "../styles/HomeScreenStyles";
 import { generateStockListText } from "../utils/stringUtils";
 import ImportModal from "../components/ImportModal";
-import useProducts from "../hooks/useProducts";
+import useInventory from "../hooks/useInventory";
 import { SortOrder } from "../utils/sortUtils";
 import SearchBar from "../components/SearchBar";
 import { useList } from "../hooks/useList";
@@ -48,12 +48,12 @@ export default function HomeScreen() {
   const [searchQuery, setSearchQuery] = useState("");
 
   const {
-    products,
-    loadProducts,
+    inventoryItems,
+    loadInventoryItems,
     saveInventoryHistorySnapshot,
     handleProductOrderChange,
-    filteredProducts,
-  } = useProducts(listId, sortOrder, searchQuery);
+    filteredInventoryItems,
+  } = useInventory(listId, sortOrder, searchQuery);
 
   const {
     listName,
@@ -75,14 +75,14 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      loadProducts();
-    }, [sortOrder, loadProducts])
+      loadInventoryItems();
+    }, [sortOrder, loadInventoryItems])
   );
 
   const saveAndCopyStockList = async () => {
     try {
       await saveInventoryHistorySnapshot();
-      const text = generateStockListText(products);
+      const text = generateStockListText(inventoryItems);
       Clipboard.setStringAsync(text);
       Alert.alert("Sucesso", "Lista de estoque copiada para a área de transferência!");
     } catch (error) {
@@ -129,14 +129,14 @@ export default function HomeScreen() {
       </View>
       
       <InventoryList
-        inventoryItems={filteredProducts}
+        inventoryItems={filteredInventoryItems}
         handleInventoryItemOrderChange={handleProductOrderChange}
       />
       <AddItemButton onPress={() => navigation.navigate("AddProduct", { listId })} label="Adicionar Produto" />
       <ImportModal
         isImportModalVisible={isImportModalVisible}
         setIsImportModalVisible={setIsImportModalVisible}
-        loadProducts={loadProducts}
+        loadItems={loadInventoryItems}
         listId={listId}
       />
     </SafeAreaView>

@@ -15,6 +15,9 @@ import {
   addProduct,
   consolidateProductHistory,
   getInventoryItems,
+  updateInventoryItem,
+  addInventoryItem,
+  saveInventoryHistorySnapshot,
 } from "../database/database";
 import { InventoryItem, InventoryHistory } from "../database/models";
 
@@ -23,7 +26,7 @@ const similarityThreshold = 0.5;
 export default function ImportModal({
   isImportModalVisible,
   setIsImportModalVisible,
-  loadProducts,
+  loadItems,
   listId,
 }) {
   const theme = useTheme();
@@ -78,15 +81,15 @@ export default function ImportModal({
     if (!remainingProducts || remainingProducts.length === 0) {
       setConfirmationModalVisible(false);
       setCurrentImportItem(null);
-      await loadProducts();
+      await loadItems();
       return;
     }
 
     const [currentProduct, ...rest] = remainingProducts;
     const existingProducts = await getInventoryItems(listId);
-    // First, check for exact name matches (case-insensitive)
+    // First, check for exact name matches (case-insensitive)   
     const exactMatch = existingProducts.find(
-      (p) => p.name.toLowerCase() === currentProduct.originalName.toLowerCase()
+      (p) => p.productName.toLowerCase() === currentProduct.originalName.toLowerCase()
     );
 
     if (exactMatch) {
@@ -111,13 +114,13 @@ export default function ImportModal({
     const similarProducts = existingProducts
       .filter(
         (p) =>
-          calculateSimilarity(p.name, currentProduct.originalName) >=
+          calculateSimilarity(p.productName, currentProduct.originalName) >=
           similarityThreshold
       )
       .sort(
         (product1, product2) =>
-          calculateSimilarity(product2.name, currentProduct.originalName) -
-          calculateSimilarity(product1.name, currentProduct.originalName)
+          calculateSimilarity(product2.productName, currentProduct.originalName) -
+          calculateSimilarity(product1.productName, currentProduct.originalName)
       );
 
     if (similarProducts.length > 0) {
@@ -145,24 +148,24 @@ export default function ImportModal({
       const existingProducts = await getInventoryItems(listId);
       const productHistory = await getProductHistory(product.originalName);
       const exactMatch = existingProducts.find(
-        (p) => p.name.toLowerCase() === product.originalName.toLowerCase()
+        (p) => p.productName.toLowerCase() === product.originalName.toLowerCase()
       );
 
       if (exactMatch) {
         // Update quantity of exact match
-        await updateInventoryItemQuantity(exactMatch.id, product.quantity);
+        await updateInventoryItem(exactMatch.id, product.quantity);
         return exactMatch.id;
       }
 
       // No exact match found, create new product
-      const productId = await addProduct(
+      const productId = await addInventoryItem(
         product.originalName,
         product.quantity,
         listId
-      );
+      );  
 
       if (importDate && !checkDateExists(productHistory, importDate)) {
-        await saveProductHistoryForSingleProduct(
+        await saveInventoryHistorySnapshot(
           productId,
           product.quantity,
           importDate

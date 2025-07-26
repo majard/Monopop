@@ -48,6 +48,7 @@ export default function EditInventoryItem() {
   const route = useRoute<EditInventoryItemProps["route"]>();
   const inventoryItem = route.params?.inventoryItem;
   const [quantity, setQuantity] = useState(inventoryItem?.quantity?.toString() || "");
+  const [notes, setNotes] = useState(inventoryItem?.notes || "");
   const [history, setHistory] = useState<InventoryHistory[]>([]);
   const navigation = useNavigation<EditInventoryItemNavigationProp>();
   const theme = useTheme();
@@ -82,7 +83,7 @@ export default function EditInventoryItem() {
   const handleUpdate = async () => {
     if (inventoryItem?.id) {
       try {
-        await updateInventoryItem(inventoryItem.id, parseInt(quantity));
+        await updateInventoryItem(inventoryItem.id, parseInt(quantity), notes);
         navigation.goBack();
       } catch (error) {
         console.error("Erro ao atualizar produto:", error);
@@ -191,9 +192,6 @@ export default function EditInventoryItem() {
 
         <Card style={styles.card}>
           <Card.Content>
-            <Text variant="titleMedium" style={styles.subtitle}>
-              Quantidade Atual
-            </Text>
             <PaperTextInput
               label="Quantidade"
               value={quantity}
@@ -211,6 +209,31 @@ export default function EditInventoryItem() {
               testID="update-button"
             >
               Atualizar Quantidade
+            </Button>
+          </Card.Content>
+        </Card>
+
+        
+        <Card style={styles.card}>
+          <Card.Content>
+
+            <PaperTextInput
+              label="Observações"
+              value={notes}
+              onChangeText={setNotes}
+              keyboardType="default"
+              style={styles.input}
+              mode="outlined"
+              testID="notes-input"
+            />
+            <Button
+              mode="contained"
+              onPress={handleUpdate}
+              style={styles.button}
+              disabled={!notes}
+              testID="update-button"
+            >
+              Atualizar Observações
             </Button>
           </Card.Content>
         </Card>
