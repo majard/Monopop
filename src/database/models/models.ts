@@ -44,7 +44,7 @@ export interface ShoppingListItem {
   id: number;
   inventoryItemId: number; // CRITICAL: FK to InventoryItem (as per V2 migration)
   quantity: number; // Desired quantity of the *specific InventoryItem* for purchase
-  checked: boolean; // True if item has been put in cart/purchased
+  checked: number; // SQLite stores as 0 or 1, but should be converted to boolean in UI
   price?: number;
   sortOrder: number;
   notes?: string;

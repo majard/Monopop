@@ -15,7 +15,7 @@ import {
   NativeStackScreenProps,
 } from "@react-navigation/native-stack";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { RootStackParamList } from "../types/navigation";
+import { RootStackParamList, BottomTabParamList } from "../types/navigation";
 import { createHomeScreenStyles } from "../styles/HomeScreenStyles";
 import { generateStockListText } from "../utils/stringUtils";
 import ImportModal from "../components/ImportModal";
@@ -31,13 +31,15 @@ import { saveInventoryHistorySnapshot } from "../database/database";
 
 type HomeScreenNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
-  "Home"
+  "MainTabs"
 >;
-type HomeScreenProps = NativeStackScreenProps<RootStackParamList, "Home">;
+type HomeScreenProps = NativeStackScreenProps<BottomTabParamList, "Inventory">;
 
 export default function HomeScreen() {
   const route = useRoute<HomeScreenProps["route"]>();
-  const listId = route.params?.listId ?? 1;
+  const parentRoute = useRoute<NativeStackScreenProps<RootStackParamList, "MainTabs">["route"]>();
+  const listId = parentRoute.params?.listId ?? route.params?.listId ?? 1;
+  console.log('\n\n\nlist id in homescreen:', listId, 'from parent:', parentRoute.params?.listId, 'from route:', route.params?.listId);
 
   const navigation = useNavigation<HomeScreenNavigationProp>();
   const theme = useTheme();
@@ -55,12 +57,7 @@ export default function HomeScreen() {
     filteredInventoryItems,
   } = useInventory(listId, sortOrder, searchQuery);
 
-  const {
-    listName,
-    handleListNameSave,
-    handleListDelete,
-  } = useList(listId);
-
+  const { listName, handleListNameSave, handleListDelete } = useList(listId);
 
   const handleImportButtonClick = useCallback(() => {
     setIsImportModalVisible(true);
@@ -82,12 +79,18 @@ export default function HomeScreen() {
   const saveAndCopyStockList = async () => {
     try {
       for (const inventoryItem of inventoryItems) {
-        console.log("\n\n\nSaving history snapshot for inventory item:", inventoryItem.id);
+        console.log(
+          "\n\n\nSaving history snapshot for inventory item:",
+          inventoryItem.id
+        );
         await saveInventoryHistorySnapshot(inventoryItem.id);
       }
       const text = generateStockListText(inventoryItems);
       Clipboard.setStringAsync(text);
-      Alert.alert("Sucesso", "Lista de estoque copiada para a área de transferência!");
+      Alert.alert(
+        "Sucesso",
+        "Lista de estoque copiada para a área de transferência!"
+      );
     } catch (error) {
       console.error("Erro ao salvar histórico e copiar lista:", error);
       Alert.alert("Erro", "Não foi possível copiar a lista de estoque.");
@@ -130,12 +133,15 @@ export default function HomeScreen() {
           <SortMenu setSortOrder={handleSortOrderChange} />
         </View>
       </View>
-      
+
       <InventoryList
         inventoryItems={filteredInventoryItems}
         handleInventoryItemOrderChange={handleProductOrderChange}
       />
-      <AddItemButton onPress={() => navigation.navigate("AddInventoryItem", { listId })} label="Adicionar Produto ao Estoque" />
+      <AddItemButton
+        onPress={() => navigation.navigate("AddInventoryItem", { listId })}
+        label="Adicionar Produto ao Estoque"
+      />
       <ImportModal
         isImportModalVisible={isImportModalVisible}
         setIsImportModalVisible={setIsImportModalVisible}

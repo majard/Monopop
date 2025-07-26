@@ -58,7 +58,7 @@ export default function ListsScreen() {
             <Card
               key={item.id}
               style={{ marginBottom: 16, borderRadius: 12, elevation: 2 }}
-              onPress={() => navigation.navigate("Home", { listId: item.id })}
+              onPress={() => navigation.navigate("MainTabs", { listId: item.id })}
             >
               <Card.Content
                 style={{ flexDirection: "row", alignItems: "center" }}
@@ -83,17 +83,9 @@ export default function ListsScreen() {
           contentContainerStyle={{ padding: 16, paddingBottom: 64 }}
         />
       )}
-
       <FAB
         icon="plus"
-        label="Adicionar Lista"
-        style={{
-          position: "absolute",
-          right: 24,
-          bottom: 32,
-          backgroundColor: theme.colors.primary,
-        }}
-        color={theme.colors.onPrimary}
+        style={styles.fab}
         onPress={() => navigation.navigate("AddList")}
       />
     </View>
@@ -104,15 +96,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
-    marginBottom: 32,
   },
   title: {
     fontSize: 24,
-    marginBottom: 8,
-    marginTop: 8,
     fontWeight: "bold",
+    marginBottom: 24,
+    textAlign: "center",
   },
-  button: {
-    marginTop: 16,
+  fab: {
+    position: "absolute",
+    margin: 16,
+    right: 0,
+    bottom: 0,
   },
 });
