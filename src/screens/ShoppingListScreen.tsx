@@ -1,15 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Text, TouchableOpacity, FlatList, Pressable } from 'react-native';
 import { TextInput as PaperTextInput, Button, useTheme, List, Chip, Surface, Checkbox, IconButton } from 'react-native-paper';
-import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
-import { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { addShoppingListItem, getShoppingListItemsByListId, getInventoryItems, updateShoppingListItem, deleteShoppingListItem, buyShoppingListItem } from '../database/database';
-import { RootStackParamList, BottomTabParamList } from '../types/navigation';
+import { RootStackParamList } from '../types/navigation';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { InventoryItem, ShoppingListItem } from '../database/models';
+import { useListContext } from '../context/ListContext';
 
 type ShoppingListScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'ShoppingList'>;
-type ShoppingListScreenProps = NativeStackScreenProps<RootStackParamList, 'ShoppingList'>;
 
 interface ShoppingListItemWithDetails extends Omit<ShoppingListItem, 'checked'> {
   checked: boolean; // Converted from database number to boolean
@@ -20,18 +20,15 @@ interface ShoppingListItemWithDetails extends Omit<ShoppingListItem, 'checked'> 
 
 export default function ShoppingListScreen() {
   const headerHeight = useHeaderHeight();
-
-  const route = useRoute<ShoppingListScreenProps["route"]>();
-  const parentRoute = useRoute<NativeStackScreenProps<RootStackParamList, "MainTabs">["route"]>();
-  const listId = parentRoute.params?.listId ?? route.params?.listId ?? 1;
-  console.log('ShoppingListScreen listId:', listId, 'from parent:', parentRoute.params?.listId, 'from route:', route.params?.listId);
+  const { listId } = useListContext();
+  console.log('ShoppingListScreen listId:', listId);
   const [productName, setProductName] = useState('');
   const [quantity, setQuantity] = useState('1');
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [shoppingListItems, setShoppingListItems] = useState<ShoppingListItemWithDetails[]>([]);
   const [selectedInventoryItem, setSelectedInventoryItem] = useState<InventoryItem | null>(null);
   const [loading, setLoading] = useState(false);
-  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(true);
   const navigation = useNavigation<ShoppingListScreenNavigationProp>();
   const theme = useTheme();
 
@@ -72,7 +69,7 @@ export default function ShoppingListScreen() {
 
   // Filter inventory items based on input
   const filteredInventoryItems = useMemo(() => {
-    if (!productName.trim()) return [];
+    //if (!productName.trim()) return [];
     
     return inventoryItems.filter(item =>
       item.productName.toLowerCase().includes(productName.toLowerCase())
@@ -89,7 +86,7 @@ export default function ShoppingListScreen() {
   const handleProductNameChange = (text: string) => {
     setProductName(text);
     setSelectedInventoryItem(null);
-    setShowSuggestions(text.length > 0);
+    setShowSuggestions(filteredInventoryItems.length > 0);
   };
 
   const handleSubmit = async () => {    
@@ -211,8 +208,7 @@ export default function ShoppingListScreen() {
   );
 
   const isCreatingNew = !selectedInventoryItem && productName.trim().length > 0;
-  const hasSuggestions = filteredInventoryItems.length > 0 && showSuggestions;
-
+  console.log("showSuggestions", showSuggestions);
   const checkedItems = shoppingListItems.filter(item => item.checked);
   const uncheckedItems = shoppingListItems.filter(item => !item.checked);
 
@@ -231,7 +227,6 @@ export default function ShoppingListScreen() {
               label="Adicionar Produto"
               value={productName}
               onChangeText={handleProductNameChange}
-              onFocus={() => setShowSuggestions(productName.length > 0)}
               style={styles.productInput}
               mode="outlined"
               autoFocus
@@ -254,7 +249,7 @@ export default function ShoppingListScreen() {
             />
 
             {/* Inventory Suggestions */}
-            {hasSuggestions && (
+            {showSuggestions && (
               <View style={styles.suggestionsContainer}>
                 <Text style={styles.suggestionsTitle}>Produtos no Estoque:</Text>
                 <FlatList
@@ -268,7 +263,7 @@ export default function ShoppingListScreen() {
             )}
 
             {/* New Product Indicator */}
-            {isCreatingNew && !hasSuggestions && (
+            {isCreatingNew && !showSuggestions && (
               <View style={styles.newProductIndicator}>
                 <Chip 
                   icon="plus" 
@@ -320,8 +315,8 @@ export default function ShoppingListScreen() {
         </Surface>
 
         {/* Shopping List Items */}
-        <View style={styles.shoppingListContainer}>
-          <Text style={styles.sectionTitle}>Itens da Lista de Compras</Text>
+        <ScrollView style={styles.shoppingListContainer}>
+          <Text style={styles.sectionTitle}>Lista de Compras</Text>
           
           {shoppingListItems.length === 0 ? (
             <Surface style={styles.emptyState}>
@@ -359,7 +354,7 @@ export default function ShoppingListScreen() {
               )}
             </>
           )}
-        </View>
+        </ScrollView>
       </View>
     </KeyboardAvoidingView>
   );

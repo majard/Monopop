@@ -7,15 +7,13 @@ import {
 } from "react-native-paper";
 import {
   useNavigation,
-  useRoute,
   useFocusEffect,
 } from "@react-navigation/native";
 import {
   NativeStackNavigationProp,
-  NativeStackScreenProps,
 } from "@react-navigation/native-stack";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { RootStackParamList, BottomTabParamList } from "../types/navigation";
+import { RootStackParamList } from "../types/navigation";
 import { createHomeScreenStyles } from "../styles/HomeScreenStyles";
 import { generateStockListText } from "../utils/stringUtils";
 import ImportModal from "../components/ImportModal";
@@ -28,18 +26,16 @@ import { EditableName } from "../components/EditableName";
 import { AddItemButton } from "../components/AddItemButton";
 import InventoryList from "../components/InventoryList";
 import { saveInventoryHistorySnapshot } from "../database/database";
+import { useListContext } from "../context/ListContext";
 
 type HomeScreenNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
   "MainTabs"
 >;
-type HomeScreenProps = NativeStackScreenProps<BottomTabParamList, "Inventory">;
 
 export default function HomeScreen() {
-  const route = useRoute<HomeScreenProps["route"]>();
-  const parentRoute = useRoute<NativeStackScreenProps<RootStackParamList, "MainTabs">["route"]>();
-  const listId = parentRoute.params?.listId ?? route.params?.listId ?? 1;
-  console.log('\n\n\nlist id in homescreen:', listId, 'from parent:', parentRoute.params?.listId, 'from route:', route.params?.listId);
+  const { listId } = useListContext();
+  console.log('HomeScreen listId:', listId);
 
   const navigation = useNavigation<HomeScreenNavigationProp>();
   const theme = useTheme();

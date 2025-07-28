@@ -9,8 +9,9 @@ import {
 import { getLists } from "../database/database";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { RootStackParamList } from "../types/navigation";
+import { BottomTabParamList } from "../types/navigation";
 import { getEmojiForList } from "../utils/stringUtils";
+import { useListContext } from "../context/ListContext";
 
 type ListItem = {
   id: number;
@@ -20,7 +21,8 @@ type ListItem = {
 export default function ListsScreen() {
   const [lists, setLists] = useState<ListItem[]>([]);
   const navigation =
-    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+    useNavigation<NativeStackNavigationProp<BottomTabParamList>>();
+  const { setListId } = useListContext();
   const theme = useTheme();
 
   const loadLists = async () => {
@@ -33,6 +35,12 @@ export default function ListsScreen() {
       loadLists();
     }, [])
   );
+
+  const handleListSelect = (listId: number) => {
+    console.log('ListsScreen: selecting list', listId);
+    setListId(listId);
+    navigation.navigate("Inventory", { listId });
+  };
 
   return (
     <View
@@ -58,7 +66,7 @@ export default function ListsScreen() {
             <Card
               key={item.id}
               style={{ marginBottom: 16, borderRadius: 12, elevation: 2 }}
-              onPress={() => navigation.navigate("MainTabs", { listId: item.id })}
+              onPress={() => handleListSelect(item.id)}
             >
               <Card.Content
                 style={{ flexDirection: "row", alignItems: "center" }}
