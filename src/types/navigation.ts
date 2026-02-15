@@ -8,6 +8,7 @@ export type RootStackParamList = {
   EditInventoryItem: {inventoryItem: InventoryItem}
   AddList: undefined;
   ShoppingList: {listId: number};
+  AddProductToShoppingList: { listId: number };
 };
 
 export type BottomTabParamList = {

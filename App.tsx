@@ -11,6 +11,7 @@ import AddProductScreen from './src/screens/AddProductScreen';
 import AddInventoryItemScreen from './src/screens/AddInventoryItemScreen';
 import EditInventoryItemScreen from './src/screens/EditInventoryItemScreen';
 import AddListScreen from './src/screens/AddListScreen';
+import AddProductToShoppingListScreen from './src/screens/AddProductToShoppingListScreen';
 import { ListProvider } from './src/context/ListContext';
 
 const Stack = createNativeStackNavigator();
@@ -73,6 +74,11 @@ export default function App() {
                   name="AddInventoryItem"
                   options={{title: 'Adicionar Produto ao Estoque', headerShown: false}}
                   component={AddInventoryItemScreen}
+                />
+                <Stack.Screen
+                  name="AddProductToShoppingList"
+                  options={{ title: 'Adicionar à Lista de Compras', headerShown: false }}
+                  component={AddProductToShoppingListScreen}
                 />
               </Stack.Navigator>
             </NavigationContainer>
