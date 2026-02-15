@@ -1,13 +1,14 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Text, TouchableOpacity, FlatList, Pressable } from 'react-native';
-import { TextInput as PaperTextInput, Button, useTheme, List, Chip, Surface, Checkbox, IconButton } from 'react-native-paper';
+import React, { useState, useMemo } from 'react';
+import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Text, FlatList, Pressable } from 'react-native';
+import { TextInput as PaperTextInput, Button, useTheme, List, Chip, Surface } from 'react-native-paper';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { addShoppingListItem, getShoppingListItemsByListId, getInventoryItems, updateShoppingListItem, deleteShoppingListItem, buyShoppingListItem } from '../database/database';
+import { addShoppingListItem, getShoppingListItemsByListId, getInventoryItems, updateShoppingListItem, deleteShoppingListItem, concludeShoppingForList } from '../database/database';
 import { RootStackParamList } from '../types/navigation';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { InventoryItem, ShoppingListItem } from '../database/models';
 import { useListContext } from '../context/ListContext';
+import { ShoppingListItemCard } from '../components/ShoppingListItemCard';
 
 type ShoppingListScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'ShoppingList'>;
 
@@ -137,12 +138,16 @@ export default function ShoppingListScreen() {
     }
   };
 
-  const handleBuyItem = async (item: ShoppingListItemWithDetails) => {
+  const handleConcludeShopping = async () => {
+    if (checkedItems.length === 0) return;
+    setLoading(true);
     try {
-      await buyShoppingListItem(item.id);
+      await concludeShoppingForList(listId);
       await loadData();
     } catch (error) {
-      console.error('Erro ao comprar item:', error);
+      console.error('Erro ao concluir compras:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -171,40 +176,11 @@ export default function ShoppingListScreen() {
   );
 
   const renderShoppingListItem = ({ item }: { item: ShoppingListItemWithDetails }) => (
-    <Surface style={styles.shoppingItemCard}>
-      <View style={styles.shoppingItemContent}>
-        <View style={styles.shoppingItemLeft}>
-          <Checkbox
-            status={item.checked ? 'checked' : 'unchecked'}
-            onPress={() => handleToggleChecked(item)}
-          />
-          <View style={styles.shoppingItemInfo}>
-            <Text style={[
-              styles.shoppingItemName,
-              item.checked && styles.checkedItem
-            ]}>
-              {item.productName}
-            </Text>
-            <Text style={styles.shoppingItemQuantity}>
-              Quantidade: {item.quantity} | Estoque: {item.currentInventoryQuantity}
-            </Text>
-          </View>
-        </View>
-        <View style={styles.shoppingItemActions}>
-          <IconButton
-            icon="cart-check"
-            size={20}
-            onPress={() => handleBuyItem(item)}
-            disabled={item.checked}
-          />
-          <IconButton
-            icon="delete"
-            size={20}
-            onPress={() => handleDeleteItem(item)}
-          />
-        </View>
-      </View>
-    </Surface>
+    <ShoppingListItemCard
+      item={item}
+      onToggleChecked={() => handleToggleChecked(item)}
+      onDelete={() => handleDeleteItem(item)}
+    />
   );
 
   const isCreatingNew = !selectedInventoryItem && productName.trim().length > 0;
@@ -340,6 +316,22 @@ export default function ShoppingListScreen() {
                 </View>
               )}
 
+              {/* Conclude shopping button */}
+              {checkedItems.length > 0 && (
+                <View style={styles.concludeSection}>
+                  <Button
+                    mode="contained"
+                    onPress={handleConcludeShopping}
+                    disabled={loading}
+                    loading={loading}
+                    icon="cart-check"
+                    style={styles.concludeButton}
+                  >
+                    Concluir compras
+                  </Button>
+                </View>
+              )}
+
               {/* Checked Items */}
               {checkedItems.length > 0 && (
                 <View style={styles.itemsSection}>
@@ -446,6 +438,12 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     color: '#333',
   },
+  concludeSection: {
+    marginBottom: 16,
+  },
+  concludeButton: {
+    paddingVertical: 8,
+  },
   itemsSection: {
     marginBottom: 16,
   },
@@ -454,42 +452,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 8,
     color: '#666',
-  },
-  shoppingItemCard: {
-    marginBottom: 8,
-    borderRadius: 8,
-    elevation: 1,
-  },
-  shoppingItemContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-  },
-  shoppingItemLeft: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  shoppingItemInfo: {
-    flex: 1,
-    marginLeft: 8,
-  },
-  shoppingItemName: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#333',
-  },
-  checkedItem: {
-    textDecorationLine: 'line-through',
-    color: '#888',
-  },
-  shoppingItemQuantity: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 2,
-  },
-  shoppingItemActions: {
-    flexDirection: 'row',
   },
   emptyState: {
     padding: 32,

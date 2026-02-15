@@ -728,3 +728,61 @@ export const buyShoppingListItem = async (
     }
   });
 };
+
+/** Conclude shopping for a list: add all checked items' quantities to inventory, write history, then remove them from the shopping list. Single transaction. */
+export const concludeShoppingForList = async (listId: number): Promise<void> => {
+  const db = getDb();
+  const now = new Date().toISOString();
+  const dateToSave = now.split('T')[0];
+
+  await db.withTransactionAsync(async () => {
+    const checkedItems = await db.getAllAsync<{
+      id: number;
+      inventoryItemId: number;
+      quantity: number;
+    }>(
+      `SELECT sli.id, sli.inventoryItemId, sli.quantity
+       FROM shopping_list_items sli
+       JOIN inventory_items ii ON sli.inventoryItemId = ii.id
+       WHERE ii.listId = ? AND sli.checked = 1;`,
+      [listId]
+    );
+
+    for (const row of checkedItems) {
+      const { id: shoppingListItemId, inventoryItemId, quantity: qtyToPurchase } = row;
+
+      // 1. Update inventory quantity
+      await db.runAsync(
+        `UPDATE inventory_items SET quantity = quantity + ?, updatedAt = ? WHERE id = ?;`,
+        [qtyToPurchase, now, inventoryItemId]
+      );
+
+      // 2. Add inventory history entry (inline to stay in same transaction)
+      const updatedInventoryItem = await db.getFirstAsync<{ quantity: number }>(
+        `SELECT quantity FROM inventory_items WHERE id = ?;`,
+        [inventoryItemId]
+      );
+      if (updatedInventoryItem) {
+        const notes = `Purchased ${qtyToPurchase} units (via Shopping List)`;
+        const existingEntry = await db.getFirstAsync<{ id: number }>(
+          `SELECT id FROM inventory_history WHERE inventoryItemId = ? AND date = ?;`,
+          [inventoryItemId, dateToSave]
+        );
+        if (existingEntry) {
+          await db.runAsync(
+            `UPDATE inventory_history SET quantity = ?, notes = ?, createdAt = ? WHERE id = ?;`,
+            [updatedInventoryItem.quantity, notes, now, existingEntry.id]
+          );
+        } else {
+          await db.runAsync(
+            `INSERT INTO inventory_history (inventoryItemId, quantity, date, notes, createdAt) VALUES (?, ?, ?, ?, ?);`,
+            [inventoryItemId, updatedInventoryItem.quantity, dateToSave, notes, now]
+          );
+        }
+      }
+
+      // 3. Delete the shopping list item
+      await db.runAsync(`DELETE FROM shopping_list_items WHERE id = ?;`, [shoppingListItemId]);
+    }
+  });
+};
