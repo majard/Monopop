@@ -380,6 +380,7 @@ export const getInventoryHistory = async (
 
 export const saveInventoryHistorySnapshot = async (
   inventoryItemId: number,
+  quantityToSave?: number,
   overrideDate?: Date
 ): Promise<void> => {
   const db = getDb();
@@ -408,7 +409,7 @@ export const saveInventoryHistorySnapshot = async (
       // If entry exists for today, update its quantity
       await db.runAsync(
         `UPDATE inventory_history SET quantity = ?, createdAt = ? WHERE id = ?;`,
-        [currentInventoryItem.quantity, createdAt, existingEntry.id]
+        [quantityToSave !== undefined ? quantityToSave : currentInventoryItem.quantity, createdAt, existingEntry.id]
       );
     } else {
       // Otherwise, insert a new entry
