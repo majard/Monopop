@@ -1,13 +1,11 @@
-import { View, Text, StyleSheet } from "react-native";
+import React from "react";
+import { View, Text, StyleSheet, Pressable } from "react-native";
 import {
-  TextInput as PaperTextInput,
   Surface,
   Checkbox,
   IconButton,
   useTheme,
 } from "react-native-paper";
-import { createHomeScreenStyles } from "../styles/HomeScreenStyles";
-import { useShoppingListItem } from "../hooks/useShoppingListItem";
 
 export interface ShoppingListItemCardItem {
   id: number;
@@ -15,96 +13,86 @@ export interface ShoppingListItemCardItem {
   checked: boolean;
   productName: string;
   currentInventoryQuantity: number;
+  price?: number;
 }
 
 interface ShoppingListItemCardProps {
   item: ShoppingListItemCardItem;
   onToggleChecked: () => void;
   onDelete: () => void;
+  onEdit: () => void;
 }
 
 export function ShoppingListItemCard({
   item,
   onToggleChecked,
   onDelete,
+  onEdit,
 }: ShoppingListItemCardProps) {
   const theme = useTheme();
-  const styles = createHomeScreenStyles(theme);
 
-  const {
-    quantity,
-    updateQuantity,
-    startContinuousAdjustment,
-    stopContinuousAdjustment,
-  } = useShoppingListItem({
-    shoppingListItemId: item.id,
-    initialQuantity: item.quantity,
-  });
+  const formatCurrency = (value: number) => {
+    return `R$ ${value ? value.toFixed(2).replace(".", ",") : "0,00"}`;
+  };
+
+  const itemTotal = item.price ? formatCurrency(item.quantity * item.price) : null;
 
   return (
-    <Surface style={cardStyles.shoppingItemCard}>
-      <View style={cardStyles.shoppingItemContent}>
-        <View style={cardStyles.shoppingItemLeft}>
-          <Checkbox
-            status={item.checked ? "checked" : "unchecked"}
-            onPress={onToggleChecked}
-          />
-          <View style={cardStyles.shoppingItemInfo}>
-            <Text
-              style={[
-                cardStyles.shoppingItemName,
-                item.checked && cardStyles.checkedItem,
-              ]}
-            >
-              {item.productName}
-            </Text>
-            <View style={styles.quantityContainer}>
-              <View style={styles.quantityInputContainer}>
-                <Text variant="bodyMedium">Quantidade: </Text>
-                <PaperTextInput
-                  mode="outlined"
-                  dense
-                  value={quantity.toString()}
-                  onChangeText={(value) =>
-                    updateQuantity(value === "" ? 1 : parseInt(value, 10))
-                  }
-                  keyboardType="numeric"
-                  style={styles.input}
-                  testID={`quantity-text-input-shopping-${item.id}`}
-                />
+    <Pressable onPress={onEdit}>
+      <Surface style={cardStyles.shoppingItemCard}>
+        <View style={cardStyles.shoppingItemContent}>
+          <View style={cardStyles.shoppingItemLeft}>
+            <Checkbox
+              status={item.checked ? "checked" : "unchecked"}
+              onPress={onToggleChecked}
+            />
+            <View style={cardStyles.shoppingItemInfo}>
+              <Text
+                style={[
+                  cardStyles.shoppingItemName,
+                  item.checked && cardStyles.checkedItem,
+                ]}
+              >
+                {item.productName}
+              </Text>
+              <View style={cardStyles.detailsRow}>
+                <Text style={cardStyles.quantityText}>
+                  Qtd: {item.quantity}
+                </Text>
+                {item.price !== undefined && (
+                  <>
+                    <Text style={cardStyles.separator}>•</Text>
+                    <Text style={cardStyles.priceText}>
+                      {formatCurrency(item.price)} un
+                    </Text>
+                  </>
+                )}
               </View>
-              <View style={styles.quantityButtons}>
-                <IconButton
-                  icon="minus"
-                  size={20}
-                  onPress={() => updateQuantity(Math.max(1, quantity - 1))}
-                  onLongPress={() => startContinuousAdjustment(false)}
-                  onPressOut={stopContinuousAdjustment}
-                />
-                <IconButton
-                  icon="plus"
-                  size={20}
-                  onPress={() => updateQuantity(quantity + 1)}
-                  onLongPress={() => startContinuousAdjustment(true)}
-                  onPressOut={stopContinuousAdjustment}
-                  testID={`increment-button-shopping-${item.id}`}
-                />
-              </View>
+              {itemTotal && (
+                <Text style={cardStyles.totalText}>Total: {itemTotal}</Text>
+              )}
+              <Text style={cardStyles.stockLabel}>
+                Estoque: {item.currentInventoryQuantity}
+              </Text>
             </View>
-            <Text style={cardStyles.stockLabel}>
-              Estoque: {item.currentInventoryQuantity}
-            </Text>
+          </View>
+          <View style={cardStyles.shoppingItemActions}>
+            <IconButton
+              icon="pencil"
+              size={20}
+              onPress={onEdit}
+              iconColor={theme.colors.primary}
+            />
+            <IconButton
+              icon="delete"
+              size={20}
+              onPress={onDelete}
+              iconColor={theme.colors.error}
+            />
           </View>
         </View>
-        <View style={cardStyles.shoppingItemActions}>
-          <IconButton
-            icon="delete"
-            size={20}
-            onPress={onDelete}
-          />
-        </View>
-      </View>
-    </Surface>
+      </Surface>
+    </Pressable>
   );
 }
 
@@ -137,12 +125,37 @@ const cardStyles = StyleSheet.create({
     textDecorationLine: "line-through",
     color: "#888",
   },
-  stockLabel: {
+  detailsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 4,
+  },
+  quantityText: {
     fontSize: 14,
     color: "#666",
+  },
+  priceText: {
+    fontSize: 14,
+    color: "#666",
+  },
+  separator: {
+    fontSize: 14,
+    color: "#999",
+    marginHorizontal: 6,
+  },
+  totalText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#2196F3",
+    marginTop: 2,
+  },
+  stockLabel: {
+    fontSize: 12,
+    color: "#999",
     marginTop: 4,
   },
   shoppingItemActions: {
     flexDirection: "row",
+    alignItems: "center",
   },
 });

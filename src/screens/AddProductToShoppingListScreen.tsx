@@ -229,6 +229,7 @@ const localStyles = StyleSheet.create({
   nameRow: {
     flexDirection: "row",
     alignItems: "baseline",
+    justifyContent: "space-between",
   },
   productName: {
     fontSize: 16,

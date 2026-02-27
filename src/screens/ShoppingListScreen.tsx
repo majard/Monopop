@@ -8,6 +8,7 @@ import { RootStackParamList } from '../types/navigation';
 import { ShoppingListItem } from '../database/models';
 import { useListContext } from '../context/ListContext';
 import { ShoppingListItemCard } from '../components/ShoppingListItemCard';
+import { EditShoppingItemModal } from '../components/EditShoppingItemModal';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AddItemButton } from '../components/AddItemButton';
 import { createHomeScreenStyles } from '../styles/HomeScreenStyles';
@@ -19,12 +20,14 @@ interface ShoppingListItemWithDetails extends Omit<ShoppingListItem, 'checked'> 
   productName: string;
   productId: number;
   currentInventoryQuantity: number;
+  price?: number;
 }
 
 export default function ShoppingListScreen() {
   const { listId } = useListContext();
   const [shoppingListItems, setShoppingListItems] = useState<ShoppingListItemWithDetails[]>([]);
   const [loading, setLoading] = useState(false);
+  const [editingItem, setEditingItem] = useState<ShoppingListItemWithDetails | null>(null);
   const navigation = useNavigation<ShoppingListScreenNavigationProp>();
   const theme = useTheme();
   const styles = createHomeScreenStyles(theme);
@@ -96,11 +99,34 @@ export default function ShoppingListScreen() {
       item={item}
       onToggleChecked={() => handleToggleChecked(item)}
       onDelete={() => handleDeleteItem(item)}
+      onEdit={() => setEditingItem(item)}
     />
   );
 
   const checkedItems = shoppingListItems.filter(item => item.checked);
   const uncheckedItems = shoppingListItems.filter(item => !item.checked);
+
+  const totalCheckedPrice = checkedItems.reduce((total, item) => {
+    if (item.price) {
+      return total + (item.quantity * item.price);
+    }
+    return total;
+  }, 0);
+
+  const formatCurrency = (value: number) => {
+    return `R$ ${value.toFixed(2).replace('.', ',')}`;
+  };
+
+  const handleSaveEdit = async (quantity: number, price: number | undefined) => {
+    if (!editingItem) return;
+    try {
+      await updateShoppingListItem(editingItem.id, { quantity, price });
+      await loadData();
+      setEditingItem(null);
+    } catch (error) {
+      console.error('Erro ao atualizar item:', error);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -128,6 +154,13 @@ export default function ShoppingListScreen() {
                 />
               </View>
             )}
+            
+            {checkedItems.length > 0 && (
+              <View style={localStyles.totalSection}>
+                <Text style={localStyles.totalLabel}>Total no carrinho:</Text>
+                <Text style={localStyles.totalValue}>{formatCurrency(totalCheckedPrice)}</Text>
+              </View>
+            )}
 
             {checkedItems.length > 0 && (
               <View style={localStyles.concludeSection}>
@@ -144,9 +177,10 @@ export default function ShoppingListScreen() {
               </View>
             )}
 
+
             {checkedItems.length > 0 && (
               <View style={localStyles.itemsSection}>
-                <Text style={localStyles.subsectionTitle}>Comprados ({checkedItems.length})</Text>
+                <Text style={localStyles.subsectionTitle}>No carrinho ({checkedItems.length})</Text>
                 <FlatList
                   data={checkedItems}
                   renderItem={renderShoppingListItem}
@@ -158,9 +192,16 @@ export default function ShoppingListScreen() {
           </>
         )}
       </ScrollView>
+
       <AddItemButton
         onPress={() => navigation.navigate('AddProductToShoppingList', { listId })}
         label="Adicionar à Lista de Compras"
+      />
+      <EditShoppingItemModal
+        visible={editingItem !== null}
+        item={editingItem}
+        onSave={handleSaveEdit}
+        onDismiss={() => setEditingItem(null)}
       />
     </SafeAreaView>
   );
@@ -176,6 +217,7 @@ const localStyles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     padding: 16,
+    marginBottom: 32,
   },
   concludeSection: {
     marginBottom: 16,
@@ -203,4 +245,23 @@ const localStyles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 24,
   },
-}); 
+  totalSection: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#e3f2fd',
+    padding: 16,
+    marginHorizontal: 8,
+    marginBottom: 16,
+    borderRadius: 8,
+  },
+  totalLabel: {
+    fontSize: 14,
+    color: '#666',
+  },
+  totalValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#2196F3',
+  },
+});
