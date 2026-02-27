@@ -1,5 +1,4 @@
-// components/SortMenu.tsx
-import {useState} from 'react';
+import {useState, useCallback} from 'react';
 import { Button, Menu, Divider, useTheme } from 'react-native-paper';
 import { SortOrder } from '../utils/sortUtils';
 import { createHomeScreenStyles } from '../styles/HomeScreenStyles';
@@ -10,19 +9,28 @@ interface SortMenuProps {
 
 export const SortMenu = ({ setSortOrder }: SortMenuProps) => {
   const [menuVisible, setMenuVisible] = useState(false);
-  const openMenu = () => setMenuVisible(true);
-  const closeMenu = () => setMenuVisible(false);
+  const [openCount, setOpenCount] = useState(0);
+  
+  const openMenu = useCallback(() => {
+    setOpenCount(c => c + 1);
+    setMenuVisible(true);
+  }, []);
+  
+  const closeMenu = useCallback(() => {
+    setMenuVisible(false);
+  }, []);
+
+  const handleSortChange = useCallback((order: SortOrder) => {
+    setSortOrder(order);
+    closeMenu();
+  }, [setSortOrder]);
 
   const theme = useTheme();
   const styles = createHomeScreenStyles(theme);
 
-  const handleSortChange = (order: SortOrder) => {
-    setSortOrder(order);
-    closeMenu();
-  };
-
   return (
     <Menu
+      key={`menu-${openCount}`}
       visible={menuVisible}
       onDismiss={closeMenu}
       anchor={
