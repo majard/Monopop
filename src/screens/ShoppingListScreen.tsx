@@ -28,6 +28,7 @@ export default function ShoppingListScreen() {
   const [shoppingListItems, setShoppingListItems] = useState<ShoppingListItemWithDetails[]>([]);
   const [loading, setLoading] = useState(false);
   const [editingItem, setEditingItem] = useState<ShoppingListItemWithDetails | null>(null);
+  const [isCartCollapsed, setIsCartCollapsed] = useState(false);
   const navigation = useNavigation<ShoppingListScreenNavigationProp>();
   const theme = useTheme();
   const styles = createHomeScreenStyles(theme);
@@ -128,12 +129,14 @@ export default function ShoppingListScreen() {
     }
   };
 
+  const bottomBarHeight = checkedItems.length > 0 ? 64: 0;
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={localStyles.sectionTitle}>Lista de Compras</Text>
       </View>
-      <ScrollView style={localStyles.scrollContent}>
+      <ScrollView style={localStyles.scrollContent} contentContainerStyle={{ paddingBottom: bottomBarHeight + 96 }}>
         {shoppingListItems.length === 0 ? (
           <Surface style={localStyles.emptyState}>
             <Text style={localStyles.emptyStateText}>
@@ -154,39 +157,27 @@ export default function ShoppingListScreen() {
                 />
               </View>
             )}
-            
-            {checkedItems.length > 0 && (
-              <View style={localStyles.totalSection}>
-                <Text style={localStyles.totalLabel}>Total no carrinho:</Text>
-                <Text style={localStyles.totalValue}>{formatCurrency(totalCheckedPrice)}</Text>
-              </View>
-            )}
-
-            {checkedItems.length > 0 && (
-              <View style={localStyles.concludeSection}>
-                <Button
-                  mode="contained"
-                  onPress={handleConcludeShopping}
-                  disabled={loading}
-                  loading={loading}
-                  icon="cart-check"
-                  style={localStyles.concludeButton}
-                >
-                  Concluir compras
-                </Button>
-              </View>
-            )}
-
 
             {checkedItems.length > 0 && (
               <View style={localStyles.itemsSection}>
-                <Text style={localStyles.subsectionTitle}>No carrinho ({checkedItems.length})</Text>
-                <FlatList
-                  data={checkedItems}
-                  renderItem={renderShoppingListItem}
-                  keyExtractor={(item) => item.id.toString()}
-                  scrollEnabled={false}
-                />
+                <View style={localStyles.cartHeaderRow}>
+                  <Text style={localStyles.subsectionTitle}>No carrinho ({checkedItems.length})</Text>
+                  <Button
+                    mode="text"
+                    onPress={() => setIsCartCollapsed(!isCartCollapsed)}
+                    compact
+                  >
+                    {isCartCollapsed ? 'Mostrar' : 'Ocultar'}
+                  </Button>
+                </View>
+                {!isCartCollapsed && (
+                  <FlatList
+                    data={checkedItems}
+                    renderItem={renderShoppingListItem}
+                    keyExtractor={(item) => item.id.toString()}
+                    scrollEnabled={false}
+                  />
+                )}
               </View>
             )}
           </>
@@ -196,6 +187,7 @@ export default function ShoppingListScreen() {
       <AddItemButton
         onPress={() => navigation.navigate('AddProductToShoppingList', { listId })}
         label="Adicionar à Lista de Compras"
+        style={checkedItems.length > 0 ? { bottom: bottomBarHeight  } : undefined}
       />
       <EditShoppingItemModal
         visible={editingItem !== null}
@@ -203,6 +195,25 @@ export default function ShoppingListScreen() {
         onSave={handleSaveEdit}
         onDismiss={() => setEditingItem(null)}
       />
+
+      {checkedItems.length > 0 && (
+        <View style={localStyles.bottomBar}>
+          <View style={localStyles.bottomBarSummary}>
+            <Text style={localStyles.bottomBarLabel}>Total no carrinho:</Text>
+            <Text style={localStyles.bottomBarValue}>{formatCurrency(totalCheckedPrice)}</Text>
+          </View>
+          <Button
+            mode="contained"
+            onPress={handleConcludeShopping}
+            disabled={loading}
+            loading={loading}
+            icon="cart-check"
+            style={localStyles.bottomBarButton}
+          >
+            Concluir compras
+          </Button>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -228,6 +239,11 @@ const localStyles = StyleSheet.create({
   itemsSection: {
     marginBottom: 16,
   },
+  cartHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   subsectionTitle: {
     fontSize: 16,
     fontWeight: '600',
@@ -245,16 +261,6 @@ const localStyles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 24,
   },
-  totalSection: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#e3f2fd',
-    padding: 16,
-    marginHorizontal: 8,
-    marginBottom: 16,
-    borderRadius: 8,
-  },
   totalLabel: {
     fontSize: 14,
     color: '#666',
@@ -263,5 +269,36 @@ const localStyles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: '#2196F3',
+  },
+  bottomBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 12,
+    backgroundColor: 'white',
+    borderTopWidth: 1,
+    borderTopColor: '#e0e0e0',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  bottomBarSummary: {
+    flex: 1,
+  },
+  bottomBarLabel: {
+    fontSize: 12,
+    color: '#666',
+  },
+  bottomBarValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#2196F3',
+  },
+  bottomBarButton: {
+    borderRadius: 8,
   },
 });
