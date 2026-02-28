@@ -3,12 +3,13 @@ import { View, StyleSheet, ScrollView, Text, FlatList } from 'react-native';
 import { Button, Surface, useTheme } from 'react-native-paper';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { getShoppingListItemsByListId, getInventoryItems, updateShoppingListItem, deleteShoppingListItem, concludeShoppingForList } from '../database/database';
+import { concludeShoppingForListWithInvoice, getLastStoreName, getShoppingListItemsByListId, getInventoryItems, getStores, updateShoppingListItem, deleteShoppingListItem } from '../database/database';
 import { RootStackParamList } from '../types/navigation';
 import { ShoppingListItem } from '../database/models';
 import { useListContext } from '../context/ListContext';
 import { ShoppingListItemCard } from '../components/ShoppingListItemCard';
 import { EditShoppingItemModal } from '../components/EditShoppingItemModal';
+import { ConfirmInvoiceModal, StoreOption } from '../components/ConfirmInvoiceModal';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AddItemButton } from '../components/AddItemButton';
 import { createHomeScreenStyles } from '../styles/HomeScreenStyles';
@@ -29,6 +30,9 @@ export default function ShoppingListScreen() {
   const [loading, setLoading] = useState(false);
   const [editingItem, setEditingItem] = useState<ShoppingListItemWithDetails | null>(null);
   const [isCartCollapsed, setIsCartCollapsed] = useState(false);
+  const [confirmVisible, setConfirmVisible] = useState(false);
+  const [stores, setStores] = useState<StoreOption[]>([]);
+  const [defaultStoreName, setDefaultStoreName] = useState('');
   const navigation = useNavigation<ShoppingListScreenNavigationProp>();
   const theme = useTheme();
   const styles = createHomeScreenStyles(theme);
@@ -42,9 +46,11 @@ export default function ShoppingListScreen() {
 
   const loadData = async () => {
     try {
-      const [inventory, shopping] = await Promise.all([
+      const [inventory, shopping, storesList, lastStore] = await Promise.all([
         getInventoryItems(listId),
-        getShoppingListItemsByListId(listId)
+        getShoppingListItemsByListId(listId),
+        getStores(),
+        getLastStoreName(),
       ]);
 
       const enhancedShoppingItems = shopping.map(item => {
@@ -59,6 +65,8 @@ export default function ShoppingListScreen() {
       });
 
       setShoppingListItems(enhancedShoppingItems);
+      setStores(storesList);
+      setDefaultStoreName(lastStore ?? '');
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
     }
@@ -73,11 +81,17 @@ export default function ShoppingListScreen() {
     }
   };
 
-  const handleConcludeShopping = async () => {
+  const openConfirmConclude = () => {
+    if (checkedItems.length === 0) return;
+    setConfirmVisible(true);
+  };
+
+  const handleConfirmConclude = async (storeName: string) => {
     if (checkedItems.length === 0) return;
     setLoading(true);
     try {
-      await concludeShoppingForList(listId);
+      await concludeShoppingForListWithInvoice(listId, storeName);
+      setConfirmVisible(false);
       await loadData();
     } catch (error) {
       console.error('Erro ao concluir compras:', error);
@@ -92,6 +106,17 @@ export default function ShoppingListScreen() {
       await loadData();
     } catch (error) {
       console.error('Erro ao deletar item:', error);
+    }
+  };
+
+  const handleSaveEdit = async (quantity: number, price: number | undefined) => {
+    if (!editingItem) return;
+    try {
+      await updateShoppingListItem(editingItem.id, { quantity, price });
+      await loadData();
+      setEditingItem(null);
+    } catch (error) {
+      console.error('Erro ao atualizar item:', error);
     }
   };
 
@@ -118,18 +143,7 @@ export default function ShoppingListScreen() {
     return `R$ ${value.toFixed(2).replace('.', ',')}`;
   };
 
-  const handleSaveEdit = async (quantity: number, price: number | undefined) => {
-    if (!editingItem) return;
-    try {
-      await updateShoppingListItem(editingItem.id, { quantity, price });
-      await loadData();
-      setEditingItem(null);
-    } catch (error) {
-      console.error('Erro ao atualizar item:', error);
-    }
-  };
-
-  const bottomBarHeight = checkedItems.length > 0 ? 64: 0;
+  const bottomBarHeight = checkedItems.length > 0 ? 64 : 0;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -187,7 +201,7 @@ export default function ShoppingListScreen() {
       <AddItemButton
         onPress={() => navigation.navigate('AddProductToShoppingList', { listId })}
         label="Adicionar à Lista de Compras"
-        style={checkedItems.length > 0 ? { bottom: bottomBarHeight  } : undefined}
+        style={checkedItems.length > 0 ? { bottom: bottomBarHeight } : undefined}
       />
       <EditShoppingItemModal
         visible={editingItem !== null}
@@ -204,7 +218,7 @@ export default function ShoppingListScreen() {
           </View>
           <Button
             mode="contained"
-            onPress={handleConcludeShopping}
+            onPress={openConfirmConclude}
             disabled={loading}
             loading={loading}
             icon="cart-check"
@@ -214,6 +228,15 @@ export default function ShoppingListScreen() {
           </Button>
         </View>
       )}
+
+      <ConfirmInvoiceModal
+        visible={confirmVisible}
+        stores={stores}
+        defaultStoreName={defaultStoreName}
+        onConfirm={handleConfirmConclude}
+        onDismiss={() => setConfirmVisible(false)}
+        loading={loading}
+      />
     </SafeAreaView>
   );
 }

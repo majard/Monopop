@@ -51,3 +51,27 @@ export interface ShoppingListItem {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface Store {
+  id: number;
+  name: string;
+  createdAt: string;
+}
+
+export interface Invoice {
+  id: number;
+  storeId: number;
+  listId: number;
+  total: number;
+  createdAt: string;
+}
+
+export interface InvoiceItem {
+  id: number;
+  invoiceId: number;
+  productId: number;
+  quantity: number;
+  unitPrice?: number | null;
+  lineTotal: number;
+  createdAt: string;
+}

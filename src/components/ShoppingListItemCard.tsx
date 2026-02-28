@@ -68,7 +68,7 @@ export function ShoppingListItemCard({
                   </>
                 )}
               </View>
-              {itemTotal && (
+              {itemTotal && item.checked && (
                 <Text style={cardStyles.totalText}>Total: {itemTotal}</Text>
               )}
               <Text style={cardStyles.stockLabel}>
