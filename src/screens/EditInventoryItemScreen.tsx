@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   StyleSheet,
@@ -16,7 +16,7 @@ import {
   Card,
   IconButton,
 } from "react-native-paper";
-import { useNavigation, useRoute } from "@react-navigation/native";
+import { useNavigation, useRoute, useFocusEffect } from "@react-navigation/native";
 import {
   NativeStackNavigationProp,
   NativeStackScreenProps,
@@ -65,6 +65,19 @@ export default function EditInventoryItem() {
     getLists().then(setLists);
     setSelectedListId(inventoryItem?.listId ?? 1);
   }, []);
+
+  // Refresh data when screen gains focus to show latest changes
+  useFocusEffect(
+    useCallback(() => {
+      if (inventoryItem) {
+        setQuantity(inventoryItem.quantity.toString());
+        setNotes(inventoryItem.notes || "");
+        setName(inventoryItem.productName || "");
+        setSelectedListId(inventoryItem.listId ?? 1);
+        loadHistory();
+      }
+    }, [inventoryItem])
+  );
 
   const loadHistory = async () => {
     if (inventoryItem?.productName) { // Ensure product and id exist before calling

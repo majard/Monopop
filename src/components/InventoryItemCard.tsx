@@ -24,12 +24,14 @@ interface InventoryItemCardProps {
   inventoryItem: InventoryItem;
   drag: () => void;
   isActive: boolean;
+  onInventoryItemUpdated?: () => void;
 }
 
 export const InventoryItemCard = ({
   inventoryItem,
   drag,
   isActive,
+  onInventoryItemUpdated,
 }: InventoryItemCardProps) => {
   const navigation = useNavigation<ProductCardNavigationProp>();
   const theme = useTheme();
@@ -41,7 +43,7 @@ export const InventoryItemCard = ({
     confirmRemoveInventoryItem,
     startContinuousAdjustment,
     stopContinuousAdjustment,
-  } = useInventoryItem({ inventoryItemId: inventoryItem.id, initialQuantity: inventoryItem.quantity });
+  } = useInventoryItem({ inventoryItemId: inventoryItem.id, initialQuantity: inventoryItem.quantity, onInventoryItemUpdated });
 
 
   return (

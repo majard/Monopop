@@ -129,6 +129,7 @@ export default function HomeScreen() {
       <InventoryList
         inventoryItems={filteredInventoryItems}
         handleInventoryItemOrderChange={handleProductOrderChange}
+        onInventoryItemUpdated={loadInventoryItems}
       />
       <AddItemButton
         onPress={() => navigation.navigate("AddInventoryItem", { listId })}
