@@ -9,6 +9,8 @@ export const initializeDatabase = async (
 ): Promise<SQLite.SQLiteDatabase> => {
   if (!db) {
     db = await SQLite.openDatabaseAsync(databaseName);
+    // Enable foreign key constraints (sqlite3 default is OFF)
+    await db.execAsync('PRAGMA foreign_keys = ON;');
 
     try {
       const result = db.getFirstSync<{ user_version: number }>('PRAGMA user_version;');
