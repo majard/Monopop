@@ -9,8 +9,13 @@ type MainScreenProps = RouteProp<RootStackParamList, 'MainTabs'>;
 export default function MainScreen() {
   const route = useRoute<MainScreenProps>();
   const { listId, setListId } = useListContext();
+  useEffect(() => {
+    if (route.params?.listId) {
+      setListId(route.params.listId);
+    }
+  }, [route.params?.listId, setListId]);
 
 
 
-  return <BottomTabNavigator key= {listId} listId={listId} />;
+  return <BottomTabNavigator key={listId} listId={listId} />;
 } 

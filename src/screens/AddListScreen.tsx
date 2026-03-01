@@ -28,8 +28,9 @@ export default function AddListScreen() {
 
   const handleSubmit = async () => {
     try {
-      await addList(name);
-      navigation.navigate('Lists');
+      const listId = await addList(name);
+      console.log('List ID:', listId);
+      navigation.navigate('MainTabs', { listId });
     } catch (error) {
       console.error('Erro ao adicionar lista:', error);
     }
