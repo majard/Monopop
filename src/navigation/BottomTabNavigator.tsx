@@ -13,7 +13,6 @@ interface BottomTabNavigatorProps {
 }
 
 export default function BottomTabNavigator({ listId = 1 }: BottomTabNavigatorProps) {
-  console.log('BottomTabNavigator listId:', listId);
   
   return (
     <Tab.Navigator

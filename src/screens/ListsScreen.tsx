@@ -37,7 +37,6 @@ export default function ListsScreen() {
   );
 
   const handleListSelect = (listId: number) => {
-    console.log('ListsScreen: selecting list', listId);
     setListId(listId);
     navigation.navigate("Inventory", { listId });
   };

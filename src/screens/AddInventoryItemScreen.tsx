@@ -49,7 +49,6 @@ export default function AddInventoryItemScreen() {
   }, [products, productName]);
 
   const handleProductSelect = (product: Product) => {
-    console.log("handleProductSelect called with product:", product);
     setSelectedProduct(product);
     setProductName(product.name);
     setShowSuggestions(false);
@@ -62,7 +61,6 @@ export default function AddInventoryItemScreen() {
   };
 
   const handleSubmit = async () => {    
-    console.log("handleSubmit called");
     if (!productName.trim()) {
       console.error('Nome do produto é obrigatório');
       return;
@@ -80,7 +78,6 @@ export default function AddInventoryItemScreen() {
         productId = await addProduct(productName.trim());
       }
 
-      console.log("Adding inventory item with productId:", productId);
       await addInventoryItem(
         listId,
         productId,

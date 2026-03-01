@@ -12,7 +12,5 @@ export default function MainScreen() {
 
 
 
-  console.log('MainScreen rendering with listId:', listId);
-
   return <BottomTabNavigator key= {listId} listId={listId} />;
 } 

@@ -58,7 +58,6 @@ export default function EditInventoryItem() {
   const [selectedListId, setSelectedListId] = useState(inventoryItem?.listId ?? 1);
 
   useEffect(() => {
-    console.log('\n\ninventoryItem', inventoryItem);
     if (inventoryItem) {
       setQuantity(inventoryItem.quantity.toString());
       loadHistory();
@@ -68,11 +67,9 @@ export default function EditInventoryItem() {
   }, []);
 
   const loadHistory = async () => {
-    console.log('\n\n loading history inventoryItem', inventoryItem);
     if (inventoryItem?.productName) { // Ensure product and id exist before calling
       try {
         const data = await getInventoryHistory(inventoryItem.id);
-        console.log('\n\ndata', data);
         setHistory(data || []); 
       } catch (error) {
         console.error("Erro ao carregar histórico:", error);

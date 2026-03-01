@@ -35,7 +35,6 @@ type HomeScreenNavigationProp = NativeStackNavigationProp<
 
 export default function HomeScreen() {
   const { listId } = useListContext();
-  console.log('HomeScreen listId:', listId);
 
   const navigation = useNavigation<HomeScreenNavigationProp>();
   const theme = useTheme();
@@ -75,10 +74,7 @@ export default function HomeScreen() {
   const saveAndCopyStockList = async () => {
     try {
       for (const inventoryItem of inventoryItems) {
-        console.log(
-          "\n\n\nSaving history snapshot for inventory item:",
-          inventoryItem.id
-        );
+
         await saveInventoryHistorySnapshot(inventoryItem.id);
       }
       const text = generateStockListText(inventoryItems);
