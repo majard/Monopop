@@ -34,12 +34,12 @@ export const QuantityPill = React.memo(({
       borderRadius: 999,
       overflow: 'hidden',
       opacity: disabled ? 0.4 : 1,
-      minWidth: 80,
+      width: 128,
       justifyContent: 'space-between',
     }}>
       <Pressable
-        style={{ paddingHorizontal: 10, paddingVertical: 8 }}
-        hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+        style={{ paddingHorizontal: 16, paddingVertical: 12 }}
+        hitSlop={{ top: 24, bottom: 24, left: 24, right: 24 }}
         onPress={onDecrement}
         onLongPress={onStartContinuousDecrement}
         onPressOut={onStopContinuous}
@@ -49,9 +49,10 @@ export const QuantityPill = React.memo(({
       </Pressable>
 
       <Text style={{
-        fontSize: 16,
+        fontSize: 15,
         fontWeight: '700',
-        minWidth: 24,
+        width: 42,
+        paddingHorizontal: 8,
         textAlign: 'center',
         color: theme.colors.onSurface,
       }}>
@@ -59,8 +60,8 @@ export const QuantityPill = React.memo(({
       </Text>
 
       <Pressable
-        style={{ paddingHorizontal: 10, paddingVertical: 8 }}
-        hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+        style={{ paddingHorizontal: 16, paddingVertical: 12 }}
+        hitSlop={{ top: 24, bottom: 24, left: 24, right: 24 }}
         onPress={onIncrement}
         onLongPress={onStartContinuousIncrement}
         onPressOut={onStopContinuous}
