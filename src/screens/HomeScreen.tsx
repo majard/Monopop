@@ -3,6 +3,8 @@ import { View, Alert, } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import {
   Button,
+  IconButton,
+  Text,
   useTheme,
 } from "react-native-paper";
 import {
@@ -26,7 +28,7 @@ import { EditableName } from "../components/EditableName";
 import { AddItemButton } from "../components/AddItemButton";
 import InventoryList from "../components/InventoryList";
 import ContextualHeader from "../components/ContextualHeader";
-import { saveInventoryHistorySnapshot } from "../database/database";
+import { saveInventoryHistorySnapshot, deleteInventoryItem } from "../database/database";
 import { useListContext } from "../context/ListContext";
 
 type HomeScreenNavigationProp = NativeStackNavigationProp<
@@ -44,6 +46,8 @@ export default function HomeScreen() {
   const [sortOrder, setSortOrder] = useState<SortOrder>("custom");
   const [isImportModalVisible, setIsImportModalVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
 
   const {
     inventoryItems,
@@ -62,6 +66,30 @@ export default function HomeScreen() {
   const handleSortOrderChange = useCallback((order: SortOrder) => {
     setSortOrder(order);
   }, []);
+
+  const handleToggleSelect = (id: number) => {
+    setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const handleEnterSelectionMode = () => {
+    setIsSelectionMode(true);
+    setSelectedIds([]);
+  };
+
+  const handleExitSelectionMode = () => {
+    setIsSelectionMode(false);
+    setSelectedIds([]);
+  };
+
+  const handleDeleteSelected = async () => {
+    for (const id of selectedIds) {
+      await deleteInventoryItem(id);
+    }
+    await loadInventoryItems();
+    handleExitSelectionMode();
+  };
 
   // useFocusEffect is still crucial here to ensure the list refreshes
   // after single product operations (update, delete) performed via useProduct.
@@ -126,10 +154,41 @@ export default function HomeScreen() {
         </View>
       </View>
 
+      {isSelectionMode && (
+        <View style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          paddingHorizontal: 16,
+          paddingVertical: 8,
+          backgroundColor: theme.colors.secondaryContainer,
+        }}>
+          <Text variant="bodyMedium">
+            {selectedIds.length} selecionado{selectedIds.length !== 1 ? 's' : ''}
+          </Text>
+          <View style={{ flexDirection: 'row' }}>
+            <IconButton
+              icon="delete"
+              iconColor={theme.colors.error}
+              onPress={handleDeleteSelected}
+              disabled={selectedIds.length === 0}
+            />
+            <IconButton
+              icon="close"
+              onPress={handleExitSelectionMode}
+            />
+          </View>
+        </View>
+      )}
+
       <InventoryList
         inventoryItems={filteredInventoryItems}
         handleInventoryItemOrderChange={handleProductOrderChange}
         onInventoryItemUpdated={loadInventoryItems}
+        isSelectionMode={isSelectionMode}
+        selectedIds={selectedIds}
+        onToggleSelect={handleToggleSelect}
+        onLongPressStart={handleEnterSelectionMode}
       />
       <AddItemButton
         onPress={() => navigation.navigate("AddInventoryItem", { listId })}

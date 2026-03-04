@@ -8,7 +8,7 @@ interface UseInventoryItemProps {
   onInventoryItemUpdated?: () => void;
 }
 
-const updateDebounceDelay = 300; // Debounce delay for single inventory item DB updates
+const updateDebounceDelay = 150; // Debounce delay for single inventory item DB updates
 const initialContinuousDelay = 300; // Delay before continuous adjustment starts repeating
 const intervalContinuousDelay = 100; // Interval for continuous adjustment repeats
 
@@ -51,14 +51,10 @@ export const useInventoryItem = ({
       setQuantity(clampedQuantity); // Optimistic UI update
       latestQuantityRef.current = clampedQuantity; // Keep track of the latest quantity for DB update
 
-      if (onInventoryItemUpdated) {
-        onInventoryItemUpdated();
-      }
-
       // Trigger the debounced DB update
       debouncedDbUpdate(inventoryItemId, clampedQuantity);
     },
-    [inventoryItemId, onInventoryItemUpdated, debouncedDbUpdate]
+    [inventoryItemId, debouncedDbUpdate]
   );
 
   // --- Continuous Adjustment States and Refs ---
