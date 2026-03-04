@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Text, FlatList } from 'react-native';
 import { Button, Surface, useTheme } from 'react-native-paper';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -39,12 +39,20 @@ export default function ShoppingListScreen() {
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [defaultStoreName, setDefaultStoreName] = useState('');
   const [selectedStoreId, setSelectedStoreId] = useState<number | null>(null);
+  const [lastStoreId, setLastStoreId] = useState<number | null>(null);
   const [storePickerVisible, setStorePickerVisible] = useState(false);
   const navigation = useNavigation<ShoppingListScreenNavigationProp>();
   const theme = useTheme();
   const styles = createHomeScreenStyles(theme);
 
   const isFirstLoad = useRef(true);
+
+  // Trigger price updates when store changes and data is loaded
+  useEffect(() => {
+    if (selectedStoreId && shoppingListItems.length > 0 && !isFirstLoad.current) {
+      updatePricesForStore(selectedStoreId, shoppingListItems);
+    }
+  }, [selectedStoreId]);
 
   // Load inventory items and shopping list items on component mount and focus
   useFocusEffect(
@@ -70,6 +78,7 @@ export default function ShoppingListScreen() {
           productName: inventoryItem?.productName || 'Unknown Product',
           productId: inventoryItem?.productId || 0,
           currentInventoryQuantity: inventoryItem?.quantity || 0,
+          priceManuallySet: false, // Initialize as auto-set prices
         };
       });
 
@@ -86,10 +95,12 @@ export default function ShoppingListScreen() {
       let storeIdToSet: number | null = null;
 
       if (isFirstLoad.current) {
+        
+          const lastStoreObj = storesList.find(s => s.name === lastStore);
+          setLastStoreId(lastStoreObj?.id ?? null);
 
         if (defaultStoreMode === 'last') {
           storeNameToSet = lastStore ?? '';
-          const lastStoreObj = storesList.find(s => s.name === lastStore);
           storeIdToSet = lastStoreObj?.id ?? null;
         } else if (defaultStoreMode === 'fixed' && defaultStoreId) {
           const defaultStore = storesList.find(s => s.id === parseInt(defaultStoreId));
@@ -112,22 +123,24 @@ export default function ShoppingListScreen() {
     try {
       const updatedItems = await Promise.all(
         items.map(async (item) => {
-          // Only update prices that are null/undefined OR not manually set
+          // Only update prices that are not manually set
           if (item.priceManuallySet) {
             return item;
           }
 
           // Try to get price for this product at the selected store
           const storePrice = await getLastUnitPriceForProductAtStore(item.productId, storeId);
-
           if (storePrice !== null) {
             return { ...item, price: storePrice, priceManuallySet: false };
+          } else {
+            const lastStorePrice = await getLastUnitPriceForProductAtStore(item.productId, lastStoreId);
+          
+            return { ...item, price: lastStorePrice ?? item.price, priceManuallySet: false };
           }
-
-          return item;
         })
       );
 
+      // Always update state to trigger re-render
       setShoppingListItems(updatedItems);
     } catch (error) {
       console.error('Error updating prices for store:', error);
