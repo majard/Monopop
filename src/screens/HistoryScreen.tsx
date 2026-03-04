@@ -52,7 +52,6 @@ interface MonthSummary {
 export default function HistoryScreen() {
   const { listId } = useListContext();
   const { listName, handleListNameSave, handleListDelete } = useList(listId);
-  const { findByProductId, inventoryItems } = useInventory(listId, 'alphabetical', '');
   const [events, setEvents] = useState<HistoryEvent[]>([]);
   const [filteredEvents, setFilteredEvents] = useState<HistoryEvent[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -61,6 +60,9 @@ export default function HistoryScreen() {
   const [selectedPeriod, setSelectedPeriod] = useState<'all' | 'month' | 'week'>('all');
   const navigation = useNavigation<HistoryScreenNavigationProp>();
   const theme = useTheme();
+  
+  // Use inventory hook for fuzzy search and finding items
+  const { findByProductId, inventoryItems, filteredInventoryItems } = useInventory(listId, 'alphabetical', searchQuery);
 
   //console.log('inventoryItems in historyscreen', inventoryItems);
   const loadHistory = async () => {
@@ -218,15 +220,17 @@ export default function HistoryScreen() {
       filtered = filtered.filter(e => new Date(e.date) >= oneWeekAgo);
     }
     
-    // Apply search filter
+    // Apply search filter using fuzzy matching from useInventory
     if (query.trim()) {
-      const searchLower = query.toLowerCase();
+      // Get the set of product IDs that match the fuzzy search
+      const matchedProductIds = new Set(filteredInventoryItems.map(item => item.productId));
+      
       filtered = filtered.filter(e => {
         if (e.type === 'purchase') {
-          return e.store.toLowerCase().includes(searchLower) ||
-            e.items.some(item => item.productName.toLowerCase().includes(searchLower));
+          return e.store.toLowerCase().includes(query.toLowerCase()) ||
+            e.items.some(item => matchedProductIds.has(item.productId));
         } else {
-          return e.changes.some(change => change.productName.toLowerCase().includes(searchLower));
+          return e.changes.some(change => matchedProductIds.has(change.productId));
         }
       });
     }
