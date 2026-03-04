@@ -108,7 +108,7 @@ export default function HistoryScreen() {
          FROM inventory_history ih
          JOIN inventory_items ii ON ih.inventoryItemId = ii.id
          JOIN products p ON ii.productId = p.id
-         WHERE ii.listId = ? AND ih.notes LIKE '%Salvou%'
+         WHERE ii.listId = ?
          ORDER BY ih.date DESC`,
         [listId]
       );
