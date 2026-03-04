@@ -50,7 +50,7 @@ interface MonthSummary {
 
 export default function HistoryScreen() {
   const { listId } = useListContext();
-  const { listName } = useList(listId);
+  const { listName, handleListNameSave, handleListDelete } = useList(listId);
   const [events, setEvents] = useState<HistoryEvent[]>([]);
   const [filteredEvents, setFilteredEvents] = useState<HistoryEvent[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -362,7 +362,11 @@ export default function HistoryScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ContextualHeader listName={listName} />
+      <ContextualHeader 
+        listName={listName}
+        onListNameSave={handleListNameSave}
+        onListDelete={handleListDelete}
+      />
       
       <View style={styles.summaryCard}>
         <Text style={styles.summaryTitle}>Este Mês</Text>

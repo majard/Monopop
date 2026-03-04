@@ -28,7 +28,7 @@ interface ShoppingListItemWithDetails extends Omit<ShoppingListItem, 'checked'> 
 
 export default function ShoppingListScreen() {
   const { listId } = useListContext();
-  const { listName } = useList(listId);
+  const { listName, handleListNameSave, handleListDelete } = useList(listId);
   const [shoppingListItems, setShoppingListItems] = useState<ShoppingListItemWithDetails[]>([]);
   const [loading, setLoading] = useState(false);
   const [editingItem, setEditingItem] = useState<ShoppingListItemWithDetails | null>(null);
@@ -150,7 +150,11 @@ export default function ShoppingListScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ContextualHeader listName={listName} />
+      <ContextualHeader 
+        listName={listName}
+        onListNameSave={handleListNameSave}
+        onListDelete={handleListDelete}
+      />
       
       <ScrollView style={localStyles.scrollContent} contentContainerStyle={{ paddingBottom: bottomBarHeight + 96 }}>
         {shoppingListItems.length === 0 ? (

@@ -92,7 +92,11 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ContextualHeader listName={listName} />
+      <ContextualHeader 
+        listName={listName} 
+        onListNameSave={handleListNameSave}
+        onListDelete={handleListDelete}
+      />
       
       <View style={styles.header}>
         <SearchBar searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
