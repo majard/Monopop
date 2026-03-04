@@ -46,9 +46,17 @@ export default function ListsScreen() {
     <View
       style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
-      <Text style={[styles.title, { color: theme.colors.primary }]}>
-        Suas Listas
-      </Text>
+      <View style={styles.header}>
+        <Text style={[styles.title, { color: theme.colors.primary }]}>
+          Suas Listas
+        </Text>
+        <IconButton
+          icon="cog"
+          size={28}
+          onPress={() => navigation.navigate('Config')}
+          iconColor={theme.colors.primary}
+        />
+      </View>
       {lists.length === 0 ? (
         <View style={localStyles.emptyState}>
           <Text style={localStyles.emptyStateTitle}>
@@ -110,13 +118,17 @@ export default function ListsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 16,
   },
   title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 24,
-    textAlign: "center",
+    fontSize: 28,
+    fontWeight: 'bold',
   },
   fab: {
     position: "absolute",

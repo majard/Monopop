@@ -10,6 +10,14 @@ export type RootStackParamList = {
   AddList: undefined;
   ShoppingList: {listId: number};
   AddProductToShoppingList: { listId: number };
+  Config: undefined;
+  Products: undefined;
+  Stores: undefined;
+  Categories: undefined;
+  Invoices: undefined;
+  InvoiceDetail: { invoiceId: number };
+  Backup: undefined;
+  About: undefined;
 };
 
 export type BottomTabParamList = {

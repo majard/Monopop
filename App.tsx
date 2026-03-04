@@ -13,6 +13,14 @@ import EditInventoryItemScreen from './src/screens/EditInventoryItemScreen';
 import AddListScreen from './src/screens/AddListScreen';
 import AddProductToShoppingListScreen from './src/screens/AddProductToShoppingListScreen';
 import ListsScreen from './src/screens/ListsScreen';
+import ConfigScreen from './src/screens/ConfigScreen';
+import ProductsScreen from './src/screens/ProductsScreen';
+import StoresScreen from './src/screens/StoresScreen';
+import CategoriesScreen from './src/screens/CategoriesScreen';
+import InvoicesScreen from './src/screens/InvoicesScreen';
+import InvoiceDetailScreen from './src/screens/InvoiceDetailScreen';
+import BackupScreen from './src/screens/BackupScreen';
+import AboutScreen from './src/screens/AboutScreen';
 import { ListProvider } from './src/context/ListContext';
 
 const Stack = createNativeStackNavigator();
@@ -86,6 +94,46 @@ export default function App() {
                   name="AddProductToShoppingList"
                   options={{ title: 'Adicionar à Lista de Compras', headerShown: false }}
                   component={AddProductToShoppingListScreen}
+                />
+                <Stack.Screen
+                  name="Config"
+                  options={{ title: 'Configurações', headerShown: false }}
+                  component={ConfigScreen}
+                />
+                <Stack.Screen
+                  name="Products"
+                  options={{ title: 'Produtos', headerShown: false }}
+                  component={ProductsScreen}
+                />
+                <Stack.Screen
+                  name="Stores"
+                  options={{ title: 'Lojas', headerShown: false }}
+                  component={StoresScreen}
+                />
+                <Stack.Screen
+                  name="Categories"
+                  options={{ title: 'Categorias', headerShown: false }}
+                  component={CategoriesScreen}
+                />
+                <Stack.Screen
+                  name="Invoices"
+                  options={{ title: 'Compras', headerShown: false }}
+                  component={InvoicesScreen}
+                />
+                <Stack.Screen
+                  name="InvoiceDetail"
+                  options={{ title: 'Detalhes da Compra', headerShown: false }}
+                  component={InvoiceDetailScreen}
+                />
+                <Stack.Screen
+                  name="Backup"
+                  options={{ title: 'Backup', headerShown: false }}
+                  component={BackupScreen}
+                />
+                <Stack.Screen
+                  name="About"
+                  options={{ title: 'Sobre', headerShown: false }}
+                  component={AboutScreen}
                 />
               </Stack.Navigator>
             </NavigationContainer>
