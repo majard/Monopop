@@ -133,7 +133,7 @@ export default function HomeScreen() {
       />
       <AddItemButton
         onPress={() => navigation.navigate("AddInventoryItem", { listId })}
-        label="Adicionar Produto ao Estoque"
+        label="Adicionar ao Estoque"
       />
       <ImportModal
         isImportModalVisible={isImportModalVisible}
