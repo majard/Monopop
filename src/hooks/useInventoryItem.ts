@@ -31,10 +31,6 @@ export const useInventoryItem = ({
     updateTimeoutRef.current = setTimeout(async () => {
       try {
         await updateInventoryItem(id, newQuantity);
-        // Trigger immediate parent refresh after successful DB update
-        if (onInventoryItemUpdated) {
-          onInventoryItemUpdated();
-        }
       } catch (err) {
         console.error(`Erro ao atualizar inventory item ${id}:`, err);
       } finally {
