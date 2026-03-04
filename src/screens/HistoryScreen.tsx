@@ -10,6 +10,8 @@ import {
 } from 'react-native-paper';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { parseISO, format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import { RootStackParamList } from '../types/navigation';
 import { useListContext } from '../context/ListContext';
 import { useList } from '../hooks/useList';
@@ -154,7 +156,7 @@ export default function HistoryScreen() {
         .map(([date, changes], index) => ({
           type: 'inventory' as const,
           id: 1000000 + index, // Unique ID for inventory events
-          date: new Date(date).toISOString(),
+          date: date + 'T00:00:00',
           changes,
         }));
 
@@ -171,7 +173,7 @@ export default function HistoryScreen() {
       const currentYear = now.getFullYear();
       
       const thisMonthPurchases = purchaseEvents.filter(e => {
-        const date = new Date(e.date);
+        const date = parseISO(e.date);
         return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
       });
 
@@ -212,12 +214,12 @@ export default function HistoryScreen() {
       const currentMonth = now.getMonth();
       const currentYear = now.getFullYear();
       filtered = filtered.filter(e => {
-        const date = new Date(e.date);
+        const date = parseISO(e.date);
         return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
       });
     } else if (period === 'week') {
       const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      filtered = filtered.filter(e => new Date(e.date) >= oneWeekAgo);
+      filtered = filtered.filter(e => parseISO(e.date) >= oneWeekAgo);
     }
     
     // Apply search filter using fuzzy matching from useInventory
@@ -261,8 +263,8 @@ export default function HistoryScreen() {
   const formatCurrency = (value: number) => `R$ ${value.toFixed(2).replace('.', ',')}`;
   
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
+    const date = parseISO(dateString);
+    return format(date, 'dd MMM yyyy', { locale: ptBR });
   };
 
   const handleItemPress = (productId: number) => {
