@@ -4,7 +4,11 @@ import { Appbar, Card, Text, useTheme, Divider, Avatar } from 'react-native-pape
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';  
+import Constants from 'expo-constants';
+
+const version = Constants.expoConfig?.version ?? '1.5';
+
 
 type AboutScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'About'>;
 
@@ -27,7 +31,7 @@ export default function AboutScreen() {
             style={{ backgroundColor: theme.colors.primary }}
           />
           <Text style={styles.appName}>Listai</Text>
-          <Text style={styles.version}>Versão 1.5</Text>
+          <Text style={styles.version}>{version}</Text>
         </View>
 
         <Card style={styles.card}>
