@@ -25,6 +25,7 @@ interface ShoppingListItemWithDetails extends Omit<ShoppingListItem, 'checked'> 
   productId: number;
   currentInventoryQuantity: number;
   price?: number;
+  priceManuallySet?: boolean; // Flag to track if price was set manually
 }
 
 export default function ShoppingListScreen() {
@@ -111,8 +112,8 @@ export default function ShoppingListScreen() {
     try {
       const updatedItems = await Promise.all(
         items.map(async (item) => {
-          // Only update prices that are null/undefined (not manually set)
-          if (item.price !== null && item.price !== undefined) {
+          // Only update prices that are null/undefined OR not manually set
+          if (item.priceManuallySet) {
             return item;
           }
 
@@ -120,7 +121,7 @@ export default function ShoppingListScreen() {
           const storePrice = await getLastUnitPriceForProductAtStore(item.productId, storeId);
 
           if (storePrice !== null) {
-            return { ...item, price: storePrice };
+            return { ...item, price: storePrice, priceManuallySet: false };
           }
 
           return item;
@@ -189,8 +190,19 @@ export default function ShoppingListScreen() {
   const handleSaveEdit = async (quantity: number, price: number | undefined) => {
     if (!editingItem) return;
     try {
+      // Mark price as manually set if user provided a price
+      const priceManuallySet = price !== undefined && price !== null;
       await updateShoppingListItem(editingItem.id, { quantity, price });
-      await loadData();
+      
+      // Update local state to reflect manual price setting
+      setShoppingListItems(prev => 
+        prev.map(item => 
+          item.id === editingItem.id 
+            ? { ...item, quantity, price, priceManuallySet }
+            : item
+        )
+      );
+      
       setEditingItem(null);
     } catch (error) {
       console.error('Erro ao atualizar item:', error);
