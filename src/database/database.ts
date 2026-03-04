@@ -118,6 +118,25 @@ export const getLastUnitPriceForProduct = async (productId: number): Promise<num
   }
 };
 
+export const getLastUnitPriceForProductAtStore = async (productId: number, storeId: number): Promise<number | null> => {
+  const db = getDb();
+  try {
+    const row = await db.getFirstAsync<{ unitPrice: number }>(
+      `SELECT ii.unitPrice 
+       FROM invoice_items ii
+       INNER JOIN invoices i ON ii.invoiceId = i.id
+       WHERE ii.productId = ? AND i.storeId = ?
+       ORDER BY ii.createdAt DESC 
+       LIMIT 1`,
+      [productId, storeId]
+    );
+    return row?.unitPrice || null;
+  } catch (error) {
+    console.error('Error getting last unit price for product at store:', error);
+    return null;
+  }
+};
+
 export const ensureStoreExists = async (db: SQLite.SQLiteDatabase, storeName: string): Promise<number> => {
   const normalized = normalizeStoreName(storeName);
   if (!normalized) {

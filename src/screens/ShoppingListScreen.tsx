@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { View, StyleSheet, ScrollView, Text, FlatList } from 'react-native';
 import { Button, Surface, useTheme } from 'react-native-paper';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { concludeShoppingForListWithInvoice, getLastStoreName, getShoppingListItemsByListId, getInventoryItems, getStores, updateShoppingListItem, deleteShoppingListItem, getSetting, setSetting } from '../database/database';
+import { concludeShoppingForListWithInvoice, getLastStoreName, getShoppingListItemsByListId, getInventoryItems, getStores, updateShoppingListItem, deleteShoppingListItem, getSetting, setSetting, getLastUnitPriceForProductAtStore } from '../database/database';
 import { RootStackParamList } from '../types/navigation';
 import { ShoppingListItem } from '../database/models';
 import { useListContext } from '../context/ListContext';
@@ -14,6 +14,7 @@ import { ConfirmInvoiceModal, StoreOption } from '../components/ConfirmInvoiceMo
 import ContextualHeader from '../components/ContextualHeader';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AddItemButton } from '../components/AddItemButton';
+import { StorePickerDialog } from '../components/StorePickerDialog';
 import { createHomeScreenStyles } from '../styles/HomeScreenStyles';
 
 type ShoppingListScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'ShoppingList'>;
@@ -36,9 +37,13 @@ export default function ShoppingListScreen() {
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [defaultStoreName, setDefaultStoreName] = useState('');
+  const [selectedStoreId, setSelectedStoreId] = useState<number | null>(null);
+  const [storePickerVisible, setStorePickerVisible] = useState(false);
   const navigation = useNavigation<ShoppingListScreenNavigationProp>();
   const theme = useTheme();
   const styles = createHomeScreenStyles(theme);
+
+  const isFirstLoad = useRef(true);
 
   // Load inventory items and shopping list items on component mount and focus
   useFocusEffect(
@@ -77,18 +82,64 @@ export default function ShoppingListScreen() {
       ]);
 
       let storeNameToSet = '';
-      if (defaultStoreMode === 'last') {
-        storeNameToSet = lastStore ?? '';
-      } else if (defaultStoreMode === 'fixed' && defaultStoreId) {
-        const defaultStore = storesList.find(s => s.id === parseInt(defaultStoreId));
-        storeNameToSet = defaultStore?.name ?? '';
-      }
-      // If 'ask', leave empty string
+      let storeIdToSet: number | null = null;
 
-      setDefaultStoreName(storeNameToSet);
+      if (isFirstLoad.current) {
+
+        if (defaultStoreMode === 'last') {
+          storeNameToSet = lastStore ?? '';
+          const lastStoreObj = storesList.find(s => s.name === lastStore);
+          storeIdToSet = lastStoreObj?.id ?? null;
+        } else if (defaultStoreMode === 'fixed' && defaultStoreId) {
+          const defaultStore = storesList.find(s => s.id === parseInt(defaultStoreId));
+          storeNameToSet = defaultStore?.name ?? '';
+          storeIdToSet = defaultStore?.id ?? null;
+        }
+
+        setDefaultStoreName(storeNameToSet);
+        setSelectedStoreId(storeIdToSet);
+        isFirstLoad.current = false;
+      }
+      // If 'ask', leave empty string and null
+
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
     }
+  };
+
+  const updatePricesForStore = async (storeId: number, items: ShoppingListItemWithDetails[]) => {
+    try {
+      const updatedItems = await Promise.all(
+        items.map(async (item) => {
+          // Only update prices that are null/undefined (not manually set)
+          if (item.price !== null && item.price !== undefined) {
+            return item;
+          }
+
+          // Try to get price for this product at the selected store
+          const storePrice = await getLastUnitPriceForProductAtStore(item.productId, storeId);
+
+          if (storePrice !== null) {
+            return { ...item, price: storePrice };
+          }
+
+          return item;
+        })
+      );
+
+      setShoppingListItems(updatedItems);
+    } catch (error) {
+      console.error('Error updating prices for store:', error);
+    }
+  };
+
+  const handleStoreSelect = (storeId: number) => {
+    setSelectedStoreId(storeId);
+    const selectedStore = stores.find(s => s.id === storeId);
+    setDefaultStoreName(selectedStore?.name ?? '');
+
+    // Update prices for the selected store
+    updatePricesForStore(storeId, shoppingListItems);
   };
 
   const handleToggleChecked = async (item: ShoppingListItemWithDetails) => {
@@ -110,13 +161,13 @@ export default function ShoppingListScreen() {
     setLoading(true);
     try {
       await concludeShoppingForListWithInvoice(listId, storeName);
-      
+
       // Save used store to defaultStoreId
       const store = stores.find(s => s.name === storeName);
       if (store) {
         await setSetting('defaultStoreId', store.id.toString());
       }
-      
+
       setConfirmVisible(false);
       await loadData();
     } catch (error) {
@@ -173,12 +224,25 @@ export default function ShoppingListScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ContextualHeader 
+      <ContextualHeader
         listName={listName}
         onListNameSave={handleListNameSave}
         onListDelete={handleListDelete}
       />
-      
+
+      {/* Store Selector */}
+      <View style={localStyles.storeSelector}>
+        <Text style={localStyles.storeSelectorLabel}>Loja:</Text>
+        <Button
+          mode="outlined"
+          onPress={() => setStorePickerVisible(true)}
+          style={localStyles.storeSelectorButton}
+          contentStyle={localStyles.storeSelectorButtonContent}
+        >
+          {defaultStoreName || 'Selecionar loja'}
+        </Button>
+      </View>
+
       <ScrollView style={localStyles.scrollContent} contentContainerStyle={{ paddingBottom: bottomBarHeight + 96 }}>
         {shoppingListItems.length === 0 ? (
           <Surface style={localStyles.emptyState}>
@@ -266,6 +330,13 @@ export default function ShoppingListScreen() {
         onDismiss={() => setConfirmVisible(false)}
         loading={loading}
       />
+      <StorePickerDialog
+        visible={storePickerVisible}
+        stores={stores}
+        selectedId={selectedStoreId}
+        onSelect={handleStoreSelect}
+        onDismiss={() => setStorePickerVisible(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -276,6 +347,27 @@ const localStyles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 16,
     color: '#333',
+  },
+  storeSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: 'white',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  storeSelectorLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginRight: 12,
+    color: '#333',
+  },
+  storeSelectorButton: {
+    flex: 1,
+  },
+  storeSelectorButtonContent: {
+    justifyContent: 'flex-start',
   },
   scrollContent: {
     flexGrow: 1,
