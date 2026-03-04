@@ -12,6 +12,7 @@ import AddInventoryItemScreen from './src/screens/AddInventoryItemScreen';
 import EditInventoryItemScreen from './src/screens/EditInventoryItemScreen';
 import AddListScreen from './src/screens/AddListScreen';
 import AddProductToShoppingListScreen from './src/screens/AddProductToShoppingListScreen';
+import ListsScreen from './src/screens/ListsScreen';
 import { ListProvider } from './src/context/ListContext';
 
 const Stack = createNativeStackNavigator();
@@ -37,7 +38,8 @@ export default function App() {
           <ListProvider initialListId={1}>
             <NavigationContainer>
               <Stack.Navigator
-                initialRouteName="MainTabs"
+                id="MainNavigator"
+                initialRouteName="Lists"
                 screenOptions={{
                   headerStyle: {
                     backgroundColor: theme.colors.primary,
@@ -48,6 +50,11 @@ export default function App() {
                   },
                 }}
               >
+                <Stack.Screen 
+                  name="Lists" 
+                  component={ListsScreen}
+                  options={{ title: 'Suas Listas', headerShown: false }}
+                />
                 <Stack.Screen 
                   name="MainTabs" 
                   component={MainScreen}

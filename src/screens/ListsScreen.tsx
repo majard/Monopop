@@ -9,7 +9,7 @@ import {
 import { getLists } from "../database/database";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { BottomTabParamList } from "../types/navigation";
+import { RootStackParamList } from "../types/navigation";
 import { getEmojiForList } from "../utils/stringUtils";
 import { useListContext } from "../context/ListContext";
 
@@ -21,7 +21,7 @@ type ListItem = {
 export default function ListsScreen() {
   const [lists, setLists] = useState<ListItem[]>([]);
   const navigation =
-    useNavigation<NativeStackNavigationProp<BottomTabParamList>>();
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { setListId } = useListContext();
   const theme = useTheme();
 
@@ -38,7 +38,7 @@ export default function ListsScreen() {
 
   const handleListSelect = (listId: number) => {
     setListId(listId);
-    navigation.navigate("Inventory", { listId });
+    navigation.navigate("MainTabs", { listId });
   };
 
   return (
