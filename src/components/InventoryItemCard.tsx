@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Pressable, Animated } from 'react-native';
+import { View, Pressable } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import {
   Card,
@@ -87,8 +87,8 @@ export const InventoryItemCard = ({
         backgroundColor: theme.colors.error,
         justifyContent: 'center',
         alignItems: 'center',
-        width: 80,
-        marginBottom: 8,
+        width: 100,
+        marginBottom: 16,
         borderRadius: 12,
         marginLeft: 8,
       }}
