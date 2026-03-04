@@ -55,7 +55,7 @@ export const InventoryItemCard = ({
     confirmRemoveInventoryItem,
     startContinuousAdjustment,
     stopContinuousAdjustment,
-  } = useInventoryItem({ inventoryItemId: inventoryItem.id, initialQuantity: inventoryItem.quantity, onInventoryItemUpdated });
+  } = useInventoryItem({ inventoryItemId: inventoryItem.id, initialQuantity: inventoryItem.quantity, productName: inventoryItem.productName, onInventoryItemUpdated });
 
   const handleEdit = () => {
     if (!isSelectionMode) {

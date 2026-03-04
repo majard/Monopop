@@ -83,12 +83,25 @@ export default function HomeScreen() {
     setSelectedIds([]);
   };
 
-  const handleDeleteSelected = async () => {
-    for (const id of selectedIds) {
-      await deleteInventoryItem(id);
-    }
-    await loadInventoryItems();
-    handleExitSelectionMode();
+  const handleDeleteSelected = () => {
+    Alert.alert(
+      "Confirmar Exclusão",
+      `Tem certeza que deseja excluir ${selectedIds.length} ${selectedIds.length === 1 ? 'item' : 'itens'} do estoque?`,
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Excluir",
+          style: "destructive",
+          onPress: async () => {
+            for (const id of selectedIds) {
+              await deleteInventoryItem(id);
+            }
+            await loadInventoryItems();
+            handleExitSelectionMode();
+          },
+        },
+      ]
+    );
   };
 
   // useFocusEffect is still crucial here to ensure the list refreshes

@@ -5,6 +5,7 @@ import { Alert } from "react-native";
 interface UseInventoryItemProps {
   inventoryItemId: number;
   initialQuantity: number;
+  productName: string;
   onInventoryItemUpdated?: () => void;
 }
 
@@ -15,6 +16,7 @@ const intervalContinuousDelay = 100; // Interval for continuous adjustment repea
 export const useInventoryItem = ({
   inventoryItemId,
   initialQuantity,
+  productName,
   onInventoryItemUpdated,
 }: UseInventoryItemProps) => {
   const [quantity, setQuantity] = useState(initialQuantity);
@@ -122,7 +124,7 @@ export const useInventoryItem = ({
   const confirmRemoveInventoryItem = useCallback(() => {
     Alert.alert(
       "Confirmar Exclusão",
-      "Tem certeza que deseja excluir este item do estoque?",
+      `Tem certeza que deseja excluir "${productName}" do estoque?`,
       [
         { text: "Cancelar", style: "cancel" },
         {
