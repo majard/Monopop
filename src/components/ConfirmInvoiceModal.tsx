@@ -1,15 +1,15 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { View, StyleSheet, FlatList, Pressable } from "react-native";
+import React, { useEffect, useState } from "react";
+import { View, StyleSheet } from "react-native";
 import {
   Modal,
   Portal,
   Text,
-  TextInput,
   Button,
   Surface,
   useTheme,
 } from "react-native-paper";
 import { getSetting } from "../database/database";
+import { SearchablePickerDialog } from "./SearchablePickerDialog";
 
 export interface StoreOption {
   id: number;
@@ -68,16 +68,18 @@ export function ConfirmInvoiceModal({
     }
   }, [visible, defaultStoreName, defaultStoreMode, defaultStoreId, stores]);
 
-  const normalizedInput = storeName.trim().toLowerCase();
-
-  const suggestions = useMemo(() => {
-    if (!normalizedInput) return stores.slice(0, 8);
-    return stores
-      .filter((s) => s.name.toLowerCase().includes(normalizedInput))
-      .slice(0, 8);
-  }, [stores, normalizedInput]);
-
   const canConfirm = storeName.trim().length > 0;
+
+  const handleStoreSelect = (storeId: number) => {
+    const selectedStore = stores.find(s => s.id === storeId);
+    if (selectedStore) {
+      setStoreName(selectedStore.name);
+    }
+  };
+
+  const handleCreateNew = (newStoreName: string) => {
+    setStoreName(newStoreName);
+  };
 
   return (
     <Portal>
@@ -90,43 +92,17 @@ export function ConfirmInvoiceModal({
           <Text style={styles.title}>Confirmar compras</Text>
 
           <Text style={styles.label}>Loja</Text>
-          <View style={styles.inputContainer}>
-            <TextInput
-              mode="outlined"
-              value={storeName}
-              onChangeText={setStoreName}
-              placeholder="Digite o nome da loja"
-              autoCapitalize="words"
-              style={styles.input}
-              right={
-                storeName.trim().length > 0 && (
-                  <TextInput.Icon
-                    icon="close"
-                    onPress={() => setStoreName('')}
-                    color={theme.colors.error}
-                  />
-                )
-              }
-            />
-          </View>
-
-          {suggestions.length > 0 && (
-            <View style={styles.suggestionsContainer}>
-              <FlatList
-                data={suggestions}
-                keyExtractor={(item) => item.id.toString()}
-                keyboardShouldPersistTaps="handled"
-                renderItem={({ item }) => (
-                  <Pressable
-                    onPress={() => setStoreName(item.name)}
-                    style={styles.suggestionRow}
-                  >
-                    <Text style={styles.suggestionText}>{item.name}</Text>
-                  </Pressable>
-                )}
-              />
-            </View>
-          )}
+          <SearchablePickerDialog
+            visible={visible}
+            items={stores}
+            selectedId={stores.find(s => s.name === storeName)?.id ?? null}
+            onSelect={handleStoreSelect}
+            onCreateNew={handleCreateNew}
+            title="Selecionar loja"
+            placeholder="Digite o nome da loja"
+            embedded={true}
+            onDismiss={() => {}}
+          />
 
           <View style={styles.buttonRow}>
             <Button onPress={onDismiss} style={styles.button}>
@@ -170,30 +146,6 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 16,
     marginBottom: 8,
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  input: {
-    flex: 1,
-  },
-  clearButton: {
-    paddingHorizontal: 8,
-  },
-  suggestionsContainer: {
-    maxHeight: 120,
-    marginBottom: 16,
-  },
-  suggestionRow: {
-    padding: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-  },
-  suggestionText: {
-    fontSize: 16,
-    fontSize: 14,
-    color: "#333",
   },
   buttonRow: {
     flexDirection: "row",

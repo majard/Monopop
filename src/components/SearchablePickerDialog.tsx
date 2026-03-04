@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { View, StyleSheet, FlatList, Pressable } from "react-native";
+import { View, StyleSheet, FlatList, ScrollView } from "react-native";
 import {
   Modal,
   Portal,
@@ -20,6 +20,7 @@ interface SearchablePickerDialogProps {
   onCreateNew: (name: string) => void;
   title: string;
   placeholder?: string;
+  embedded?: boolean;
 }
 
 export function SearchablePickerDialog({
@@ -31,6 +32,7 @@ export function SearchablePickerDialog({
   onCreateNew,
   title,
   placeholder = "Buscar...",
+  embedded = false,
 }: SearchablePickerDialogProps) {
   const theme = useTheme();
   const [searchText, setSearchText] = useState("");
@@ -61,12 +63,16 @@ export function SearchablePickerDialog({
 
   const handleSelectItem = (id: number) => {
     onSelect(id);
-    onDismiss();
+    if (!embedded) {
+      onDismiss();
+    }
   };
 
   const handleCreateNew = () => {
     onCreateNew(searchText.trim());
-    onDismiss();
+    if (!embedded) {
+      onDismiss();
+    }
   };
 
   const renderItem = ({ item }: { item: { id: number; name: string } }) => (
@@ -96,6 +102,83 @@ export function SearchablePickerDialog({
     </View>
   );
 
+  const renderItemList = () => {
+    if (filteredItems.length === 0 && !showCreateNew) {
+      return renderEmptyState();
+    }
+
+    if (embedded) {
+      return (
+        <ScrollView style={styles.listContainer}>
+          {filteredItems.map((item) => (
+            <List.Item
+              key={item.id}
+              title={item.name}
+              onPress={() => handleSelectItem(item.id)}
+              right={(props) =>
+                selectedId === item.id && <List.Icon {...props} icon="check" />
+              }
+            />
+          ))}
+          {showCreateNew && <CreateNewItem />}
+        </ScrollView>
+      );
+    }
+
+    return (
+      <FlatList
+        data={filteredItems}
+        keyExtractor={(item) => item.id.toString()}
+        renderItem={renderItem}
+        keyboardShouldPersistTaps="handled"
+        style={styles.listContainer}
+        ListFooterComponent={
+          showCreateNew ? <CreateNewItem /> : null
+        }
+      />
+    );
+  };
+
+  const content = (
+    <>
+      {!embedded && (
+        <Text style={embedded ? styles.embeddedTitle : styles.title}>{title}</Text>
+      )}
+
+      <TextInput
+        mode="outlined"
+        value={searchText}
+        onChangeText={setSearchText}
+        placeholder={placeholder}
+        autoFocus={visible && !embedded}
+        style={styles.input}
+        right={
+          searchText.trim().length > 0 && (
+            <TextInput.Icon
+              icon="close"
+              onPress={() => setSearchText("")}
+              color={theme.colors.error}
+            />
+          )
+        }
+      />
+
+      {renderItemList()}
+
+      {!embedded && (
+        <View style={styles.buttonRow}>
+          <Button onPress={onDismiss} style={styles.button}>
+            Cancelar
+          </Button>
+        </View>
+      )}
+    </>
+  );
+
+  if (embedded) {
+    return content;
+  }
+
   return (
     <Portal>
       <Modal
@@ -104,48 +187,7 @@ export function SearchablePickerDialog({
         contentContainerStyle={styles.modalContainer}
       >
         <Surface style={styles.surface}>
-          <Text style={styles.title}>{title}</Text>
-
-          <TextInput
-            mode="outlined"
-            value={searchText}
-            onChangeText={setSearchText}
-            placeholder={placeholder}
-            autoFocus={visible}
-            style={styles.input}
-            right={
-              searchText.trim().length > 0 && (
-                <TextInput.Icon
-                  icon="close"
-                  onPress={() => setSearchText("")}
-                  color={theme.colors.error}
-                />
-              )
-            }
-          />
-
-          <View style={styles.listContainer}>
-            {filteredItems.length === 0 && !showCreateNew ? (
-              renderEmptyState()
-            ) : (
-              <FlatList
-                data={filteredItems}
-                keyExtractor={(item) => item.id.toString()}
-                renderItem={renderItem}
-                keyboardShouldPersistTaps="handled"
-                style={styles.list}
-                ListFooterComponent={
-                  showCreateNew ? <CreateNewItem /> : null
-                }
-              />
-            )}
-          </View>
-
-          <View style={styles.buttonRow}>
-            <Button onPress={onDismiss} style={styles.button}>
-              Cancelar
-            </Button>
-          </View>
+          {content}
         </Surface>
       </Modal>
     </Portal>
@@ -165,11 +207,21 @@ const styles = StyleSheet.create({
     maxWidth: 420,
     elevation: 4,
   },
+  embeddedSurface: {
+    padding: 16,
+    borderRadius: 8,
+    backgroundColor: "white",
+  },
   title: {
     fontSize: 18,
     fontWeight: "600",
     textAlign: "center",
     marginBottom: 16,
+  },
+  embeddedTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 12,
   },
   input: {
     marginBottom: 16,
