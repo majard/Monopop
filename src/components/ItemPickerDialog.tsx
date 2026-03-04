@@ -2,36 +2,43 @@ import React from 'react';
 import { ScrollView } from 'react-native';
 import { Dialog, Portal, List, Button } from 'react-native-paper';
 
-interface StorePickerDialogProps {
-  visible: boolean;
-  onDismiss: () => void;
-  stores: { id: number; name: string }[];
-  selectedId: number | null;
-  onSelect: (id: number) => void;
+interface Item {
+  id: number;
+  name: string;
 }
 
-export function StorePickerDialog({
+interface ItemPickerDialogProps {
+  visible: boolean;
+  onDismiss: () => void;
+  items: Item[];
+  selectedId: number | null;
+  onSelect: (id: number) => void;
+  title: string;
+}
+
+export function ItemPickerDialog({
   visible,
   onDismiss,
-  stores,
+  items,
   selectedId,
   onSelect,
-}: StorePickerDialogProps) {
+  title,
+}: ItemPickerDialogProps) {
   return (
     <Portal>
       <Dialog visible={visible} onDismiss={onDismiss}>
-        <Dialog.Title>Escolher loja</Dialog.Title>
+        <Dialog.Title>{title}</Dialog.Title>
         <Dialog.ScrollArea>
           <ScrollView>
-            {stores.map(store => (
+            {items.map(item => (
               <List.Item
-                key={store.id}
-                title={store.name}
+                key={item.id}
+                title={item.name}
                 onPress={() => {
-                  onSelect(store.id);
+                  onSelect(item.id);
                   onDismiss();
                 }}
-                right={props => selectedId === store.id &&
+                right={props => selectedId === item.id &&
                   <List.Icon {...props} icon="check" />
                 }
               />

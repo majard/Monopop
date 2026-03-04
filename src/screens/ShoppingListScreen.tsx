@@ -14,7 +14,7 @@ import { ConfirmInvoiceModal, StoreOption } from '../components/ConfirmInvoiceMo
 import ContextualHeader from '../components/ContextualHeader';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AddItemButton } from '../components/AddItemButton';
-import { StorePickerDialog } from '../components/StorePickerDialog';
+import { ItemPickerDialog } from '../components/ItemPickerDialog';
 import { createHomeScreenStyles } from '../styles/HomeScreenStyles';
 
 type ShoppingListScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'ShoppingList'>;
@@ -355,12 +355,13 @@ export default function ShoppingListScreen() {
         onDismiss={() => setConfirmVisible(false)}
         loading={loading}
       />
-      <StorePickerDialog
+      <ItemPickerDialog
         visible={storePickerVisible}
-        stores={stores}
+        items={stores}
         selectedId={selectedStoreId}
         onSelect={handleStoreSelect}
         onDismiss={() => setStorePickerVisible(false)}
+        title="Escolher loja"
       />
     </SafeAreaView>
   );
