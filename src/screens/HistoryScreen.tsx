@@ -95,7 +95,7 @@ export default function HistoryScreen() {
         })
       );
 
-      // Load inventory save events - group by date
+      // Load inventory save events - group by date (exclude purchase-related entries)
       const inventoryHistory = await db.getAllAsync<{
         date: string;
         inventoryItemId: number;
@@ -108,7 +108,7 @@ export default function HistoryScreen() {
          FROM inventory_history ih
          JOIN inventory_items ii ON ih.inventoryItemId = ii.id
          JOIN products p ON ii.productId = p.id
-         WHERE ii.listId = ?
+         WHERE ii.listId = ? AND (ih.notes IS NULL OR ih.notes NOT LIKE '%Purchased%')
          ORDER BY ih.date DESC`,
         [listId]
       );
