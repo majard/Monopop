@@ -45,11 +45,11 @@ export const QuantityPill = React.memo(({
         onPressOut={onStopContinuous}
         disabled={disabled}
       >
-        <Text style={{ fontSize: 18, lineHeight: 20, color: theme.colors.onSurface }}>−</Text>
+        <Text style={{ fontSize: 22, lineHeight: 20, color: theme.colors.onSurface }}>−</Text>
       </Pressable>
 
       <Text style={{
-        fontSize: 14,
+        fontSize: 16,
         fontWeight: '700',
         minWidth: 24,
         textAlign: 'center',
@@ -67,7 +67,7 @@ export const QuantityPill = React.memo(({
         disabled={disabled}
         testID={testID}
       >
-        <Text style={{ fontSize: 18, lineHeight: 20, color: theme.colors.onSurface }}>+</Text>
+        <Text style={{ fontSize: 22, lineHeight: 20, color: theme.colors.onSurface }}>+</Text>
       </Pressable>
     </View>
   );

@@ -115,7 +115,7 @@ export const InventoryItemCard = ({
 
         {/* Name — takes remaining space, wraps up to 3 lines */}
         <View style={{ flex: 1, marginHorizontal: 8 }}>
-          <Text variant="titleMedium" numberOfLines={3}>
+          <Text variant="titleMedium" numberOfLines={3} style={{ fontSize: 17 }}>
             {inventoryItem.productName}
           </Text>
         </View>
