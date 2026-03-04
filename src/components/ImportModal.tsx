@@ -1,7 +1,7 @@
 import { parse, parseISO, isSameDay } from "date-fns";
 import { useState, useEffect } from "react";
 import { calculateSimilarity } from "../utils/similarityUtils";
-import { Modal, View, Text, ScrollView, Alert, Pressable } from "react-native";
+import { Modal, View, Text, ScrollView, Alert } from "react-native";
 import {
   Button,
   TextInput as PaperTextInput,
@@ -14,11 +14,11 @@ import {
   getInventoryHistory,
   addSingleInventoryHistoryEntry,
   addProduct,
-  consolidateProductHistory,
   getInventoryItems,
   addInventoryItem,
 } from "../database/database";
 import { InventoryItem, InventoryHistory } from "../database/models";
+import { ConfirmationModal } from "./ImportConfirmationModal";
 
 const similarityThreshold = 0.5;
 
@@ -204,74 +204,99 @@ export default function ImportModal({
       if (!currentImportItem?.bestMatch || !currentImportItem?.similarProducts)
         return;
 
-      // Update all similar products to match the best match
-      for (const product of currentImportItem.similarProducts.slice(1)) {
-        await consolidateProductHistory(
-          product.id,
-          currentImportItem.bestMatch.id
+      // Accept the current bestMatch for the current imported product
+      const { bestMatch, importedProduct, importDate, remainingProducts } = currentImportItem;
+      const now = new Date();
+      const historyDate = importDate ? importDate : now;
+      const productHistory = await getInventoryHistory(bestMatch.id);
+      const lastHistoryDate = await getLastHistoryDate(productHistory);
+
+      // If there is an import date and it doesn't exist in the history, save the history
+      if (importDate && !checkDateExists(productHistory, importDate)) {
+        await addSingleInventoryHistoryEntry(
+          bestMatch.id,
+          importedProduct.quantity,
+          importDate
         );
       }
 
-      // Update the quantity of the best match
-      await updateInventoryItem(
-        currentImportItem.bestMatch.id,
-        currentImportItem.importedProduct.quantity
-      );
+      // If we have a history entry from the same day or the import is older, skip it
+      if (
+        isSameDay(lastHistoryDate, historyDate) ||
+        historyDate < lastHistoryDate
+      ) {
+        console.log(
+          `Skipping update: ${
+            historyDate < lastHistoryDate ? "older import" : "same day entry"
+          }`
+        );
+      } else {
+        // Only update if the date is newer than the last history entry
+        await updateInventoryItem(bestMatch.id, importedProduct.quantity);
+      }
 
-      setConfirmationModalVisible(false);
-      await processNextProduct(
-        currentImportItem.remainingProducts,
-        currentImportItem.importDate
-      );
-    } catch (error) {
-      console.error("Error accepting all similar products:", error);
-    }
-  };
-
-  const handleAcceptAllSimilar = async () => {
-    try {
-      if (!currentImportItem) return;
+      // Process all remaining products automatically without showing confirmation modal
       const existingProducts = await getInventoryItems(listId);
-
-      // Get all remaining products that have similar matches
-      const productsToUpdate = currentImportItem.remainingProducts.filter(
-        (product) => {
-          const similarProducts = existingProducts.filter(
-            (p) =>
-              calculateSimilarity(p.productName, product.originalName) >=
-              similarityThreshold
-          );
-          return similarProducts.length > 0;
-        }
-      );
-
-      // Update all products
-      for (const product of productsToUpdate) {
-        const similarProducts = existingProducts.filter(
-          (p) =>
-            calculateSimilarity(p.productName, product.originalName) >=
-            similarityThreshold
+      
+      for (const product of remainingProducts) {
+        // Check for exact name match first
+        const exactMatch = existingProducts.find(
+          (p) => p.productName.toLowerCase() === product.originalName.toLowerCase()
         );
-        if (similarProducts.length > 0) {
-          const bestMatch = similarProducts[0];
-          await updateInventoryItem(bestMatch.id, product.quantity);
+
+        if (exactMatch) {
+          // Update quantity and history of exact match
+          const exactMatchHistory = await getInventoryHistory(exactMatch.id);
+          const exactMatchLastDate = await getLastHistoryDate(exactMatchHistory);
+          if (exactMatchLastDate < importDate) {
+            await updateInventoryItem(exactMatch.id, product.quantity);
+          }
+          if (importDate && !checkDateExists(exactMatchHistory, importDate)) {
+            await saveInventoryHistorySnapshot(
+              exactMatch.id,
+              product.quantity,
+              importDate
+            );
+          }
+        } else {
+          // Look for similar products
+          const similarProducts = existingProducts
+            .filter(
+              (p) =>
+                calculateSimilarity(p.productName, product.originalName) >=
+                similarityThreshold
+            )
+            .sort(
+              (product1, product2) =>
+                calculateSimilarity(product2.productName, product.originalName) -
+                calculateSimilarity(product1.productName, product.originalName)
+            );
+
+          if (similarProducts.length > 0) {
+            // Use the best match silently
+            const bestSimilarMatch = similarProducts[0];
+            await updateInventoryItem(bestSimilarMatch.id, product.quantity);
+            
+            if (importDate) {
+              const similarHistory = await getInventoryHistory(bestSimilarMatch.id);
+              if (!checkDateExists(similarHistory, importDate)) {
+                await saveInventoryHistorySnapshot(
+                  bestSimilarMatch.id,
+                  product.quantity,
+                  importDate
+                );
+              }
+            }
+          } else {
+            // No match exists, create a new product
+            await createNewProduct(product, importDate);
+          }
         }
       }
 
-      // Filter out the updated products and continue with the rest
-      const remainingProducts = currentImportItem.remainingProducts.filter(
-        (product) => {
-          const similarProducts = existingProducts.filter(
-            (p) =>
-              calculateSimilarity(p.productName, product.originalName) >=
-              similarityThreshold
-          );
-          return similarProducts.length === 0;
-        }
-      );
-
       setConfirmationModalVisible(false);
-      await processNextProduct(remainingProducts, currentImportItem.importDate);
+      setCurrentImportItem(null);
+      await loadItems();
     } catch (error) {
       console.error("Error accepting all suggestions:", error);
     }
@@ -348,181 +373,6 @@ export default function ImportModal({
     setCurrentImportItem(null);
   };
 
-  const ConfirmationModal = () => {
-    if (!currentImportItem) return null;
-
-    const { importedProduct, bestMatch, similarProducts, importDate } =
-      currentImportItem;
-    const [isNewerOrSameDate, setIsNewerOrSameDate] = useState(false);
-
-    useEffect(() => {
-      const checkHistory = async () => {
-        const history = await getInventoryHistory(bestMatch.id);
-        if (history.length === 0) {
-          setIsNewerOrSameDate(true);
-          return;
-        }
-
-        const sortedHistory = history.sort(
-          (a, b) => parseISO(b.date).getTime() - parseISO(a.date).getTime()
-        );
-
-        const lastHistoryDate = parseISO(sortedHistory[0].date);
-        const historyDate = importDate || new Date();
-
-        // Check if the import date is the same or newer than the last history entry
-        setIsNewerOrSameDate(historyDate >= lastHistoryDate);
-      };
-
-      checkHistory();
-    }, [bestMatch.id, importDate]);
-
-    const formatDate = (date: Date) => {
-      return date.toLocaleDateString("pt-BR", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-    };
-
-    return (
-      <Modal
-        visible={confirmationModalVisible}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setConfirmationModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <ScrollView
-            contentContainerStyle={{ flexGrow: 1, justifyContent: "center" }}
-          >
-            <View style={styles.modalContainer}>
-              <Text style={styles.modalTitle}>Produtos de Nomes Parecidos</Text>
-              <View style={styles.confirmationContent}>
-                <View style={styles.productCompareContainer}>
-                  <View style={styles.productInfoColumn}>
-                    <Text style={styles.productLabel}>Produto Importado:</Text>
-                    <Text style={styles.productValue}>
-                      {importedProduct.originalName}
-                    </Text>
-                    <Text style={styles.quantityText}>
-                      Quantidade: {importedProduct.quantity}
-                    </Text>
-                    {importDate && (
-                      <Text style={styles.dateText}>
-                        Data: {formatDate(importDate)}
-                      </Text>
-                    )}
-                  </View>
-                  <View style={styles.productInfoColumn}>
-                    <Text style={styles.productLabel}>Produto Existente:</Text>
-                    <Text style={styles.productValue}>{bestMatch.productName}</Text>
-                    <Text style={styles.quantityText}>
-                      Quantidade: {bestMatch.quantity}
-                    </Text>
-                  </View>
-                </View>
-
-                {similarProducts.length > 1 && (
-                  <View style={styles.similarProductsContainer}>
-                    <Text style={styles.sectionTitle}>
-                      Outros Produtos Similares:
-                    </Text>
-                    <ScrollView
-                      style={styles.similarProductsScroll}
-                      nestedScrollEnabled={true}
-                    >
-                      {similarProducts.slice(1).map((product, index) => (
-                        // This is a hack to make the selected product the best match
-
-                        <Pressable
-                          key={product.id}
-                          onPress={() => {
-                            const updatedSimilarProducts = [
-                              product,
-                              ...similarProducts.filter(
-                                (p) => p.id !== product.id
-                              ),
-                            ];
-
-                            setCurrentImportItem({
-                              ...currentImportItem,
-                              bestMatch: product,
-                              similarProducts: updatedSimilarProducts,
-                            });
-                          }}
-                        >
-                          <View
-                            key={index}
-                            style={styles.similarProductItemContainer}
-                          >
-                            <Text style={styles.productValue}>
-                              {product.productName}
-                            </Text>
-                            <Text style={styles.quantityText}>
-                              Quantidade: {product.quantity}
-                            </Text>
-                          </View>
-                        </Pressable>
-                      ))}
-                    </ScrollView>
-                  </View>
-                )}
-              </View>
-              <View style={styles.buttonContainer}>
-                <Button
-                  mode="contained"
-                  onPress={handleAddToExisting}
-                  style={[styles.stackedButton, styles.actionButton]}
-                  labelStyle={styles.buttonLabelStyle}
-                >
-                  Produtos iguais
-                </Button>
-                <Button
-                  mode="contained"
-                  onPress={handleCreateNew}
-                  style={[styles.stackedButton, styles.actionButton]}
-                  labelStyle={styles.buttonLabelStyle}
-                >
-                  Produtos diferentes
-                </Button>
-                <Button
-                  mode="contained"
-                  onPress={handleAcceptAllSuggestions}
-                  style={[styles.stackedButton, styles.actionButton]}
-                  labelStyle={styles.buttonLabelStyle}
-                >
-                  Aceitar Todas as Sugestões de Substituição
-                </Button>
-                <Button
-                  mode="text"
-                  onPress={handleSkipImport}
-                  style={styles.stackedButton}
-                  labelStyle={[styles.buttonLabelStyle, styles.skipButtonLabel]}
-                >
-                  Pular
-                </Button>
-                <Button
-                  mode="text"
-                  onPress={handleCancelAllImports}
-                  style={styles.stackedButton}
-                  labelStyle={[
-                    styles.buttonLabelStyle,
-                    styles.cancelButtonLabel,
-                  ]}
-                >
-                  Cancelar Todos
-                </Button>
-              </View>
-            </View>
-          </ScrollView>
-        </View>
-      </Modal>
-    );
-  };
-
   return (
     <View>
       <Modal
@@ -563,7 +413,16 @@ export default function ImportModal({
         </View>
       </Modal>
 
-      <ConfirmationModal />
+      <ConfirmationModal
+        visible={confirmationModalVisible}
+        currentImportItem={currentImportItem}
+        onAcceptAllSuggestions={handleAcceptAllSuggestions}
+        onAddToExisting={handleAddToExisting}
+        onCreateNew={handleCreateNew}
+        onSkipImport={handleSkipImport}
+        onCancelAllImports={handleCancelAllImports}
+        onUpdateCurrentItem={setCurrentImportItem}
+      />
     </View>
   );
 }
