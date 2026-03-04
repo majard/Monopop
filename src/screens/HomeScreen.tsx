@@ -25,6 +25,7 @@ import { SortMenu } from "../components/SortMenu";
 import { EditableName } from "../components/EditableName";
 import { AddItemButton } from "../components/AddItemButton";
 import InventoryList from "../components/InventoryList";
+import ContextualHeader from "../components/ContextualHeader";
 import { saveInventoryHistorySnapshot } from "../database/database";
 import { useListContext } from "../context/ListContext";
 
@@ -91,14 +92,9 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <ContextualHeader listName={listName} />
+      
       <View style={styles.header}>
-        {/* List Name Editing/Display */}
-        <EditableName
-          name={listName}
-          handleSave={handleListNameSave}
-          handleDelete={handleListDelete}
-        />
-
         <SearchBar searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
 
         <View style={styles.buttonRow}>

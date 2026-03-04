@@ -7,9 +7,11 @@ import { concludeShoppingForListWithInvoice, getLastStoreName, getShoppingListIt
 import { RootStackParamList } from '../types/navigation';
 import { ShoppingListItem } from '../database/models';
 import { useListContext } from '../context/ListContext';
+import { useList } from '../hooks/useList';
 import { ShoppingListItemCard } from '../components/ShoppingListItemCard';
 import { EditShoppingItemModal } from '../components/EditShoppingItemModal';
 import { ConfirmInvoiceModal, StoreOption } from '../components/ConfirmInvoiceModal';
+import ContextualHeader from '../components/ContextualHeader';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AddItemButton } from '../components/AddItemButton';
 import { createHomeScreenStyles } from '../styles/HomeScreenStyles';
@@ -26,6 +28,7 @@ interface ShoppingListItemWithDetails extends Omit<ShoppingListItem, 'checked'> 
 
 export default function ShoppingListScreen() {
   const { listId } = useListContext();
+  const { listName } = useList(listId);
   const [shoppingListItems, setShoppingListItems] = useState<ShoppingListItemWithDetails[]>([]);
   const [loading, setLoading] = useState(false);
   const [editingItem, setEditingItem] = useState<ShoppingListItemWithDetails | null>(null);
@@ -147,9 +150,8 @@ export default function ShoppingListScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={localStyles.sectionTitle}>Lista de Compras</Text>
-      </View>
+      <ContextualHeader listName={listName} />
+      
       <ScrollView style={localStyles.scrollContent} contentContainerStyle={{ paddingBottom: bottomBarHeight + 96 }}>
         {shoppingListItems.length === 0 ? (
           <Surface style={localStyles.emptyState}>
