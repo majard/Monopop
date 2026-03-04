@@ -13,6 +13,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
 import { useListContext } from '../context/ListContext';
 import { useList } from '../hooks/useList';
+import useInventory from '../hooks/useInventory';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ContextualHeader from '../components/ContextualHeader';
 import { Invoice, InvoiceItem, InventoryItem } from '../database/models';
@@ -51,6 +52,7 @@ interface MonthSummary {
 export default function HistoryScreen() {
   const { listId } = useListContext();
   const { listName, handleListNameSave, handleListDelete } = useList(listId);
+  const { findByProductId, inventoryItems } = useInventory(listId, 'alphabetical', '');
   const [events, setEvents] = useState<HistoryEvent[]>([]);
   const [filteredEvents, setFilteredEvents] = useState<HistoryEvent[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -60,6 +62,7 @@ export default function HistoryScreen() {
   const navigation = useNavigation<HistoryScreenNavigationProp>();
   const theme = useTheme();
 
+  //console.log('inventoryItems in historyscreen', inventoryItems);
   const loadHistory = async () => {
     try {
       const db = getDb();
@@ -259,9 +262,12 @@ export default function HistoryScreen() {
   };
 
   const handleItemPress = (productId: number) => {
-    // Navigate to EditProductScreen
-    // Note: Need to fetch product details first
-    navigation.navigate('EditProduct', { product: { id: productId } as any });
+    // Find full inventory item using findByProductId
+    console.log('finding inventory item for product id', productId);
+    const inventoryItem = findByProductId(productId);
+    if (inventoryItem) {
+      navigation.navigate('EditInventoryItem', { inventoryItem });
+    }
   };
 
   const renderEvent = ({ item }: { item: HistoryEvent }) => {
