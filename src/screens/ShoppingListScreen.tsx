@@ -69,7 +69,23 @@ export default function ShoppingListScreen() {
 
       setShoppingListItems(enhancedShoppingItems);
       setStores(storesList);
-      setDefaultStoreName(lastStore ?? '');
+
+      // Set default store name based on defaultStoreMode setting
+      const [defaultStoreMode, defaultStoreId] = await Promise.all([
+        getSetting('defaultStoreMode'),
+        getSetting('defaultStoreId'),
+      ]);
+
+      let storeNameToSet = '';
+      if (defaultStoreMode === 'last') {
+        storeNameToSet = lastStore ?? '';
+      } else if (defaultStoreMode === 'fixed' && defaultStoreId) {
+        const defaultStore = storesList.find(s => s.id === parseInt(defaultStoreId));
+        storeNameToSet = defaultStore?.name ?? '';
+      }
+      // If 'ask', leave empty string
+
+      setDefaultStoreName(storeNameToSet);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
     }
