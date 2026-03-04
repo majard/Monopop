@@ -44,18 +44,18 @@ export function ConfirmInvoiceModal({
         getSetting('defaultStoreMode'),
         getSetting('defaultStoreId')
       ]);
-      
+
       setDefaultStoreMode((storeMode as 'ask' | 'last' | 'fixed') || 'ask');
       setDefaultStoreId(storeId ? parseInt(storeId) : null);
     };
-    
+
     loadSettings();
   }, []);
 
   useEffect(() => {
     if (visible) {
       let initialStoreName = defaultStoreName || "";
-      
+
       // Use default store mode to determine initial store
       if (defaultStoreMode !== 'ask' && defaultStoreId) {
         const defaultStore = stores.find(s => s.id === defaultStoreId);
@@ -63,7 +63,7 @@ export function ConfirmInvoiceModal({
           initialStoreName = defaultStore.name;
         }
       }
-      
+
       setStoreName(initialStoreName);
     }
   }, [visible, defaultStoreName, defaultStoreMode, defaultStoreId, stores]);
@@ -90,14 +90,25 @@ export function ConfirmInvoiceModal({
           <Text style={styles.title}>Confirmar compras</Text>
 
           <Text style={styles.label}>Loja</Text>
-          <TextInput
-            mode="outlined"
-            value={storeName}
-            onChangeText={setStoreName}
-            placeholder="Digite o nome da loja"
-            autoCapitalize="words"
-            style={styles.input}
-          />
+          <View style={styles.inputContainer}>
+            <TextInput
+              mode="outlined"
+              value={storeName}
+              onChangeText={setStoreName}
+              placeholder="Digite o nome da loja"
+              autoCapitalize="words"
+              style={styles.input}
+              right={
+                storeName.trim().length > 0 && (
+                  <TextInput.Icon
+                    icon="close"
+                    onPress={() => setStoreName('')}
+                    color={theme.colors.error}
+                  />
+                )
+              }
+            />
+          </View>
 
           {suggestions.length > 0 && (
             <View style={styles.suggestionsContainer}>
@@ -157,29 +168,30 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   label: {
-    fontSize: 14,
-    color: "#666",
+    fontSize: 16,
     marginBottom: 8,
   },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   input: {
-    width: "100%",
+    flex: 1,
+  },
+  clearButton: {
+    paddingHorizontal: 8,
   },
   suggestionsContainer: {
-    marginTop: 8,
-    borderWidth: 1,
-    borderColor: "#e0e0e0",
-    borderRadius: 8,
-    overflow: "hidden",
-    maxHeight: 180,
+    maxHeight: 120,
+    marginBottom: 16,
   },
   suggestionRow: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    padding: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
-    backgroundColor: "white",
+    borderBottomColor: '#e0e0e0',
   },
   suggestionText: {
+    fontSize: 16,
     fontSize: 14,
     color: "#333",
   },
