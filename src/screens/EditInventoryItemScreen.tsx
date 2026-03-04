@@ -6,7 +6,6 @@ import {
   ScrollView,
   SafeAreaView,
   Alert,
-  Modal,
 } from "react-native";
 import {
   TextInput as PaperTextInput,
@@ -14,7 +13,8 @@ import {
   Text,
   useTheme,
   Card,
-  IconButton,
+  Chip,
+  Divider,
 } from "react-native-paper";
 import { useNavigation, useRoute, useFocusEffect } from "@react-navigation/native";
 import {
@@ -22,6 +22,8 @@ import {
   NativeStackScreenProps,
 } from "@react-navigation/native-stack";
 import { LineChart } from "react-native-chart-kit";
+import { parseISO, format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import {
   updateInventoryItem,
   getInventoryHistory,
@@ -29,11 +31,17 @@ import {
   deleteInventoryItem,
   getLists,
   updateInventoryItemList,
+  getCategories,
+  addCategory,
+  updateProductCategory,
 } from "../database/database";
 import { InventoryHistory } from "../database/models";
 import { RootStackParamList } from "../types/navigation";
-import { getEmojiForList } from "../utils/stringUtils";
+import ContextualHeader from "../components/ContextualHeader";
 import { EditableName } from "../components/EditableName";
+import { ItemPickerDialog } from "../components/ItemPickerDialog";
+import { SearchablePickerDialog } from "../components/SearchablePickerDialog";
+import { getDb } from "../database/database";
 
 type EditInventoryItemNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
@@ -44,26 +52,39 @@ type EditInventoryItemProps = NativeStackScreenProps<
   "EditInventoryItem"
 >;
 
+interface PriceHistory {
+  date: string;
+  price: number;
+  storeName: string;
+}
+
 export default function EditInventoryItem() {
   const route = useRoute<EditInventoryItemProps["route"]>();
   const inventoryItem = route.params?.inventoryItem;
   const [quantity, setQuantity] = useState(inventoryItem?.quantity?.toString() || "");
   const [notes, setNotes] = useState(inventoryItem?.notes || "");
   const [history, setHistory] = useState<InventoryHistory[]>([]);
+  const [priceHistory, setPriceHistory] = useState<PriceHistory[]>([]);
   const navigation = useNavigation<EditInventoryItemNavigationProp>();
   const theme = useTheme();
   const [name, setName] = useState(inventoryItem?.productName || "");
   const [lists, setLists] = useState<{ id: number; name: string }[]>([]);
+  const [categories, setCategories] = useState<{ id: number; name: string }[]>([]);
   const [listModalVisible, setListModalVisible] = useState(false);
+  const [categoryModalVisible, setCategoryModalVisible] = useState(false);
   const [selectedListId, setSelectedListId] = useState(inventoryItem?.listId ?? 1);
+  const [selectedCategoryId, setSelectedCategoryId] = useState(inventoryItem?.categoryId ?? null);
 
   useEffect(() => {
     if (inventoryItem) {
       setQuantity(inventoryItem.quantity.toString());
       loadHistory();
+      loadPriceHistory();
     }
     getLists().then(setLists);
+    getCategories().then(setCategories);
     setSelectedListId(inventoryItem?.listId ?? 1);
+    setSelectedCategoryId(inventoryItem?.categoryId ?? null);
   }, []);
 
   // Refresh data when screen gains focus to show latest changes
@@ -74,19 +95,45 @@ export default function EditInventoryItem() {
         setNotes(inventoryItem.notes || "");
         setName(inventoryItem.productName || "");
         setSelectedListId(inventoryItem.listId ?? 1);
+        setSelectedCategoryId(inventoryItem.categoryId ?? null);
         loadHistory();
+        loadPriceHistory();
       }
     }, [inventoryItem])
   );
 
   const loadHistory = async () => {
-    if (inventoryItem?.productName) { // Ensure product and id exist before calling
+    if (inventoryItem?.productName) {
       try {
         const data = await getInventoryHistory(inventoryItem.id);
-        setHistory(data || []); 
+        setHistory(data || []);
       } catch (error) {
         console.error("Erro ao carregar histórico:", error);
       }
+    }
+  };
+
+  const loadPriceHistory = async () => {
+    if (!inventoryItem?.productId) return;
+
+    try {
+      const db = getDb();
+      const result = await db.getAllAsync(`
+        SELECT 
+          ii.createdAt as date,
+          ii.unitPrice as price,
+          s.name as storeName
+        FROM invoice_items ii
+        JOIN invoices i ON ii.invoiceId = i.id
+        LEFT JOIN stores s ON i.storeId = s.id
+        WHERE ii.productId = ?
+        ORDER BY ii.createdAt DESC
+        LIMIT 20
+      `, [inventoryItem.productId]);
+
+      setPriceHistory(result as PriceHistory[]);
+    } catch (error) {
+      console.error("Erro ao carregar histórico de preços:", error);
     }
   };
 
@@ -116,7 +163,7 @@ export default function EditInventoryItem() {
     if (inventoryItem?.id) {
       Alert.alert(
         "Confirmar Exclusão",
-        "Tem certeza que deseja excluir este produto?",
+        `Tem certeza que deseja excluir ${inventoryItem.productName}?`,
         [
           {
             text: "Cancelar",
@@ -140,21 +187,15 @@ export default function EditInventoryItem() {
   };
 
   const formatChartLabel = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("pt-BR", {
-      day: "2-digit",
-      month: "2-digit",
-    });
+    return format(parseISO(dateString + 'T00:00:00'), "dd/MM", { locale: ptBR });
   };
 
   const formatHistoryDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("pt-BR", {
-      day: "2-digit",
-      month: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    return format(parseISO(dateString + 'T00:00:00'), "dd/MM HH:mm", { locale: ptBR });
+  };
+
+  const formatPriceDate = (dateString: string) => {
+    return format(parseISO(dateString), "dd/MM/yyyy HH:mm", { locale: ptBR });
   };
 
   const chartData = {
@@ -172,6 +213,17 @@ export default function EditInventoryItem() {
     ],
   };
 
+  const chartConfig = {
+    backgroundColor: '#ffffff',
+    backgroundGradientFrom: '#ffffff',
+    backgroundGradientTo: '#ffffff',
+    decimalPlaces: 0,
+    color: (opacity = 1) => `rgba(33, 150, 243, ${opacity})`,
+    labelColor: () => '#666666',
+    style: { borderRadius: 16 },
+    propsForDots: { r: '4', strokeWidth: '2', stroke: '#2196F3' }
+  };
+
   const handleChangeList = async (newListId: number) => {
     if (inventoryItem?.id && newListId !== selectedListId) {
       await updateInventoryItemList(inventoryItem.id, newListId);
@@ -181,27 +233,70 @@ export default function EditInventoryItem() {
     setListModalVisible(false);
   };
 
+  const handleCategorySelect = async (categoryId: number) => {
+    if (inventoryItem?.productId) {
+      await updateProductCategory(inventoryItem.productId, categoryId);
+      setSelectedCategoryId(categoryId);
+    }
+    setCategoryModalVisible(false);
+  };
+
+  const handleCategoryCreate = async (categoryName: string) => {
+    try {
+      const newCategoryId = await addCategory(categoryName);
+      if (inventoryItem?.productId) {
+        await updateProductCategory(inventoryItem.productId, newCategoryId);
+        setSelectedCategoryId(newCategoryId);
+      }
+      // Refresh categories list
+      const updatedCategories = await getCategories();
+      setCategories(updatedCategories);
+    } catch (error) {
+      console.error("Erro ao criar categoria:", error);
+    }
+    setCategoryModalVisible(false);
+  };
+
+  const getQuantityDiff = (current: number, previous: number | undefined) => {
+    if (previous === undefined) return null;
+    const diff = current - previous;
+    return diff > 0 ? `+${diff}` : diff.toString();
+  };
+
+  const getQuantityDiffColor = (diff: string | null) => {
+    if (!diff) return '#666';
+    return diff.startsWith('+') ? '#4CAF50' : '#F44336';
+  };
+
   return (
-    <SafeAreaView style={{ flex: 1 }}>
-      <ScrollView style={styles.container}>
-      <EditableName name={name} handleSave={handleNameUpdate} handleDelete={handleDelete}/>
+    <SafeAreaView style={styles.container}>
+      <ContextualHeader
+        listName={name}
+        onListNameSave={handleNameUpdate}
+        onListDelete={handleDelete}
+      />
 
+      <ScrollView style={styles.scrollView}>
         <Card style={styles.card}>
           <Card.Content>
-            <PaperTextInput
-              label="Lista"
-              value={lists.find((l) => l.id === selectedListId)?.name || "Selecionar Lista"}
-              mode="outlined"
-              style={[styles.input, { flex: 1 }]}
-              editable={false}
-              right={<PaperTextInput.Icon icon="menu-down" onPress={() => setListModalVisible(true)} />}
-              pointerEvents="none"
-            />
-          </Card.Content>
-        </Card>
+            <View style={styles.chipsRow}>
+              <Chip
+                icon="format-list-bulleted"
+                onPress={() => setListModalVisible(true)}
+                style={styles.chip}
+              >
+                {lists.find((l) => l.id === selectedListId)?.name || "Selecionar Lista"}
+              </Chip>
+              
+              <Chip
+                icon="tag"
+                onPress={() => setCategoryModalVisible(true)}
+                style={styles.chip}
+              >
+                {categories.find((c) => c.id === selectedCategoryId)?.name || "Sem categoria"}
+              </Chip>
+            </View>
 
-        <Card style={styles.card}>
-          <Card.Content>
             <PaperTextInput
               label="Quantidade"
               value={quantity}
@@ -211,39 +306,26 @@ export default function EditInventoryItem() {
               mode="outlined"
               testID="quantity-input"
             />
-            <Button
-              mode="contained"
-              onPress={handleUpdate}
-              style={styles.button}
-              disabled={!quantity}
-              testID="update-button"
-            >
-              Atualizar Quantidade
-            </Button>
-          </Card.Content>
-        </Card>
-
-        
-        <Card style={styles.card}>
-          <Card.Content>
 
             <PaperTextInput
               label="Observações"
               value={notes}
               onChangeText={setNotes}
-              keyboardType="default"
+              multiline
+              numberOfLines={3}
               style={styles.input}
               mode="outlined"
               testID="notes-input"
             />
+
             <Button
               mode="contained"
               onPress={handleUpdate}
-              style={styles.button}
-              disabled={!notes}
+              style={styles.saveButton}
+              disabled={!quantity}
               testID="update-button"
             >
-              Atualizar Observações
+              Salvar
             </Button>
           </Card.Content>
         </Card>
@@ -253,75 +335,109 @@ export default function EditInventoryItem() {
             <Text variant="titleMedium" style={styles.subtitle}>
               Histórico de Quantidades
             </Text>
-            {history.length > 0 ? (
-              <View>
+
+            {history.length > 1 ? (
+              <>
                 <LineChart
                   data={chartData}
                   width={Dimensions.get("window").width - 64}
                   height={220}
-                  chartConfig={{
-                    backgroundColor: theme.colors.primary,
-                    backgroundGradientFrom: theme.colors.primary,
-                    backgroundGradientTo: theme.colors.primary,
-                    decimalPlaces: 0,
-                    color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
-                    style: {
-                      borderRadius: 16,
-                    },
-                  }}
+                  chartConfig={chartConfig}
                   bezier
                   style={styles.chart}
                 />
-                <View style={styles.historyList}>
-                  {history.map((item, index) => (
-                    <View key={item.id} style={styles.historyItem}>
-                      <Text variant="bodyMedium">
-                        {formatHistoryDate(item.date)}
-                      </Text>
-                      <Text variant="bodyMedium">
-                        Quantidade: {item.quantity}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
+                <Divider style={styles.divider} />
+              </>
+            ) : history.length === 1 ? (
+              <Text style={styles.singlePointText}>Apenas um ponto no histórico</Text>
             ) : (
-              <Text>Nenhum histórico disponível</Text>
+              <Text style={styles.emptyText}>Nenhum histórico de quantidades disponível</Text>
+            )}
+
+            {history.length > 0 && (
+              <View style={styles.historyList}>
+                {history.map((item, index) => {
+                  const previousQuantity = history[index + 1]?.quantity;
+                  const diff = getQuantityDiff(item.quantity, previousQuantity);
+
+                  return (
+                    <View key={item.id} style={styles.historyItem}>
+                      <View style={styles.historyItemLeft}>
+                        <Text variant="bodyMedium">
+                          {formatHistoryDate(item.date)}
+                        </Text>
+                        <Text variant="bodyMedium">
+                          Quantidade: {item.quantity}
+                        </Text>
+                      </View>
+                      {diff && (
+                        <Text style={[styles.quantityDiff, { color: getQuantityDiffColor(diff) }]}>
+                          {diff}
+                        </Text>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
             )}
           </Card.Content>
         </Card>
 
-        <Modal
-          visible={listModalVisible}
-          animationType="slide"
-          transparent={true}
-          onRequestClose={() => setListModalVisible(false)}
-        >
-          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'flex-end' }}>
-            <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 16, maxHeight: '60%' }}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <Text style={{ fontSize: 18, fontWeight: 'bold' }}>Escolher Lista</Text>
-                <IconButton icon="close" onPress={() => setListModalVisible(false)} />
-              </View>
-              <ScrollView>
-                {lists.map((list) => (
-                  <Card
-                    key={list.id}
-                    onPress={() => handleChangeList(list.id)}
-                    style={{ marginBottom: 8, borderRadius: 8, backgroundColor: list.id === selectedListId ? '#e3f2fd' : '#f5f5f5' }}
-                  >
-                    <Card.Content style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <Text style={{ fontSize: 22, marginRight: 12 }}>{getEmojiForList(list.name)}</Text>
-                      <Text style={{ fontSize: 16, flex: 1 }}>{list.name}</Text>
-                      {list.id === selectedListId && <IconButton icon="check" iconColor="#1976d2" size={20} />}
-                    </Card.Content>
-                  </Card>
+        <Card style={styles.card}>
+          <Card.Content>
+            <Text variant="titleMedium" style={styles.subtitle}>
+              Histórico de Preços
+            </Text>
+
+            {priceHistory.length > 0 ? (
+              <View style={styles.priceHistoryList}>
+                {priceHistory.map((item, index) => (
+                  <View key={index} style={styles.priceHistoryRow}>
+                    <View style={styles.priceHistoryTopRow}>
+                      <Text variant="bodyMedium">
+                        {formatPriceDate(item.date)}
+                      </Text>
+                      <Text variant="bodyMedium">
+                        R$ {item.price != null ? item.price.toFixed(2) : 'Preço não informado'}
+                      </Text>
+                    </View>
+                    <Text 
+                      variant="bodyMedium" 
+                      style={styles.storeName}
+                      numberOfLines={1}
+                      ellipsizeMode="tail"
+                    >
+                      {item.storeName || "Loja não informada"}
+                    </Text>
+                  </View>
                 ))}
-              </ScrollView>
-            </View>
-          </View>
-        </Modal>
+              </View>
+            ) : (
+              <Text style={styles.emptyText}>Nenhum histórico de preços disponível</Text>
+            )}
+          </Card.Content>
+        </Card>
       </ScrollView>
+
+      <ItemPickerDialog
+        visible={listModalVisible}
+        onDismiss={() => setListModalVisible(false)}
+        items={lists}
+        selectedId={selectedListId}
+        onSelect={handleChangeList}
+        title="Escolher Lista"
+      />
+
+      <SearchablePickerDialog
+        visible={categoryModalVisible}
+        onDismiss={() => setCategoryModalVisible(false)}
+        items={categories}
+        selectedId={selectedCategoryId}
+        onSelect={handleCategorySelect}
+        onCreateNew={handleCategoryCreate}
+        title="Escolher Categoria"
+        placeholder="Buscar categoria..."
+      />
     </SafeAreaView>
   );
 }
@@ -330,34 +446,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f5f5f5",
-    paddingTop: 64,
   },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  nameContainer: {
-    flexDirection: "row",
-    alignItems: "center",
+  scrollView: {
     flex: 1,
-  },
-  nameEditContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-  },
-  nameInput: {
-    flex: 1,
-    marginRight: 8,
-  },
-  title: {
-    flex: 1,
-  },
-  subtitle: {
-    marginBottom: 16,
   },
   card: {
     margin: 16,
@@ -365,22 +456,72 @@ const styles = StyleSheet.create({
   input: {
     marginBottom: 16,
   },
-  button: {
+  chipsRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 16,
+  },
+  chip: {
+    flex: 1,
+  },
+  saveButton: {
     marginTop: 8,
+  },
+  subtitle: {
+    marginBottom: 16,
   },
   chart: {
     marginVertical: 8,
     borderRadius: 16,
   },
+  divider: {
+    marginVertical: 16,
+  },
   historyList: {
     marginTop: 16,
-    paddingBottom: 64,
   },
   historyItem: {
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "center",
     paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: "#e0e0e0",
+  },
+  historyItemLeft: {
+    flex: 1,
+  },
+  quantityDiff: {
+    fontWeight: "600",
+    fontSize: 14,
+  },
+  singlePointText: {
+    textAlign: "center",
+    color: "#666",
+    fontStyle: "italic",
+    marginVertical: 16,
+  },
+  emptyText: {
+    textAlign: "center",
+    color: "#666",
+    marginVertical: 32,
+  },
+  priceHistoryList: {
+    marginTop: 16,
+  },
+  priceHistoryRow: {
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e0e0e0",
+  },
+  priceHistoryTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  storeName: {
+    fontStyle: "italic",
+    color: "#666",
   },
 });
