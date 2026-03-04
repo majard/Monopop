@@ -3,7 +3,7 @@ import { View, StyleSheet, ScrollView, Text, FlatList } from 'react-native';
 import { Button, Surface, useTheme } from 'react-native-paper';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { concludeShoppingForListWithInvoice, getLastStoreName, getShoppingListItemsByListId, getInventoryItems, getStores, updateShoppingListItem, deleteShoppingListItem, getSetting, setSetting, getLastUnitPriceForProductAtStore } from '../database/database';
+import { concludeShoppingForListWithInvoice, getLastStoreName, getShoppingListItemsByListId, getInventoryItems, getStores, updateShoppingListItem, deleteShoppingListItem, getSetting, setSetting, getLastUnitPriceForProductAtStore, getLastUnitPriceForProduct } from '../database/database';
 import { RootStackParamList } from '../types/navigation';
 import { ShoppingListItem } from '../database/models';
 import { useListContext } from '../context/ListContext';
@@ -25,7 +25,6 @@ interface ShoppingListItemWithDetails extends Omit<ShoppingListItem, 'checked'> 
   productId: number;
   currentInventoryQuantity: number;
   price?: number;
-  priceManuallySet?: boolean; // Flag to track if price was set manually
 }
 
 export default function ShoppingListScreen() {
@@ -46,13 +45,7 @@ export default function ShoppingListScreen() {
   const styles = createHomeScreenStyles(theme);
 
   const isFirstLoad = useRef(true);
-
-  // Trigger price updates when store changes and data is loaded
-  useEffect(() => {
-    if (selectedStoreId && shoppingListItems.length > 0 && !isFirstLoad.current) {
-      updatePricesForStore(selectedStoreId, shoppingListItems);
-    }
-  }, [selectedStoreId]);
+  const manualPrices = useRef<Map<number, number>>(new Map());
 
   // Load inventory items and shopping list items on component mount and focus
   useFocusEffect(
@@ -72,13 +65,14 @@ export default function ShoppingListScreen() {
 
       const enhancedShoppingItems = shopping.map(item => {
         const inventoryItem = inventory.find(inv => inv.id === item.inventoryItemId);
+        
         return {
           ...item,
           checked: Boolean(item.checked),
           productName: inventoryItem?.productName || 'Unknown Product',
           productId: inventoryItem?.productId || 0,
           currentInventoryQuantity: inventoryItem?.quantity || 0,
-          priceManuallySet: false, // Initialize as auto-set prices
+          price: manualPrices.current.has(item.id) ? manualPrices.current.get(item.id)! : item.price,
         };
       });
 
@@ -111,6 +105,11 @@ export default function ShoppingListScreen() {
         setDefaultStoreName(storeNameToSet);
         setSelectedStoreId(storeIdToSet);
         isFirstLoad.current = false;
+        
+        // Update prices for the selected store on first load
+        if (storeIdToSet !== null) {
+          updatePricesForStore(storeIdToSet, enhancedShoppingItems);
+        }
       }
       // If 'ask', leave empty string and null
 
@@ -124,18 +123,18 @@ export default function ShoppingListScreen() {
       const updatedItems = await Promise.all(
         items.map(async (item) => {
           // Only update prices that are not manually set
-          if (item.priceManuallySet) {
+          if (manualPrices.current.has(item.id)) {
             return item;
           }
 
           // Try to get price for this product at the selected store
           const storePrice = await getLastUnitPriceForProductAtStore(item.productId, storeId);
           if (storePrice !== null) {
-            return { ...item, price: storePrice, priceManuallySet: false };
+            return { ...item, price: storePrice };
           } else {
-            const lastStorePrice = await getLastUnitPriceForProductAtStore(item.productId, lastStoreId);
+            const lastPrice = await getLastUnitPriceForProduct(item.productId);
           
-            return { ...item, price: lastStorePrice ?? item.price, priceManuallySet: false };
+            return { ...item, price: lastPrice ?? item.price };
           }
         })
       );
@@ -203,15 +202,17 @@ export default function ShoppingListScreen() {
   const handleSaveEdit = async (quantity: number, price: number | undefined) => {
     if (!editingItem) return;
     try {
-      // Mark price as manually set if user provided a price
-      const priceManuallySet = price !== undefined && price !== null;
+      // Store manual price in ref if user provided a price
+      if (price !== undefined && price !== null) {
+        manualPrices.current.set(editingItem.id, price);
+      }
       await updateShoppingListItem(editingItem.id, { quantity, price });
       
       // Update local state to reflect manual price setting
       setShoppingListItems(prev => 
         prev.map(item => 
           item.id === editingItem.id 
-            ? { ...item, quantity, price, priceManuallySet }
+            ? { ...item, quantity, price }
             : item
         )
       );
