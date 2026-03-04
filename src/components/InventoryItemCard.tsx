@@ -118,6 +118,19 @@ export const InventoryItemCard = ({
           <Text variant="titleMedium" numberOfLines={3} style={{ fontSize: 17 }}>
             {inventoryItem.productName}
           </Text>
+          {inventoryItem.notes ? (
+            <Text
+              numberOfLines={1}
+              style={{
+                fontSize: 12,
+                color: theme.colors.onSurfaceVariant,
+                fontStyle: 'italic',
+                marginTop: 2,
+              }}
+            >
+              {inventoryItem.notes}
+            </Text>
+          ) : null}
         </View>
 
         {/* Pill — fixed, vertically centered by parent alignItems */}
