@@ -787,7 +787,7 @@ export const buyShoppingListItem = async (
         inventoryItemId,
         updatedInventoryItem.quantity,
         new Date(now),
-        `Purchased ${qtyToPurchase} units (via Shopping List)`
+        `Comprou ${qtyToPurchase} unidades (via Lista de Compras)`
       );
     }
 
@@ -871,7 +871,7 @@ export const concludeShoppingForListWithInvoice = async (
         [inventoryItemId]
       );
       if (updatedInventoryItem) {
-        const notes = `Purchased ${qtyToPurchase} units (via Shopping List)`;
+        const notes = `Comprou ${qtyToPurchase} unidades (via Lista de Compras)`;
         const existingEntry = await db.getFirstAsync<{ id: number }>(
           `SELECT id FROM inventory_history WHERE inventoryItemId = ? AND date = ?;`,
           [inventoryItemId, dateToSave]
@@ -934,7 +934,7 @@ export const concludeShoppingForList = async (listId: number): Promise<void> => 
         [inventoryItemId]
       );
       if (updatedInventoryItem) {
-        const notes = `Purchased ${qtyToPurchase} units (via Shopping List)`;
+        const notes = `Comprou ${qtyToPurchase} unidades (via Lista de Compras)`;
         const existingEntry = await db.getFirstAsync<{ id: number }>(
           `SELECT id FROM inventory_history WHERE inventoryItemId = ? AND date = ?;`,
           [inventoryItemId, dateToSave]

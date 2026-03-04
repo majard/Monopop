@@ -108,7 +108,7 @@ export default function HistoryScreen() {
          FROM inventory_history ih
          JOIN inventory_items ii ON ih.inventoryItemId = ii.id
          JOIN products p ON ii.productId = p.id
-         WHERE ii.listId = ? AND (ih.notes IS NULL OR ih.notes NOT LIKE '%Purchased%')
+         WHERE ii.listId = ? AND (ih.notes IS NULL OR (ih.notes NOT LIKE '%Comprou%' AND ih.notes NOT LIKE '%Purchased%'))
          ORDER BY ih.date DESC`,
         [listId]
       );
