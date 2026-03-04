@@ -17,6 +17,10 @@ export async function migrateToV4(db: SQLite.SQLiteDatabase) {
   await db.runAsync(`
     INSERT OR IGNORE INTO settings (key, value) VALUES 
     ('lastOpenedListId', NULL),
-    ('defaultStoreId', NULL);
+    ('defaultStoreId', NULL),
+    ('openLastList', 'false'),
+    ('defaultListMode', 'ask'),
+    ('defaultListId', NULL),
+    ('defaultStoreMode', 'ask');
   `);
 }

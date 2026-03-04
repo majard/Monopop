@@ -18,6 +18,7 @@ export type RootStackParamList = {
   InvoiceDetail: { invoiceId: number };
   Backup: undefined;
   About: undefined;
+  Preferences: undefined;
 };
 
 export type BottomTabParamList = {

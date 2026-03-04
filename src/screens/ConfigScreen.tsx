@@ -54,21 +54,24 @@ export default function ConfigScreen() {
             icon="folder"
             onPress={() => navigation.navigate('Categories')}
           />
-        </View>
-
-        <Divider style={styles.divider} />
-
-        <View style={styles.section}>
           <MenuItem
             title="Compras"
             icon="receipt-text"
             onPress={() => navigation.navigate('Invoices')}
           />
+
+          <Divider style={styles.divider} />
+
+
         </View>
 
-        <Divider style={styles.divider} />
-
         <View style={styles.section}>
+
+          <MenuItem
+            title="Preferências"
+            icon="cog"
+            onPress={() => navigation.navigate('Preferences')}
+          />
           <MenuItem
             title="Backup"
             icon="cloud-upload"

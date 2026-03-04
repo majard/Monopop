@@ -9,6 +9,7 @@ import {
   Surface,
   useTheme,
 } from "react-native-paper";
+import { getSetting } from "../database/database";
 
 export interface StoreOption {
   id: number;
@@ -34,12 +35,38 @@ export function ConfirmInvoiceModal({
 }: ConfirmInvoiceModalProps) {
   const theme = useTheme();
   const [storeName, setStoreName] = useState("");
+  const [defaultStoreMode, setDefaultStoreMode] = useState<'ask' | 'last' | 'fixed'>('ask');
+  const [defaultStoreId, setDefaultStoreId] = useState<number | null>(null);
+
+  useEffect(() => {
+    const loadSettings = async () => {
+      const [storeMode, storeId] = await Promise.all([
+        getSetting('defaultStoreMode'),
+        getSetting('defaultStoreId')
+      ]);
+      
+      setDefaultStoreMode((storeMode as 'ask' | 'last' | 'fixed') || 'ask');
+      setDefaultStoreId(storeId ? parseInt(storeId) : null);
+    };
+    
+    loadSettings();
+  }, []);
 
   useEffect(() => {
     if (visible) {
-      setStoreName(defaultStoreName || "");
+      let initialStoreName = defaultStoreName || "";
+      
+      // Use default store mode to determine initial store
+      if (defaultStoreMode !== 'ask' && defaultStoreId) {
+        const defaultStore = stores.find(s => s.id === defaultStoreId);
+        if (defaultStore) {
+          initialStoreName = defaultStore.name;
+        }
+      }
+      
+      setStoreName(initialStoreName);
     }
-  }, [visible, defaultStoreName]);
+  }, [visible, defaultStoreName, defaultStoreMode, defaultStoreId, stores]);
 
   const normalizedInput = storeName.trim().toLowerCase();
 

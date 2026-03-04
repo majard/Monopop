@@ -92,6 +92,8 @@ export default function BackupScreen() {
   };
 
   const handleImport = async () => {
+    const db = await getDb();
+
     try {
       setLoading(true);
       setImportDialogVisible(false);
@@ -103,13 +105,16 @@ export default function BackupScreen() {
         return;
       }
 
-      const db = await getDb();
+
+      // Disable foreign key constraints during import
+      await db.runAsync('PRAGMA foreign_keys = OFF');
 
       await db.withTransactionAsync(async () => {
+
         // Clear all tables in reverse dependency order
         await db.runAsync('DELETE FROM invoice_items');
-        await db.runAsync('DELETE FROM invoices');
         await db.runAsync('DELETE FROM shopping_list_items');
+        await db.runAsync('DELETE FROM invoices');
         await db.runAsync('DELETE FROM inventory_history');
         await db.runAsync('DELETE FROM inventory_items');
         await db.runAsync('DELETE FROM products');
@@ -190,6 +195,7 @@ export default function BackupScreen() {
             [setting.id, setting.key, setting.value, setting.createdAt, setting.updatedAt]
           );
         }
+
       });
 
       Alert.alert('Sucesso', 'Dados importados com sucesso!');
@@ -200,6 +206,9 @@ export default function BackupScreen() {
       console.error('Error importing data:', error);
       Alert.alert('Erro', 'Falha ao importar dados. Verifique o formato do JSON.');
     } finally {
+      // Re-enable foreign key constraints
+      await db.runAsync('PRAGMA foreign_keys = ON');
+
       setLoading(false);
     }
   };
@@ -211,6 +220,9 @@ export default function BackupScreen() {
 
       const db = getDb();
       await db.withTransactionAsync(async () => {
+        // Disable foreign key constraints during import
+        await db.runAsync('PRAGMA foreign_keys = OFF');
+
         await db.runAsync('DELETE FROM invoice_items');
         await db.runAsync('DELETE FROM invoices');
         await db.runAsync('DELETE FROM shopping_list_items');

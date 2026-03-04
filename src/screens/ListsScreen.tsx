@@ -7,7 +7,7 @@ import {
   Button,
   useTheme,
 } from "react-native-paper";
-import { getLists } from "../database/database";
+import { getLists, setSetting } from "../database/database";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../types/navigation";
@@ -37,8 +37,10 @@ export default function ListsScreen() {
     }, [])
   );
 
-  const handleListSelect = (listId: number) => {
+  const handleListSelect = async (listId: number) => {
     setListId(listId);
+    // Save last opened list
+    await setSetting('lastOpenedListId', listId.toString());
     navigation.navigate("MainTabs", { listId });
   };
 
