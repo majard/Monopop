@@ -13,6 +13,7 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../types/navigation";
 import { getEmojiForList } from "../utils/stringUtils";
 import { useListContext } from "../context/ListContext";
+import { EmojiAvatar } from "../components/EmojiAvatar";
 
 type ListItem = {
   id: number;
@@ -88,9 +89,7 @@ export default function ListsScreen() {
               <Card.Content
                 style={{ flexDirection: "row", alignItems: "center" }}
               >
-                <Text style={{ fontSize: 28, marginRight: 16 }}>
-                  {getEmojiForList(item.name)}
-                </Text>
+                <EmojiAvatar emoji={getEmojiForList(item.name)} size="large" />
                 <Text
                   style={{
                     fontSize: 18,

@@ -14,6 +14,7 @@ import { RootStackParamList } from '../types/navigation';
 import { createHomeScreenStyles } from '../styles/HomeScreenStyles';
 import { getEmojiForProduct } from '../utils/stringUtils';
 import { useProduct } from '../hooks/useProduct';
+import { EmojiAvatar } from './EmojiAvatar';
 
 type ProductCardNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
@@ -47,11 +48,7 @@ export const ProductCard = ({
         <Card.Content style={{ paddingVertical: 8 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             {/* Emoji avatar — fixed width */}
-            <View style={{ width: 32, justifyContent: 'center', alignItems: 'center' }}>
-              <Text style={{ fontSize: 20 }}>
-                {getEmojiForProduct(item.name)}
-              </Text>
-            </View>
+            <EmojiAvatar emoji={getEmojiForProduct(item.name)} />
 
             {/* Name — takes remaining space */}
             <View style={{ flex: 1, marginHorizontal: 8 }}>

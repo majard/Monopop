@@ -17,6 +17,7 @@ import { createHomeScreenStyles } from '../styles/HomeScreenStyles';
 import { getEmojiForProduct } from '../utils/stringUtils';
 import { useInventoryItem } from '../hooks/useInventoryItem';
 import { QuantityPill } from './QuantityPill';
+import { EmojiAvatar } from './EmojiAvatar';
 
 type ProductCardNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
@@ -110,11 +111,7 @@ export const InventoryItemCard = ({
         )}
 
         {/* Emoji — fixed width */}
-        <View style={{ width: 32, justifyContent: 'center', alignItems: 'center' }}>
-          <Text style={{ fontSize: 20 }}>
-            {getEmojiForProduct(inventoryItem.productName)}
-          </Text>
-        </View>
+        <EmojiAvatar emoji={getEmojiForProduct(inventoryItem.productName)} />
 
         {/* Name — takes remaining space, wraps up to 3 lines */}
         <View style={{ flex: 1, marginHorizontal: 8 }}>
