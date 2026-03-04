@@ -10,7 +10,6 @@ import {
   Portal,
   Dialog,
   Button,
-  Menu,
   Provider
 } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
@@ -39,15 +38,15 @@ export default function PreferencesScreen() {
   const [defaultListMode, setDefaultListMode] = useState<'ask' | 'last' | 'fixed'>('ask');
   const [defaultListId, setDefaultListId] = useState<number | null>(null);
   const [lists, setLists] = useState<ListItem[]>([]);
-  const [listMenuVisible, setListMenuVisible] = useState(false);
 
   // Store preferences
   const [defaultStoreMode, setDefaultStoreMode] = useState<'ask' | 'last' | 'fixed'>('ask');
   const [defaultStoreId, setDefaultStoreId] = useState<number | null>(null);
   const [stores, setStores] = useState<ListItem[]>([]);
-  const [storeMenuVisible, setStoreMenuVisible] = useState(false);
 
-  const [loading, setLoading] = useState(true);
+
+  const [listPickerVisible, setListPickerVisible] = useState(false);
+  const [storePickerVisible, setStorePickerVisible] = useState(false);
 
   // Load settings and data
   useEffect(() => {
@@ -85,7 +84,6 @@ export default function PreferencesScreen() {
     } catch (error) {
       console.error('Error loading preferences:', error);
     } finally {
-      setLoading(false);
     }
   };
 
@@ -188,32 +186,40 @@ export default function PreferencesScreen() {
                 />
               )}
             />
-
             {defaultListMode === 'fixed' && (
-              <Menu
-                visible={listMenuVisible}
-                onDismiss={() => setListMenuVisible(false)}
-                anchor={
-                  <Button
-                    mode="outlined"
-                    onPress={() => setListMenuVisible(true)}
-                    style={styles.dropdownButton}
-                  >
-                    {getListName(defaultListId)}
-                  </Button>
-                }
-              >
-                {lists.map((list) => (
-                  <Menu.Item
-                    key={list.id}
-                    onPress={() => {
-                      saveDefaultList(list.id);
-                      setListMenuVisible(false);
-                    }}
-                    title={list.name}
-                  />
-                ))}
-              </Menu>
+              <>
+                <List.Item
+                  title="Lista selecionada"
+                  description={getListName(defaultListId)}
+                  onPress={() => setListPickerVisible(true)}
+                  right={props => <List.Icon {...props} icon="chevron-right" />}
+                />
+                <Portal>
+                  <Dialog visible={listPickerVisible} onDismiss={() => setListPickerVisible(false)}>
+                    <Dialog.Title>Escolher lista</Dialog.Title>
+                    <Dialog.ScrollArea>
+                      <ScrollView>
+                        {lists.map(list => (
+                          <List.Item
+                            key={list.id}
+                            title={list.name}
+                            onPress={() => {
+                              saveDefaultList(list.id);
+                              setListPickerVisible(false);
+                            }}
+                            right={props => defaultListId === list.id &&
+                              <List.Icon {...props} icon="check" />
+                            }
+                          />
+                        ))}
+                      </ScrollView>
+                    </Dialog.ScrollArea>
+                    <Dialog.Actions>
+                      <Button onPress={() => setListPickerVisible(false)}>Cancelar</Button>
+                    </Dialog.Actions>
+                  </Dialog>
+                </Portal>
+              </>
             )}
           </View>
 
@@ -260,33 +266,42 @@ export default function PreferencesScreen() {
                   onPress={() => saveStoreMode('fixed')}
                 />
               )}
-              right={() => defaultStoreMode === 'fixed' && (
-                <Menu
-                  visible={storeMenuVisible}
-                  onDismiss={() => setStoreMenuVisible(false)}
-                  anchor={
-                    <Button
-                      mode="outlined"
-                      onPress={() => setStoreMenuVisible(true)}
-                      style={styles.dropdownButton}
-                    >
-                      {getStoreName(defaultStoreId)}
-                    </Button>
-                  }
-                >
-                  {stores.map((store) => (
-                    <Menu.Item
-                      key={store.id}
-                      onPress={() => {
-                        saveDefaultStore(store.id);
-                        setStoreMenuVisible(false);
-                      }}
-                      title={store.name}
-                    />
-                  ))}
-                </Menu>
-              )}
             />
+            {defaultStoreMode === 'fixed' && (
+              <>
+                <List.Item
+                  title="Loja selecionada"
+                  description={getStoreName(defaultStoreId)}
+                  onPress={() => setStorePickerVisible(true)}
+                  right={props => <List.Icon {...props} icon="chevron-right" />}
+                />
+                <Portal>
+                  <Dialog visible={storePickerVisible} onDismiss={() => setStorePickerVisible(false)}>
+                    <Dialog.Title>Escolher loja</Dialog.Title>
+                    <Dialog.ScrollArea>
+                      <ScrollView>
+                        {stores.map(store => (
+                          <List.Item
+                            key={store.id}
+                            title={store.name}
+                            onPress={() => {
+                              saveDefaultStore(store.id);
+                              setStorePickerVisible(false);
+                            }}
+                            right={props => defaultStoreId === store.id &&
+                              <List.Icon {...props} icon="check" />
+                            }
+                          />
+                        ))}
+                      </ScrollView>
+                    </Dialog.ScrollArea>
+                    <Dialog.Actions>
+                      <Button onPress={() => setStorePickerVisible(false)}>Cancelar</Button>
+                    </Dialog.Actions>
+                  </Dialog>
+                </Portal>
+              </>
+            )}
           </View>
         </ScrollView>
       </SafeAreaView>
