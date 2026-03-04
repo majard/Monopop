@@ -34,24 +34,24 @@ export const QuantityPill = React.memo(({
       borderRadius: 999,
       overflow: 'hidden',
       opacity: disabled ? 0.4 : 1,
-      minWidth: 110,
+      minWidth: 80,
       justifyContent: 'space-between',
     }}>
       <Pressable
-        style={{ paddingHorizontal: 16, paddingVertical: 10 }}
-        hitSlop={{ top: 16, bottom: 16, left: 16, right: 8 }}
+        style={{ paddingHorizontal: 10, paddingVertical: 8 }}
+        hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
         onPress={onDecrement}
         onLongPress={onStartContinuousDecrement}
         onPressOut={onStopContinuous}
         disabled={disabled}
       >
-        <Text style={{ fontSize: 20, lineHeight: 22, color: theme.colors.onSurface }}>−</Text>
+        <Text style={{ fontSize: 18, lineHeight: 20, color: theme.colors.onSurface }}>−</Text>
       </Pressable>
 
       <Text style={{
-        fontSize: 15,
+        fontSize: 14,
         fontWeight: '700',
-        minWidth: 28,
+        minWidth: 24,
         textAlign: 'center',
         color: theme.colors.onSurface,
       }}>
@@ -59,15 +59,15 @@ export const QuantityPill = React.memo(({
       </Text>
 
       <Pressable
-        style={{ paddingHorizontal: 16, paddingVertical: 10 }}
-        hitSlop={{ top: 16, bottom: 16, left: 8, right: 16 }}
+        style={{ paddingHorizontal: 10, paddingVertical: 8 }}
+        hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
         onPress={onIncrement}
         onLongPress={onStartContinuousIncrement}
         onPressOut={onStopContinuous}
         disabled={disabled}
         testID={testID}
       >
-        <Text style={{ fontSize: 20, lineHeight: 22, color: theme.colors.onSurface }}>+</Text>
+        <Text style={{ fontSize: 18, lineHeight: 20, color: theme.colors.onSurface }}>+</Text>
       </Pressable>
     </View>
   );

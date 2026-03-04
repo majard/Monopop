@@ -44,30 +44,36 @@ export const ProductCard = ({
         onLongPress={drag}
         testID={`product-card-${item.id}`}
       >
-        <Card.Content>
-          <View style={styles.cardHeader}>
-            <View style={styles.dragHandle}>
-              <Text variant="titleMedium">
-                {item.name + ' ' + getEmojiForProduct(item.name)}
+        <Card.Content style={{ paddingVertical: 8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            {/* Emoji avatar — fixed width */}
+            <View style={{ width: 32, justifyContent: 'center', alignItems: 'center' }}>
+              <Text style={{ fontSize: 20 }}>
+                {getEmojiForProduct(item.name)}
               </Text>
             </View>
-            <View style={styles.cardActions}>
-              <IconButton
-                icon="pencil"
-                size={20}
-                onPress={() =>
-                  navigation.navigate('EditProduct', { product: item })
-                }
-                iconColor={theme.colors.primary}
-              />
-              <IconButton
-                icon="delete"
-                size={20}
-                onPress={confirmRemoveProduct}
-                iconColor={theme.colors.error}
-                testID={`delete-button-${item.id}`}
-              />
+
+            {/* Name — takes remaining space */}
+            <View style={{ flex: 1, marginHorizontal: 8 }}>
+              <Text variant="titleMedium" numberOfLines={2}>
+                {item.name}
+              </Text>
             </View>
+
+            {/* Actions */}
+            <IconButton
+              icon="pencil"
+              size={20}
+              onPress={() => navigation.navigate('EditProduct', { product: item })}
+              iconColor={theme.colors.primary}
+            />
+            <IconButton
+              icon="delete"
+              size={20}
+              onPress={confirmRemoveProduct}
+              iconColor={theme.colors.error}
+              testID={`delete-button-${item.id}`}
+            />
           </View>
         </Card.Content>
       </Pressable>

@@ -97,79 +97,44 @@ export const InventoryItemCard = ({
     </Pressable>
   );
 
-  const isLongName = inventoryItem.productName.length > 28;
-
   const cardContent = (
     <Card.Content style={{ paddingVertical: 8 }}>
-      {isLongName ? (
-        // Vertical layout for long names
-        <View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
-            {isSelectionMode && (
-              <View style={{ marginRight: 8 }}>
-                <Checkbox
-                  status={isSelected ? 'checked' : 'unchecked'}
-                  onPress={() => onToggleSelect?.(inventoryItem.id)}
-                />
-              </View>
-            )}
-            <View style={{ width: 32, height: 32, justifyContent: 'center', alignItems: 'center' }}>
-              <Text style={{ fontSize: 20 }}>
-                {getEmojiForProduct(inventoryItem.productName)}
-              </Text>
-            </View>
-            <View style={{ flex: 1, marginLeft: 8 }}>
-              <Text variant="titleMedium" numberOfLines={2}>
-                {inventoryItem.productName}
-              </Text>
-            </View>
-          </View>
-          <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
-            <QuantityPill
-              quantity={quantity}
-              disabled={isSelectionMode}
-              onDecrement={() => updateInventoryItemQuantity(Math.max(0, quantity - 1))}
-              onIncrement={() => updateInventoryItemQuantity(quantity + 1)}
-              onStartContinuousDecrement={() => startContinuousAdjustment(false)}
-              onStartContinuousIncrement={() => startContinuousAdjustment(true)}
-              onStopContinuous={stopContinuousAdjustment}
-              testID={`increment-button-${inventoryItem.id}`}
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        {isSelectionMode && (
+          <View style={{ marginRight: 8 }}>
+            <Checkbox
+              status={isSelected ? 'checked' : 'unchecked'}
+              onPress={() => onToggleSelect?.(inventoryItem.id)}
             />
           </View>
+        )}
+
+        {/* Emoji — fixed width */}
+        <View style={{ width: 32, justifyContent: 'center', alignItems: 'center' }}>
+          <Text style={{ fontSize: 20 }}>
+            {getEmojiForProduct(inventoryItem.productName)}
+          </Text>
         </View>
-      ) : (
-        // Horizontal layout for short names
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          {isSelectionMode && (
-            <View style={{ marginRight: 8 }}>
-              <Checkbox
-                status={isSelected ? 'checked' : 'unchecked'}
-                onPress={() => onToggleSelect?.(inventoryItem.id)}
-              />
-            </View>
-          )}
-          <View style={{ width: 32, height: 32, justifyContent: 'center', alignItems: 'center' }}>
-            <Text style={{ fontSize: 20 }}>
-              {getEmojiForProduct(inventoryItem.productName)}
-            </Text>
-          </View>
-          <View style={{ flex: 1, marginLeft: 8 }}>
-            <Text variant="titleMedium" numberOfLines={2}>
-              {inventoryItem.productName}
-            </Text>
-          </View>
-          <QuantityPill
-            quantity={quantity}
-            disabled={isSelectionMode}
-            onDecrement={() => updateInventoryItemQuantity(Math.max(0, quantity - 1))}
-            onIncrement={() => updateInventoryItemQuantity(quantity + 1)}
-            onStartContinuousDecrement={() => startContinuousAdjustment(false)}
-            onStartContinuousIncrement={() => startContinuousAdjustment(true)}
-            onStopContinuous={stopContinuousAdjustment}
-            testID={`increment-button-${inventoryItem.id}`}
-          />
+
+        {/* Name — takes remaining space, wraps up to 3 lines */}
+        <View style={{ flex: 1, marginHorizontal: 8 }}>
+          <Text variant="titleMedium" numberOfLines={3}>
+            {inventoryItem.productName}
+          </Text>
         </View>
-      )}
+
+        {/* Pill — fixed, vertically centered by parent alignItems */}
+        <QuantityPill
+          quantity={quantity}
+          disabled={isSelectionMode}
+          onDecrement={() => updateInventoryItemQuantity(Math.max(0, quantity - 1))}
+          onIncrement={() => updateInventoryItemQuantity(quantity + 1)}
+          onStartContinuousDecrement={() => startContinuousAdjustment(false)}
+          onStartContinuousIncrement={() => startContinuousAdjustment(true)}
+          onStopContinuous={stopContinuousAdjustment}
+          testID={`increment-button-${inventoryItem.id}`}
+        />
+      </View>
     </Card.Content>
   );
 
@@ -188,16 +153,22 @@ export const InventoryItemCard = ({
   }
 
   return (
-    <Swipeable renderRightActions={renderSwipeActions}>
-      <Card style={[styles.card, { opacity: isActive ? 0.5 : 1, marginBottom: 8 }]}>
-        <Pressable
-          onPress={handleCardPress}
-          onLongPress={handleLongPress}
-          testID={`product-card-${inventoryItem.id}`}
-        >
-          {cardContent}
-        </Pressable>
-      </Card>
-    </Swipeable>
+    <View style={{ overflow: 'hidden', borderRadius: 12, marginBottom: 8 }}>
+      <Swipeable
+        renderRightActions={renderSwipeActions}
+        overshootLeft={false}
+        overshootRight={false}
+      >
+        <Card style={[styles.card, { opacity: isActive ? 0.5 : 1 }]}>
+          <Pressable
+            onPress={handleCardPress}
+            onLongPress={handleLongPress}
+            testID={`product-card-${inventoryItem.id}`}
+          >
+            {cardContent}
+          </Pressable>
+        </Card>
+      </Swipeable>
+    </View>
   );
 };
