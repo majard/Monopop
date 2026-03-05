@@ -263,7 +263,7 @@ export default function ShoppingListScreen() {
           const isCarrinho = section.title.startsWith('No carrinho');
           if (!isCarrinho && section.data.length === 0) return null;
           return (
-            <View style={[localStyles.sectionHeader, { backgroundColor: theme.colors.background }]}>
+            <View style={localStyles.sectionHeader}>
               <Text style={[localStyles.subsectionTitle, { color: theme.colors.onSurfaceVariant }]}>
                 {section.title}
               </Text>
@@ -283,7 +283,7 @@ export default function ShoppingListScreen() {
             </Text>
           </Surface>
         )}
-        contentContainerStyle={{ paddingBottom: bottomBarHeight + 96, padding: 16 }}
+        contentContainerStyle={{ paddingBottom: bottomBarHeight + 96, paddingHorizontal: 16 }}
       />
 
       <AddItemButton
