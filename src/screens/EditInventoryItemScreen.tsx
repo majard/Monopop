@@ -150,7 +150,7 @@ export default function EditInventoryItem() {
       if (finalPrice !== initialPriceRef.current && shoppingListItem?.id && shoppingListItem.id > 0) {
         await updateShoppingListItem(shoppingListItem.id, { price: finalPrice });
       }
-      
+
       const originalSli = initialShoppingListItemRef.current;
       if (shoppingListItem === null && originalSli) {
         await deleteShoppingListItem(originalSli.id);
@@ -176,10 +176,10 @@ export default function EditInventoryItem() {
     loadingRef.current = true;
 
     const [
-      historyData, 
-      listsData, 
-      categoriesData, 
-      sli, 
+      historyData,
+      listsData,
+      categoriesData,
+      sli,
       consumptionStats,
       defaultStoreMode,
       defaultStoreId,
@@ -234,14 +234,18 @@ export default function EditInventoryItem() {
         'Sair sem salvar?',
         'Você tem alterações não salvas.',
         [
-          { text: 'Descartar', style: 'destructive', onPress: () => {
-            isDirtyRef.current = false;
-            navigation.dispatch(e.data.action);
-          }},
-          { text: 'Salvar', onPress: async () => {
-            await handleSave();
-            navigation.dispatch(e.data.action);
-          }},
+          {
+            text: 'Descartar', style: 'destructive', onPress: () => {
+              isDirtyRef.current = false;
+              navigation.dispatch(e.data.action);
+            }
+          },
+          {
+            text: 'Salvar', onPress: async () => {
+              await handleSave();
+              navigation.dispatch(e.data.action);
+            }
+          },
         ]
       );
     });
@@ -290,10 +294,12 @@ export default function EditInventoryItem() {
       `Excluir ${name} do estoque?`,
       [
         { text: 'Cancelar', style: 'cancel' },
-        { text: 'Excluir', style: 'destructive', onPress: async () => {
-          await deleteInventoryItem(inventoryItem!.id);
-          navigation.goBack();
-        }},
+        {
+          text: 'Excluir', style: 'destructive', onPress: async () => {
+            await deleteInventoryItem(inventoryItem!.id);
+            navigation.goBack();
+          }
+        },
       ]
     );
   }, [name, inventoryItem, navigation]);
@@ -334,7 +340,7 @@ export default function EditInventoryItem() {
               onChangeText={setName}
               autoFocus
               onBlur={() => setIsEditingName(false)}
-              style={[localStyles.nameInput, { 
+              style={[localStyles.nameInput, {
                 color: theme.colors.onSurface,
                 borderBottomColor: theme.colors.primary,
               }]}
@@ -346,8 +352,8 @@ export default function EditInventoryItem() {
               </Text>
             </Pressable>
           )}
-          <IconButton icon="pencil-outline" size={20} onPress={() => setIsEditingName(true)} />
-          <IconButton icon="delete-outline" size={20} iconColor={theme.colors.error} onPress={handleDelete} />
+          <IconButton icon="pencil-outline" size={22} onPress={() => setIsEditingName(true)} />
+          <IconButton icon="delete-outline" size={22} iconColor={theme.colors.error} onPress={handleDelete} />
         </View>
 
         {/* Quantity row */}
@@ -369,7 +375,7 @@ export default function EditInventoryItem() {
               onChangeText={setQuantityInput}
               onBlur={() => updateInventoryItemQuantity(parseInt(quantityInput) || 0, true)}
               keyboardType="numeric"
-              style={[localStyles.qtyInput, { 
+              style={[localStyles.qtyInput, {
                 color: theme.colors.onSurface,
                 borderColor: theme.colors.outline,
               }]}
@@ -384,8 +390,8 @@ export default function EditInventoryItem() {
             </Pressable>
 
             {/* Price + shopping list inline */}
-            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
-              <MaterialCommunityIcons name="currency-usd" size={16} color={theme.colors.onSurfaceVariant} />
+
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', gap: 12, paddingLeft: 16 }}>
               {editingPrice ? (
                 <RNTextInput
                   value={priceInput}
@@ -393,14 +399,14 @@ export default function EditInventoryItem() {
                   keyboardType="decimal-pad"
                   autoFocus
                   onBlur={handlePriceSave}
-                  style={[localStyles.priceInput, { 
+                  style={[localStyles.priceInput, {
                     color: theme.colors.onSurface,
                     borderBottomColor: theme.colors.primary,
                   }]}
                 />
               ) : (
                 <Pressable onPress={() => setEditingPrice(true)}>
-                  <Text style={{ color: theme.colors.onSurface, fontSize: 14 }}>
+                  <Text style={{ color: theme.colors.onSurface, fontSize: 18, minWidth: 100 }}>
                     {suggestedPrice > 0 ? formatCurrency(suggestedPrice) : '—'}
                   </Text>
                 </Pressable>
@@ -408,7 +414,7 @@ export default function EditInventoryItem() {
               <Pressable onPress={handleToggleShoppingList}>
                 <MaterialCommunityIcons
                   name={shoppingListItem ? 'cart-check' : 'cart-plus'}
-                  size={22}
+                  size={28}
                   color={shoppingListItem ? theme.colors.primary : theme.colors.onSurfaceVariant}
                 />
               </Pressable>
@@ -443,7 +449,7 @@ export default function EditInventoryItem() {
           placeholder="Observações..."
           placeholderTextColor={theme.colors.outline}
           multiline
-          style={[localStyles.notesInput, { 
+          style={[localStyles.notesInput, {
             color: theme.colors.onSurface,
             borderColor: theme.colors.outlineVariant,
           }]}
@@ -498,7 +504,7 @@ export default function EditInventoryItem() {
           onPress={() => setQuantityHistoryCollapsed(p => !p)}
           style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}
         >
-          <Text variant="labelMedium" style={{ 
+          <Text variant="labelMedium" style={{
             color: theme.colors.onSurfaceVariant,
             textTransform: 'uppercase',
             letterSpacing: 0.5,
@@ -533,8 +539,8 @@ export default function EditInventoryItem() {
                     {item.quantity}
                   </Text>
                   {diff !== null && (
-                    <Text style={{ 
-                      fontSize: 12, 
+                    <Text style={{
+                      fontSize: 12,
                       color: diff > 0 ? theme.colors.error : diff < 0 ? '#4CAF50' : theme.colors.outline,
                       fontWeight: '600',
                     }}>
@@ -562,7 +568,7 @@ export default function EditInventoryItem() {
           onPress={() => setPriceHistoryCollapsed(p => !p)}
           style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}
         >
-          <Text variant="labelMedium" style={{ 
+          <Text variant="labelMedium" style={{
             color: theme.colors.onSurfaceVariant,
             textTransform: 'uppercase',
             letterSpacing: 0.5,
@@ -625,7 +631,7 @@ export default function EditInventoryItem() {
 function hexToRgb(hex: string): string {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
   return result
-    ? `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}` 
+    ? `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}`
     : '0, 0, 0';
 }
 
@@ -633,10 +639,10 @@ const localStyles = StyleSheet.create({
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 8,
   },
   nameText: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '700',
     flex: 1,
   },
@@ -685,7 +691,7 @@ const localStyles = StyleSheet.create({
     marginBottom: 16,
   },
   priceInput: {
-    fontSize: 15,
+    fontSize: 17,
     borderBottomWidth: 2,
     minWidth: 80,
     paddingBottom: 2,
