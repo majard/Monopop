@@ -49,16 +49,14 @@ export default function useInventory(listId: number, sortOrder: SortOrder, searc
 
   // --- Product Order Handling Logic ---
   const handleProductOrderChange = useCallback(async (newOrder: InventoryItem[]) => {
-    setInventoryItems(newOrder); // Update UI immediately
+    const reindexed = newOrder.map((item, index) => ({ ...item, sortOrder: index }));
+    setInventoryItems(reindexed);
     try {
-      const updates = newOrder.map((inventoryItem, index) => ({
-        id: inventoryItem.id,
-        sortOrder: index,
-      }));
+      const updates = reindexed.map(item => ({ id: item.id, sortOrder: item.sortOrder }));
       await updateInventoryItemOrder(updates);
     } catch (error) {
       console.error("Erro ao reordenar produtos:", error);
-      loadInventoryItems(); // Reload from DB if update fails
+      loadInventoryItems();
     }
   }, [loadInventoryItems]);
 
