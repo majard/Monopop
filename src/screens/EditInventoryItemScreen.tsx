@@ -42,6 +42,7 @@ import { SearchablePickerDialog } from '../components/SearchablePickerDialog';
 import { useInventoryItem } from '../hooks/useInventoryItem';
 import QuantityHistorySection from '../components/QuantityHistorySection';
 import PriceHistorySection from '../components/PriceHistorySection';
+import { editInventoryItemStyles } from '../styles/EditInventoryItemStyles';
 
 type EditInventoryItemProps = NativeStackScreenProps<RootStackParamList, 'EditInventoryItem'>;
 
@@ -324,21 +325,21 @@ export default function EditInventoryItem() {
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32 }}>
 
         {/* Name row */}
-        <View style={localStyles.nameRow}>
+        <View style={editInventoryItemStyles.nameRow}>
           {isEditingName ? (
             <RNTextInput
               value={name}
               onChangeText={setName}
               autoFocus
               onBlur={() => setIsEditingName(false)}
-              style={[localStyles.nameInput, {
+              style={[editInventoryItemStyles.nameInput, {
                 color: theme.colors.onSurface,
                 borderBottomColor: theme.colors.primary,
               }]}
             />
           ) : (
             <Pressable onPress={() => setIsEditingName(true)} style={{ flex: 1 }}>
-              <Text style={[localStyles.nameText, { color: theme.colors.onSurface }]}>
+              <Text style={[editInventoryItemStyles.nameText, { color: theme.colors.onSurface }]}>
                 {name}
               </Text>
             </Pressable>
@@ -348,16 +349,16 @@ export default function EditInventoryItem() {
         </View>
 
         {/* Quantity row */}
-        <View style={localStyles.quantityRow}>
-          <Text style={[localStyles.label, { color: theme.colors.onSurfaceVariant }]}>
+        <View style={editInventoryItemStyles.quantityRow}>
+          <Text style={[editInventoryItemStyles.label, { color: theme.colors.onSurfaceVariant }]}>
             Quantidade
           </Text>
-          <View style={localStyles.quantityControls}>
+          <View style={editInventoryItemStyles.quantityControls}>
             <Pressable
               onPress={() => updateInventoryItemQuantity(Math.max(0, liveQuantity - 1), true)}
               onLongPress={() => startContinuousAdjustment(false, true)}
               onPressOut={() => stopContinuousAdjustment(true)}
-              style={[localStyles.qtyButton, { borderColor: theme.colors.outline }]}
+              style={[editInventoryItemStyles.qtyButton, { borderColor: theme.colors.outline }]}
             >
               <MaterialCommunityIcons name="minus" size={20} color={theme.colors.primary} />
             </Pressable>
@@ -366,7 +367,7 @@ export default function EditInventoryItem() {
               onChangeText={setQuantityInput}
               onBlur={() => updateInventoryItemQuantity(parseInt(quantityInput) || 0, true)}
               keyboardType="numeric"
-              style={[localStyles.qtyInput, {
+              style={[editInventoryItemStyles.qtyInput, {
                 color: theme.colors.onSurface,
                 borderColor: theme.colors.outline,
               }]}
@@ -375,7 +376,7 @@ export default function EditInventoryItem() {
               onPress={() => updateInventoryItemQuantity(liveQuantity + 1, true)}
               onLongPress={() => startContinuousAdjustment(true, true)}
               onPressOut={() => stopContinuousAdjustment(true)}
-              style={[localStyles.qtyButton, { borderColor: theme.colors.outline }]}
+              style={[editInventoryItemStyles.qtyButton, { borderColor: theme.colors.outline }]}
             >
               <MaterialCommunityIcons name="plus" size={20} color={theme.colors.primary} />
             </Pressable>
@@ -390,7 +391,7 @@ export default function EditInventoryItem() {
                   keyboardType="decimal-pad"
                   autoFocus
                   onBlur={handlePriceSave}
-                  style={[localStyles.priceInput, {
+                  style={[editInventoryItemStyles.priceInput, {
                     color: theme.colors.onSurface,
                     borderBottomColor: theme.colors.primary,
                   }]}
@@ -414,11 +415,11 @@ export default function EditInventoryItem() {
         </View>
 
         {/* Category + List chips */}
-        <View style={localStyles.chipsRow}>
+        <View style={editInventoryItemStyles.chipsRow}>
           <Chip
             icon="tag-outline"
             onPress={() => setCategoryModalVisible(true)}
-            style={localStyles.chip}
+            style={editInventoryItemStyles.chip}
             mode="outlined"
           >
             {categories.find(c => c.id === selectedCategoryId)?.name || 'Sem categoria'}
@@ -426,7 +427,7 @@ export default function EditInventoryItem() {
           <Chip
             icon="format-list-bulleted"
             onPress={() => setListModalVisible(true)}
-            style={localStyles.chip}
+            style={editInventoryItemStyles.chip}
             mode="outlined"
           >
             {lists.find(l => l.id === selectedListId)?.name || 'Lista'}
@@ -440,7 +441,7 @@ export default function EditInventoryItem() {
           placeholder="Observações..."
           placeholderTextColor={theme.colors.outline}
           multiline
-          style={[localStyles.notesInput, {
+          style={[editInventoryItemStyles.notesInput, {
             color: theme.colors.onSurface,
             borderColor: theme.colors.outlineVariant,
           }]}
@@ -460,28 +461,28 @@ export default function EditInventoryItem() {
 
         {/* Derived stats */}
         {stats && (
-          <View style={[localStyles.statsRow, { borderColor: theme.colors.outlineVariant }]}>
+          <View style={[editInventoryItemStyles.statsRow, { borderColor: theme.colors.outlineVariant }]}>
             {stats.avgWeeklyConsumption !== null && (
-              <View style={localStyles.statItem}>
+              <View style={editInventoryItemStyles.statItem}>
                 <MaterialCommunityIcons name="trending-down" size={16} color={theme.colors.onSurfaceVariant} />
-                <Text style={[localStyles.statText, { color: theme.colors.onSurfaceVariant }]}>
-                  ~{stats.avgWeeklyConsumption.toFixed(1)}/semana
+                <Text style={[editInventoryItemStyles.statText, { color: theme.colors.onSurfaceVariant }]}>
+                  Consumo médio: ~{stats.avgWeeklyConsumption.toFixed(1)}/semana
                 </Text>
               </View>
             )}
             {stats.avgPrice90d !== null && (
-              <View style={localStyles.statItem}>
+              <View style={editInventoryItemStyles.statItem}>
                 <MaterialCommunityIcons name="tag-outline" size={16} color={theme.colors.onSurfaceVariant} />
-                <Text style={[localStyles.statText, { color: theme.colors.onSurfaceVariant }]}>
-                  Média: {formatCurrency(stats.avgPrice90d)}
+                <Text style={[editInventoryItemStyles.statText, { color: theme.colors.onSurfaceVariant }]}>
+                  Preço médio (90d): {formatCurrency(stats.avgPrice90d)}
                 </Text>
               </View>
             )}
             {stats.lowestPrice90d !== null && (
-              <View style={localStyles.statItem}>
+              <View style={editInventoryItemStyles.statItem}>
                 <MaterialCommunityIcons name="sale" size={16} color={theme.colors.onSurfaceVariant} />
-                <Text style={[localStyles.statText, { color: theme.colors.onSurfaceVariant }]}>
-                  Menor: {formatCurrency(stats.lowestPrice90d.price)} ({stats.lowestPrice90d.storeName})
+                <Text style={[editInventoryItemStyles.statText, { color: theme.colors.onSurfaceVariant }]}>
+                  Menor preço (90d): {formatCurrency(stats.lowestPrice90d.price)} em {stats.lowestPrice90d.storeName}
                 </Text>
               </View>
             )}
@@ -541,105 +542,3 @@ export default function EditInventoryItem() {
     </SafeAreaView>
   );
 }
-
-const localStyles = StyleSheet.create({
-  nameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  nameText: {
-    fontSize: 24,
-    fontWeight: '700',
-    flex: 1,
-  },
-  nameInput: {
-    flex: 1,
-    fontSize: 22,
-    fontWeight: '700',
-    borderBottomWidth: 2,
-    paddingBottom: 4,
-  },
-  label: {
-    fontSize: 13,
-    marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  quantityRow: {
-    marginBottom: 16,
-  },
-  quantityControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  qtyButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    borderWidth: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  qtyInput: {
-    width: 64,
-    height: 40,
-    borderWidth: 1,
-    borderRadius: 8,
-    textAlign: 'center',
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  priceRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 16,
-  },
-  priceInput: {
-    fontSize: 17,
-    borderBottomWidth: 2,
-    minWidth: 80,
-    paddingBottom: 2,
-  },
-  chipsRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 12,
-  },
-  chip: {
-    flex: 1,
-  },
-  notesInput: {
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 10,
-    fontSize: 14,
-    minHeight: 60,
-    marginBottom: 8,
-    textAlignVertical: 'top',
-  },
-  statsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginTop: 16,
-    paddingTop: 12,
-    borderTopWidth: 1,
-  },
-  statItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  statText: {
-    fontSize: 12,
-  },
-  historyRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-  },
-});
