@@ -91,7 +91,7 @@ export const createHomeScreenStyles = (theme: MD3Theme) => StyleSheet.create<Sty
     paddingBottom: 192
   },
   card: { 
-    marginBottom: 16 
+    marginBottom: 6
   },
   cardHeader: {
     flexDirection: "row",

@@ -88,13 +88,13 @@ export const InventoryItemCard = ({
         justifyContent: 'center',
         alignItems: 'center',
         width: 100,
-        marginBottom: 16,
+        marginBottom: 8,
         borderRadius: 12,
         marginLeft: 8,
       }}
     >
       <IconButton icon="delete" size={26} iconColor="white" pointerEvents="none" />
-      <Text style={{ color: 'white', fontSize: 11, marginTop: -8 }}>Deletar</Text>
+      <Text style={{ color: 'white', fontSize: 11, marginTop: -16 }}>Deletar</Text>
     </Pressable>
   );
 
@@ -163,7 +163,7 @@ export const InventoryItemCard = ({
   }
 
   return (
-    <View style={{ overflow: 'hidden', borderRadius: 12, marginBottom: 4, marginHorizontal: 8 }}>
+    <View style={{ overflow: 'hidden', borderRadius: 12, marginBottom: 0, marginHorizontal: 8 }}>
       <Swipeable
         renderRightActions={renderSwipeActions}
         overshootLeft={false}
