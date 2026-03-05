@@ -24,11 +24,10 @@ import { SortOrder } from "../utils/sortUtils";
 import SearchBar from "../components/SearchBar";
 import { useList } from "../hooks/useList";
 import { SortMenu } from "../components/SortMenu";
-import { EditableName } from "../components/EditableName";
 import { AddItemButton } from "../components/AddItemButton";
 import InventoryList from "../components/InventoryList";
 import ContextualHeader from "../components/ContextualHeader";
-import { saveInventoryHistorySnapshot, deleteInventoryItem } from "../database/database";
+import { deleteInventoryItem } from "../database/database";
 import { useListContext } from "../context/ListContext";
 
 type HomeScreenNavigationProp = NativeStackNavigationProp<
@@ -67,23 +66,37 @@ export default function HomeScreen() {
     setSortOrder(order);
   }, []);
 
-  const handleToggleSelect = (id: number) => {
+  const handleToggleSelect = useCallback((id: number) => {
     setSelectedIds(prev =>
       prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
     );
-  };
+  }, []);
 
-  const handleEnterSelectionMode = () => {
+  const handleEnterSelectionMode = useCallback(() => {
     setIsSelectionMode(true);
     setSelectedIds([]);
-  };
+  }, []);
 
-  const handleExitSelectionMode = () => {
+  const handleExitSelectionMode = useCallback(() => {
     setIsSelectionMode(false);
     setSelectedIds([]);
-  };
+  }, []);
 
-  const handleDeleteSelected = () => {
+  const saveAndCopyStockList = useCallback(async () => {
+    try {
+      for (const inventoryItem of inventoryItems) {
+        await saveInventoryHistorySnapshot(inventoryItem.id);
+      }
+      const text = generateStockListText(inventoryItems);
+      Clipboard.setStringAsync(text);
+      Alert.alert("Sucesso", "Lista de estoque copiada para a área de transferência!");
+    } catch (error) {
+      console.error("Erro ao salvar histórico e copiar lista:", error);
+      Alert.alert("Erro", "Não foi possível copiar a lista de estoque.");
+    }
+  }, [inventoryItems, saveInventoryHistorySnapshot]);
+
+  const handleDeleteSelected = useCallback(() => {
     Alert.alert(
       "Confirmar Exclusão",
       `Tem certeza que deseja excluir ${selectedIds.length} ${selectedIds.length === 1 ? 'item' : 'itens'} do estoque?`,
@@ -102,7 +115,7 @@ export default function HomeScreen() {
         },
       ]
     );
-  };
+  }, [selectedIds, loadInventoryItems, handleExitSelectionMode]);
 
   // useFocusEffect is still crucial here to ensure the list refreshes
   // after single product operations (update, delete) performed via useProduct.
@@ -113,23 +126,6 @@ export default function HomeScreen() {
     }, [sortOrder, loadInventoryItems])
   );
 
-  const saveAndCopyStockList = async () => {
-    try {
-      for (const inventoryItem of inventoryItems) {
-
-        await saveInventoryHistorySnapshot(inventoryItem.id);
-      }
-      const text = generateStockListText(inventoryItems);
-      Clipboard.setStringAsync(text);
-      Alert.alert(
-        "Sucesso",
-        "Lista de estoque copiada para a área de transferência!"
-      );
-    } catch (error) {
-      console.error("Erro ao salvar histórico e copiar lista:", error);
-      Alert.alert("Erro", "Não foi possível copiar a lista de estoque.");
-    }
-  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -140,8 +136,12 @@ export default function HomeScreen() {
       />
       
       <View style={styles.header}>
-        <SearchBar searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
-
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View style={{ flex: 1 }}>
+            <SearchBar searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
+          </View>
+          <SortMenu setSortOrder={handleSortOrderChange} sortOrder={sortOrder} iconOnly />
+        </View>
         <View style={styles.buttonRow}>
           <Button
             mode="contained"
@@ -152,7 +152,6 @@ export default function HomeScreen() {
           >
             Salvar
           </Button>
-
           <Button
             mode="contained"
             onPress={handleImportButtonClick}
@@ -162,8 +161,6 @@ export default function HomeScreen() {
           >
             Importar
           </Button>
-
-          <SortMenu setSortOrder={handleSortOrderChange} sortOrder={sortOrder} />
         </View>
       </View>
 
