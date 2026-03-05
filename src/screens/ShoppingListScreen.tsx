@@ -1,5 +1,5 @@
-import React, { useRef, useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Text, FlatList } from 'react-native';
+import React, { useRef, useState, useCallback } from 'react';
+import { View, StyleSheet, Text, SectionList } from 'react-native';
 import { Button, Surface, useTheme } from 'react-native-paper';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -20,11 +20,16 @@ import { createHomeScreenStyles } from '../styles/HomeScreenStyles';
 type ShoppingListScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'ShoppingList'>;
 
 interface ShoppingListItemWithDetails extends Omit<ShoppingListItem, 'checked'> {
-  checked: boolean; // Converted from database number to boolean
+  checked: boolean;
   productName: string;
   productId: number;
   currentInventoryQuantity: number;
   price?: number;
+}
+
+interface ShoppingSection {
+  title: string;
+  data: ShoppingListItemWithDetails[];
 }
 
 export default function ShoppingListScreen() {
@@ -47,14 +52,13 @@ export default function ShoppingListScreen() {
   const isFirstLoad = useRef(true);
   const manualPrices = useRef<Map<number, number>>(new Map());
 
-  // Load inventory items and shopping list items on component mount and focus
   useFocusEffect(
-    React.useCallback(() => {
+    useCallback(() => {
       loadData();
     }, [listId])
   );
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       const [inventory, shopping, storesList, lastStore] = await Promise.all([
         getInventoryItems(listId),
@@ -65,7 +69,6 @@ export default function ShoppingListScreen() {
 
       const enhancedShoppingItems = shopping.map(item => {
         const inventoryItem = inventory.find(inv => inv.id === item.inventoryItemId);
-        
         return {
           ...item,
           checked: Boolean(item.checked),
@@ -79,7 +82,6 @@ export default function ShoppingListScreen() {
       setShoppingListItems(enhancedShoppingItems);
       setStores(storesList);
 
-      // Set default store name based on defaultStoreMode setting
       const [defaultStoreMode, defaultStoreId] = await Promise.all([
         getSetting('defaultStoreMode'),
         getSetting('defaultStoreId'),
@@ -89,9 +91,8 @@ export default function ShoppingListScreen() {
       let storeIdToSet: number | null = null;
 
       if (isFirstLoad.current) {
-        
-          const lastStoreObj = storesList.find(s => s.name === lastStore);
-          setLastStoreId(lastStoreObj?.id ?? null);
+        const lastStoreObj = storesList.find(s => s.name === lastStore);
+        setLastStoreId(lastStoreObj?.id ?? null);
 
         if (defaultStoreMode === 'last') {
           storeNameToSet = lastStore ?? '';
@@ -105,82 +106,106 @@ export default function ShoppingListScreen() {
         setDefaultStoreName(storeNameToSet);
         setSelectedStoreId(storeIdToSet);
         isFirstLoad.current = false;
-        
-        // Update prices for the selected store on first load
+
         if (storeIdToSet !== null) {
           updatePricesForStore(storeIdToSet, enhancedShoppingItems);
         }
       }
-      // If 'ask', leave empty string and null
-
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
     }
-  };
+  }, [listId]);
 
-  const updatePricesForStore = async (storeId: number, items: ShoppingListItemWithDetails[]) => {
+  const updatePricesForStore = useCallback(async (storeId: number, items: ShoppingListItemWithDetails[]) => {
     try {
       const updatedItems = await Promise.all(
         items.map(async (item) => {
-          // Only update prices that are not manually set
-          if (manualPrices.current.has(item.id)) {
-            return item;
-          }
-
-          // Try to get price for this product at the selected store
+          if (manualPrices.current.has(item.id)) return item;
           const storePrice = await getLastUnitPriceForProductAtStore(item.productId, storeId);
           if (storePrice !== null) {
             return { ...item, price: storePrice };
           } else {
             const lastPrice = await getLastUnitPriceForProduct(item.productId);
-          
             return { ...item, price: lastPrice ?? item.price };
           }
         })
       );
-
-      // Always update state to trigger re-render
       setShoppingListItems(updatedItems);
     } catch (error) {
       console.error('Error updating prices for store:', error);
     }
-  };
+  }, []);
 
-  const handleStoreSelect = (storeId: number) => {
+  const handleStoreSelect = useCallback((storeId: number) => {
     setSelectedStoreId(storeId);
     const selectedStore = stores.find(s => s.id === storeId);
     setDefaultStoreName(selectedStore?.name ?? '');
-
-    // Update prices for the selected store
     updatePricesForStore(storeId, shoppingListItems);
-  };
+  }, [stores, shoppingListItems, updatePricesForStore]);
 
-  const handleToggleChecked = async (item: ShoppingListItemWithDetails) => {
+  const handleToggleChecked = useCallback(async (item: ShoppingListItemWithDetails) => {
     try {
       await updateShoppingListItem(item.id, { checked: !item.checked });
       await loadData();
     } catch (error) {
       console.error('Erro ao atualizar item:', error);
     }
-  };
+  }, [loadData]);
 
-  const openConfirmConclude = () => {
+  const handleDeleteItem = useCallback(async (item: ShoppingListItemWithDetails) => {
+    try {
+      await deleteShoppingListItem(item.id);
+      await loadData();
+    } catch (error) {
+      console.error('Erro ao deletar item:', error);
+    }
+  }, [loadData]);
+
+  const handleSaveEdit = useCallback(async (quantity: number, price: number | undefined) => {
+    if (!editingItem) return;
+    try {
+      if (price !== undefined && price !== null) {
+        manualPrices.current.set(editingItem.id, price);
+      }
+      await updateShoppingListItem(editingItem.id, { quantity, price });
+      setShoppingListItems(prev =>
+        prev.map(item =>
+          item.id === editingItem.id ? { ...item, quantity, price } : item
+        )
+      );
+      setEditingItem(null);
+    } catch (error) {
+      console.error('Erro ao atualizar item:', error);
+    }
+  }, [editingItem]);
+
+  const renderShoppingListItem = useCallback(({ item }: { item: ShoppingListItemWithDetails }) => (
+    <ShoppingListItemCard
+      item={item}
+      onToggleChecked={() => handleToggleChecked(item)}
+      onDelete={() => handleDeleteItem(item)}
+      onEdit={() => setEditingItem(item)}
+    />
+  ), [handleToggleChecked, handleDeleteItem]);
+
+  // Computed values — declared once, before any usage
+  const checkedItems = shoppingListItems.filter(item => item.checked);
+  const uncheckedItems = shoppingListItems.filter(item => !item.checked);
+
+  const openConfirmConclude = useCallback(() => {
     if (checkedItems.length === 0) return;
     setConfirmVisible(true);
-  };
+  }, [checkedItems.length]);
 
-  const handleConfirmConclude = async (storeName: string) => {
+  const handleConfirmConclude = useCallback(async (storeName: string) => {
     if (checkedItems.length === 0) return;
     setLoading(true);
     try {
       await concludeShoppingForListWithInvoice(listId, storeName);
-
-      // Save used store to defaultStoreId
       const store = stores.find(s => s.name === storeName);
       if (store) {
         await setSetting('defaultStoreId', store.id.toString());
       }
-
       setConfirmVisible(false);
       await loadData();
     } catch (error) {
@@ -188,63 +213,25 @@ export default function ShoppingListScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [checkedItems.length, listId, stores, loadData]);
 
-  const handleDeleteItem = async (item: ShoppingListItemWithDetails) => {
-    try {
-      await deleteShoppingListItem(item.id);
-      await loadData();
-    } catch (error) {
-      console.error('Erro ao deletar item:', error);
-    }
-  };
-
-  const handleSaveEdit = async (quantity: number, price: number | undefined) => {
-    if (!editingItem) return;
-    try {
-      // Store manual price in ref if user provided a price
-      if (price !== undefined && price !== null) {
-        manualPrices.current.set(editingItem.id, price);
-      }
-      await updateShoppingListItem(editingItem.id, { quantity, price });
-      
-      // Update local state to reflect manual price setting
-      setShoppingListItems(prev => 
-        prev.map(item => 
-          item.id === editingItem.id 
-            ? { ...item, quantity, price }
-            : item
-        )
-      );
-      
-      setEditingItem(null);
-    } catch (error) {
-      console.error('Erro ao atualizar item:', error);
-    }
-  };
-
-  const renderShoppingListItem = ({ item }: { item: ShoppingListItemWithDetails }) => (
-    <ShoppingListItemCard
-      item={item}
-      onToggleChecked={() => handleToggleChecked(item)}
-      onDelete={() => handleDeleteItem(item)}
-      onEdit={() => setEditingItem(item)}
-    />
-  );
-
-  const checkedItems = shoppingListItems.filter(item => item.checked);
-  const uncheckedItems = shoppingListItems.filter(item => !item.checked);
+  const sections: ShoppingSection[] = [
+    {
+      title: `Pendentes (${uncheckedItems.length})`,
+      data: uncheckedItems,
+    },
+    {
+      title: `No carrinho (${checkedItems.length})`,
+      data: isCartCollapsed ? [] : checkedItems,
+    },
+  ];
 
   const totalCheckedPrice = checkedItems.reduce((total, item) => {
-    if (item.price) {
-      return total + (item.quantity * item.price);
-    }
+    if (item.price) return total + item.quantity * item.price;
     return total;
   }, 0);
 
-  const formatCurrency = (value: number) => {
-    return `R$ ${value.toFixed(2).replace('.', ',')}`;
-  };
+  const formatCurrency = (value: number) => `R$ ${value.toFixed(2).replace('.', ',')}`;
 
   const bottomBarHeight = checkedItems.length > 0 ? 64 : 0;
 
@@ -256,9 +243,8 @@ export default function ShoppingListScreen() {
         onListDelete={handleListDelete}
       />
 
-      {/* Store Selector */}
-      <View style={localStyles.storeSelector}>
-        <Text style={localStyles.storeSelectorLabel}>Loja:</Text>
+      <View style={[localStyles.storeSelector, { borderBottomColor: theme.colors.outlineVariant }]}>
+        <Text style={[localStyles.storeSelectorLabel, { color: theme.colors.onSurface }]}>Loja:</Text>
         <Button
           mode="outlined"
           onPress={() => setStorePickerVisible(true)}
@@ -269,59 +255,43 @@ export default function ShoppingListScreen() {
         </Button>
       </View>
 
-      <ScrollView style={localStyles.scrollContent} contentContainerStyle={{ paddingBottom: bottomBarHeight + 96 }}>
-        {shoppingListItems.length === 0 ? (
+      <SectionList
+        sections={sections}
+        keyExtractor={(item) => item.id.toString()}
+        renderItem={renderShoppingListItem}
+        renderSectionHeader={({ section }) => {
+          const isCarrinho = section.title.startsWith('No carrinho');
+          if (!isCarrinho && section.data.length === 0) return null;
+          return (
+            <View style={[localStyles.sectionHeader, { backgroundColor: theme.colors.background }]}>
+              <Text style={[localStyles.subsectionTitle, { color: theme.colors.onSurfaceVariant }]}>
+                {section.title}
+              </Text>
+              {isCarrinho && (
+                <Button mode="text" onPress={() => setIsCartCollapsed(!isCartCollapsed)} compact>
+                  {isCartCollapsed ? 'Mostrar' : 'Ocultar'}
+                </Button>
+              )}
+            </View>
+          );
+        }}
+        ListEmptyComponent={() => (
           <Surface style={localStyles.emptyState}>
-            <Text style={localStyles.emptyStateText}>
+            <Text style={{ textAlign: 'center', color: theme.colors.onSurfaceVariant, fontSize: 16, lineHeight: 24 }}>
               Sua lista de compras está vazia.{'\n'}
               Toque no botão abaixo para adicionar produtos!
             </Text>
           </Surface>
-        ) : (
-          <>
-            {uncheckedItems.length > 0 && (
-              <View style={localStyles.itemsSection}>
-                <Text style={localStyles.subsectionTitle}>Pendentes ({uncheckedItems.length})</Text>
-                <FlatList
-                  data={uncheckedItems}
-                  renderItem={renderShoppingListItem}
-                  keyExtractor={(item) => item.id.toString()}
-                  scrollEnabled={false}
-                />
-              </View>
-            )}
-
-            {checkedItems.length > 0 && (
-              <View style={localStyles.itemsSection}>
-                <View style={localStyles.cartHeaderRow}>
-                  <Text style={localStyles.subsectionTitle}>No carrinho ({checkedItems.length})</Text>
-                  <Button
-                    mode="text"
-                    onPress={() => setIsCartCollapsed(!isCartCollapsed)}
-                    compact
-                  >
-                    {isCartCollapsed ? 'Mostrar' : 'Ocultar'}
-                  </Button>
-                </View>
-                {!isCartCollapsed && (
-                  <FlatList
-                    data={checkedItems}
-                    renderItem={renderShoppingListItem}
-                    keyExtractor={(item) => item.id.toString()}
-                    scrollEnabled={false}
-                  />
-                )}
-              </View>
-            )}
-          </>
         )}
-      </ScrollView>
+        contentContainerStyle={{ paddingBottom: bottomBarHeight + 96, padding: 16 }}
+      />
 
       <AddItemButton
         onPress={() => navigation.navigate('AddProductToShoppingList', { listId })}
         label="Adicionar à Lista de Compras"
         style={checkedItems.length > 0 ? { bottom: bottomBarHeight } : undefined}
       />
+
       <EditShoppingItemModal
         visible={editingItem !== null}
         item={editingItem}
@@ -330,10 +300,10 @@ export default function ShoppingListScreen() {
       />
 
       {checkedItems.length > 0 && (
-        <View style={localStyles.bottomBar}>
+        <View style={[localStyles.bottomBar, { backgroundColor: theme.colors.surface, borderTopColor: theme.colors.outlineVariant }]}>
           <View style={localStyles.bottomBarSummary}>
-            <Text style={localStyles.bottomBarLabel}>Total no carrinho:</Text>
-            <Text style={localStyles.bottomBarValue}>{formatCurrency(totalCheckedPrice)}</Text>
+            <Text style={[localStyles.bottomBarLabel, { color: theme.colors.onSurfaceVariant }]}>Total no carrinho:</Text>
+            <Text style={[localStyles.bottomBarValue, { color: theme.colors.primary }]}>{formatCurrency(totalCheckedPrice)}</Text>
           </View>
           <Button
             mode="contained"
@@ -369,26 +339,17 @@ export default function ShoppingListScreen() {
 }
 
 const localStyles = StyleSheet.create({
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 16,
-    color: '#333',
-  },
   storeSelector: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 8,
-    backgroundColor: 'white',
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
   },
   storeSelectorLabel: {
     fontSize: 16,
     fontWeight: '500',
     marginRight: 12,
-    color: '#333',
   },
   storeSelectorButton: {
     flex: 1,
@@ -396,50 +357,22 @@ const localStyles = StyleSheet.create({
   storeSelectorButtonContent: {
     justifyContent: 'flex-start',
   },
-  scrollContent: {
-    flexGrow: 1,
-    padding: 16,
-    marginBottom: 32,
-  },
-  concludeSection: {
-    marginBottom: 16,
-  },
-  concludeButton: {
-    paddingVertical: 8,
-  },
-  itemsSection: {
-    marginBottom: 16,
-  },
-  cartHeaderRow: {
+  sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    paddingVertical: 8,
+    paddingHorizontal: 4,
   },
   subsectionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    marginBottom: 8,
-    color: '#666',
   },
   emptyState: {
     padding: 32,
     borderRadius: 12,
     alignItems: 'center',
-  },
-  emptyStateText: {
-    textAlign: 'center',
-    color: '#666',
-    fontSize: 16,
-    lineHeight: 24,
-  },
-  totalLabel: {
-    fontSize: 14,
-    color: '#666',
-  },
-  totalValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#2196F3',
+    margin: 16,
   },
   bottomBar: {
     position: 'absolute',
@@ -449,9 +382,7 @@ const localStyles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 12,
-    backgroundColor: 'white',
     borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -462,12 +393,10 @@ const localStyles = StyleSheet.create({
   },
   bottomBarLabel: {
     fontSize: 12,
-    color: '#666',
   },
   bottomBarValue: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#2196F3',
   },
   bottomBarButton: {
     borderRadius: 8,
