@@ -1,29 +1,18 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  View,
-  StyleSheet,
-  Dimensions,
-  ScrollView,
-  SafeAreaView,
-  Alert,
-} from "react-native";
+  View, ScrollView, StyleSheet, TextInput as RNTextInput,
+  Alert, Pressable, Dimensions,
+} from 'react-native';
 import {
-  TextInput as PaperTextInput,
-  Button,
-  Text,
-  useTheme,
-  Card,
-  Chip,
-  Divider,
-} from "react-native-paper";
-import { useNavigation, useRoute, useFocusEffect } from "@react-navigation/native";
-import {
-  NativeStackNavigationProp,
-  NativeStackScreenProps,
-} from "@react-navigation/native-stack";
-import { LineChart } from "react-native-chart-kit";
-import { parseISO, format } from "date-fns";
-import { ptBR } from "date-fns/locale";
+  Text, useTheme, Card, Chip, Divider, Button, IconButton,
+} from 'react-native-paper';
+import { useNavigation, useRoute, useFocusEffect, usePreventRemove } from '@react-navigation/native';
+import { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { LineChart } from 'react-native-chart-kit';
+import { parseISO, format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   updateInventoryItem,
   getInventoryHistory,
@@ -34,23 +23,25 @@ import {
   getCategories,
   addCategory,
   updateProductCategory,
-} from "../database/database";
-import { InventoryHistory } from "../database/models";
-import { RootStackParamList } from "../types/navigation";
-import ContextualHeader from "../components/ContextualHeader";
-import { EditableName } from "../components/EditableName";
-import { ItemPickerDialog } from "../components/ItemPickerDialog";
-import { SearchablePickerDialog } from "../components/SearchablePickerDialog";
-import { getDb } from "../database/database";
+  getLastUnitPriceForProduct,
+  getLastUnitPriceForProductAtStore,
+  addShoppingListItem,
+  updateShoppingListItem,
+  deleteShoppingListItem,
+  getProductConsumptionStats,
+  getShoppingListItemForInventoryItem,
+  getSetting,
+  getStores,
+  getPriceHistory,
+} from '../database/database';
+import { InventoryHistory } from '../database/models';
+import { RootStackParamList } from '../types/navigation';
+import ContextualHeader from '../components/ContextualHeader';
+import { ItemPickerDialog } from '../components/ItemPickerDialog';
+import { SearchablePickerDialog } from '../components/SearchablePickerDialog';
+import { useInventoryItem } from '../hooks/useInventoryItem';
 
-type EditInventoryItemNavigationProp = NativeStackNavigationProp<
-  RootStackParamList,
-  "EditInventoryItem"
->;
-type EditInventoryItemProps = NativeStackScreenProps<
-  RootStackParamList,
-  "EditInventoryItem"
->;
+type EditInventoryItemProps = NativeStackScreenProps<RootStackParamList, 'EditInventoryItem'>;
 
 interface PriceHistory {
   date: string;
@@ -58,365 +49,537 @@ interface PriceHistory {
   storeName: string;
 }
 
+interface ConsumptionStats {
+  avgWeeklyConsumption: number | null;
+  avgPrice90d: number | null;
+  lowestPrice90d: { price: number; storeName: string } | null;
+}
+
 export default function EditInventoryItem() {
-  const route = useRoute<EditInventoryItemProps["route"]>();
+  const route = useRoute<EditInventoryItemProps['route']>();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const inventoryItem = route.params?.inventoryItem;
-  const [quantity, setQuantity] = useState(inventoryItem?.quantity?.toString() || "");
-  const [notes, setNotes] = useState(inventoryItem?.notes || "");
-  const [history, setHistory] = useState<InventoryHistory[]>([]);
-  const [priceHistory, setPriceHistory] = useState<PriceHistory[]>([]);
-  const navigation = useNavigation<EditInventoryItemNavigationProp>();
   const theme = useTheme();
-  const [name, setName] = useState(inventoryItem?.productName || "");
+
+  // Core fields
+  const [name, setName] = useState(inventoryItem?.productName || '');
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [notes, setNotes] = useState(inventoryItem?.notes || '');
+  const [quantityInput, setQuantityInput] = useState('');
+
+  // Category and list
   const [lists, setLists] = useState<{ id: number; name: string }[]>([]);
   const [categories, setCategories] = useState<{ id: number; name: string }[]>([]);
+  const [selectedListId, setSelectedListId] = useState(inventoryItem?.listId ?? 1);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(inventoryItem?.categoryId ?? null);
   const [listModalVisible, setListModalVisible] = useState(false);
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
-  const [selectedListId, setSelectedListId] = useState(inventoryItem?.listId ?? 1);
-  const [selectedCategoryId, setSelectedCategoryId] = useState(inventoryItem?.categoryId ?? null);
 
+  // Shopping list
+  const [shoppingListItem, setShoppingListItem] = useState<{ id: number; quantity: number; price?: number } | null>(null);
+  const [suggestedPrice, setSuggestedPrice] = useState<number>(0);
+  const [editingPrice, setEditingPrice] = useState(false);
+  const [priceInput, setPriceInput] = useState('');
+
+  // History
+  const [history, setHistory] = useState<InventoryHistory[]>([]);
+  const [priceHistory, setPriceHistory] = useState<PriceHistory[]>([]);
+  const [quantityHistoryCollapsed, setQuantityHistoryCollapsed] = useState(false);
+  const [priceHistoryCollapsed, setPriceHistoryCollapsed] = useState(false);
+
+  // Derived stats
+  const [stats, setStats] = useState<ConsumptionStats | null>(null);
+
+  // useInventoryItem hook for quantity management
+  const {
+    quantity: liveQuantity,
+    updateInventoryItemQuantity,
+    startContinuousAdjustment,
+    stopContinuousAdjustment,
+  } = useInventoryItem({
+    inventoryItemId: inventoryItem?.id ?? 0,
+    initialQuantity: inventoryItem?.quantity ?? 0,
+    productName: inventoryItem?.productName ?? '',
+  });
+
+  // Sync quantity input with live quantity
   useEffect(() => {
-    if (inventoryItem) {
-      setQuantity(inventoryItem.quantity.toString());
-      loadHistory();
-      loadPriceHistory();
+    setQuantityInput(liveQuantity.toString());
+  }, [liveQuantity]);
+
+  // Dirty tracking for beforeRemove
+  const isDirtyRef = useRef(false);
+  const mountedRef = useRef(false);
+  const loadingRef = useRef(true); // starts true, set false after first load
+  const savedRef = useRef(false);
+
+  // Mark dirty on any field change (but not on initial mount)
+  useEffect(() => {
+    if (!mountedRef.current) {
+      mountedRef.current = true;
+      return;
     }
-    getLists().then(setLists);
-    getCategories().then(setCategories);
-    setSelectedListId(inventoryItem?.listId ?? 1);
-    setSelectedCategoryId(inventoryItem?.categoryId ?? null);
+    if (loadingRef.current) return;
+    isDirtyRef.current = true;
+  }, [name, notes, selectedCategoryId, selectedListId]);
+
+  const handleSave = useCallback(async () => {
+    if (!inventoryItem?.id) return;
+    try {
+      await updateInventoryItem(inventoryItem.id, liveQuantity, notes);
+
+      if (name !== inventoryItem.productName) {
+        await updateProductName(inventoryItem.productId, name);
+      }
+      if (selectedCategoryId !== (inventoryItem.categoryId ?? null)) {
+        await updateProductCategory(inventoryItem.productId, selectedCategoryId!);
+      }
+      if (selectedListId !== inventoryItem.listId) {
+        await updateInventoryItemList(inventoryItem.id, selectedListId);
+      }
+
+      savedRef.current = true;
+      isDirtyRef.current = false;
+    } catch (error) {
+      console.error('Erro ao salvar:', error);
+    }
+  }, [inventoryItem, liveQuantity, notes, name, selectedCategoryId, selectedListId]);
+
+  const handleSaveAndGoBack = useCallback(async () => {
+    await handleSave();
+    navigation.goBack();
+  }, [handleSave, navigation]);
+
+  const loadAll = useCallback(async () => {
+    if (!inventoryItem) return;
+    loadingRef.current = true;
+
+    const [
+      historyData, 
+      listsData, 
+      categoriesData, 
+      sli, 
+      consumptionStats,
+      defaultStoreMode,
+      defaultStoreId,
+    ] = await Promise.all([
+      getInventoryHistory(inventoryItem.id),
+      getLists(),
+      getCategories(),
+      getShoppingListItemForInventoryItem(inventoryItem.id),
+      getProductConsumptionStats(inventoryItem.id, inventoryItem.productId),
+      getSetting('defaultStoreMode'),
+      getSetting('defaultStoreId'),
+    ]);
+
+    setHistory(historyData);
+    setLists(listsData);
+    setCategories(categoriesData);
+    setShoppingListItem(sli);
+    setStats(consumptionStats);
+
+    // Load price history
+    const ph = await getPriceHistory(inventoryItem.productId);
+    setPriceHistory(ph);
+
+    // Determine suggested price
+    if (sli?.price) {
+      setSuggestedPrice(sli.price);
+      setPriceInput(sli.price.toFixed(2));
+    } else if (defaultStoreMode === 'fixed' && defaultStoreId) {
+      const storePrice = await getLastUnitPriceForProductAtStore(inventoryItem.productId, parseInt(defaultStoreId));
+      if (storePrice) { setSuggestedPrice(storePrice); setPriceInput(storePrice.toFixed(2)); return; }
+    }
+    const lastPrice = await getLastUnitPriceForProduct(inventoryItem.productId);
+    if (lastPrice) { setSuggestedPrice(lastPrice); setPriceInput(lastPrice.toFixed(2)); }
+
+    // Reset dirty after load
+    isDirtyRef.current = false;
+    loadingRef.current = false;
+  }, [inventoryItem]);
+
+  useFocusEffect(useCallback(() => { loadAll(); }, [loadAll]));
+
+  // beforeRemove guard
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+      if (!isDirtyRef.current || savedRef.current) return;
+      e.preventDefault();
+      Alert.alert(
+        'Sair sem salvar?',
+        'Você tem alterações não salvas.',
+        [
+          { text: 'Descartar', style: 'destructive', onPress: () => {
+            isDirtyRef.current = false;
+            navigation.dispatch(e.data.action);
+          }},
+          { text: 'Salvar', onPress: async () => {
+            await handleSave();
+            navigation.dispatch(e.data.action);
+          }},
+        ]
+      );
+    });
+    return unsubscribe;
+  }, [navigation, handleSave]);
+
+  const handleChangeList = useCallback(async (newListId: number) => {
+    setSelectedListId(newListId);
+    setListModalVisible(false);
+    isDirtyRef.current = true;
   }, []);
 
-  // Refresh data when screen gains focus to show latest changes
-  useFocusEffect(
-    useCallback(() => {
-      if (inventoryItem) {
-        setQuantity(inventoryItem.quantity.toString());
-        setNotes(inventoryItem.notes || "");
-        setName(inventoryItem.productName || "");
-        setSelectedListId(inventoryItem.listId ?? 1);
-        setSelectedCategoryId(inventoryItem.categoryId ?? null);
-        loadHistory();
-        loadPriceHistory();
-      }
-    }, [inventoryItem])
-  );
+  const handleCategorySelect = useCallback((categoryId: number) => {
+    setSelectedCategoryId(categoryId);
+    setCategoryModalVisible(false);
+    isDirtyRef.current = true;
+  }, []);
 
-  const loadHistory = async () => {
-    if (inventoryItem?.productName) {
-      try {
-        const data = await getInventoryHistory(inventoryItem.id);
-        setHistory(data || []);
-      } catch (error) {
-        console.error("Erro ao carregar histórico:", error);
-      }
+  const handleCategoryCreate = useCallback(async (categoryName: string) => {
+    const newCategoryId = await addCategory(categoryName);
+    setSelectedCategoryId(newCategoryId);
+    const updatedCategories = await getCategories();
+    setCategories(updatedCategories);
+    setCategoryModalVisible(false);
+    isDirtyRef.current = true;
+  }, []);
+
+  const handleToggleShoppingList = useCallback(async () => {
+    if (!inventoryItem) return;
+    if (shoppingListItem) {
+      await deleteShoppingListItem(shoppingListItem.id);
+      setShoppingListItem(null);
+    } else {
+      await addShoppingListItem(inventoryItem.listId, inventoryItem.productName, 1, suggestedPrice || undefined);
+      const sli = await getShoppingListItemForInventoryItem(inventoryItem.id);
+      setShoppingListItem(sli);
     }
-  };
+  }, [inventoryItem, shoppingListItem, suggestedPrice]);
 
-  const loadPriceHistory = async () => {
-    if (!inventoryItem?.productId) return;
-
-    try {
-      const db = getDb();
-      const result = await db.getAllAsync(`
-        SELECT 
-          ii.createdAt as date,
-          ii.unitPrice as price,
-          s.name as storeName
-        FROM invoice_items ii
-        JOIN invoices i ON ii.invoiceId = i.id
-        LEFT JOIN stores s ON i.storeId = s.id
-        WHERE ii.productId = ?
-        ORDER BY ii.createdAt DESC
-        LIMIT 20
-      `, [inventoryItem.productId]);
-
-      setPriceHistory(result as PriceHistory[]);
-    } catch (error) {
-      console.error("Erro ao carregar histórico de preços:", error);
+  const handlePriceSave = useCallback(async () => {
+    const parsed = parseFloat(priceInput.replace(',', '.'));
+    if (isNaN(parsed)) return;
+    setSuggestedPrice(parsed);
+    setEditingPrice(false);
+    if (shoppingListItem) {
+      await updateShoppingListItem(shoppingListItem.id, { price: parsed });
+      setShoppingListItem(prev => prev ? { ...prev, price: parsed } : null);
     }
-  };
+  }, [priceInput, shoppingListItem]);
 
-  const handleUpdate = async () => {
-    if (inventoryItem?.id) {
-      try {
-        await updateInventoryItem(inventoryItem.id, parseInt(quantity), notes);
-        navigation.goBack();
-      } catch (error) {
-        console.error("Erro ao atualizar produto:", error);
-      }
-    }
-  };
+  const handleDelete = useCallback(() => {
+    Alert.alert(
+      'Confirmar Exclusão',
+      `Excluir ${name} do estoque?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Excluir', style: 'destructive', onPress: async () => {
+          await deleteInventoryItem(inventoryItem!.id);
+          navigation.goBack();
+        }},
+      ]
+    );
+  }, [name, inventoryItem, navigation]);
 
-  const handleNameUpdate = async (newName: string) => {
-    if (inventoryItem?.id) {
-      try {
-        setName(newName);
-        await updateProductName(inventoryItem.productId, newName);
-      } catch (error) {
-        console.error("Erro ao atualizar nome do produto:", error);
-      }
-    }
-  };
-
-  const handleDelete = async () => {
-    if (inventoryItem?.id) {
-      Alert.alert(
-        "Confirmar Exclusão",
-        `Tem certeza que deseja excluir ${inventoryItem.productName}?`,
-        [
-          {
-            text: "Cancelar",
-            style: "cancel",
-          },
-          {
-            text: "Excluir",
-            onPress: async () => {
-              try {
-                await deleteInventoryItem(inventoryItem.id);
-                navigation.goBack();
-              } catch (error) {
-                console.error("Erro ao deletar produto:", error);
-              }
-            },
-          },
-        ],
-        { cancelable: true }
-      );
-    }
-  };
-
-  const formatChartLabel = (dateString: string) => {
-    return format(parseISO(dateString + 'T00:00:00'), "dd/MM", { locale: ptBR });
-  };
-
-  const formatHistoryDate = (dateString: string) => {
-    return format(parseISO(dateString + 'T00:00:00'), "dd/MM HH:mm", { locale: ptBR });
-  };
-
-  const formatPriceDate = (dateString: string) => {
-    return format(parseISO(dateString), "dd/MM/yyyy HH:mm", { locale: ptBR });
-  };
+  const formatCurrency = (v: number) => `R$ ${v.toFixed(2).replace('.', ',')}`;
+  const formatDate = (d: string) => format(parseISO(d.includes('T') ? d : d + 'T00:00:00'), 'dd/MM', { locale: ptBR });
+  const formatFullDate = (d: string) => format(parseISO(d.includes('T') ? d : d + 'T00:00:00'), 'dd/MM/yyyy', { locale: ptBR });
 
   const chartData = {
-    labels: [...history]
-      .reverse()
-      .slice(-7)
-      .map((h) => formatChartLabel(h.date)),
-    datasets: [
-      {
-        data: [...history]
-          .reverse()
-          .slice(-7)
-          .map((h) => h.quantity),
-      },
-    ],
+    labels: [...history].reverse().slice(-7).map(h => formatDate(h.date)),
+    datasets: [{ data: [...history].reverse().slice(-7).map(h => h.quantity) }],
   };
 
   const chartConfig = {
-    backgroundColor: '#ffffff',
-    backgroundGradientFrom: '#ffffff',
-    backgroundGradientTo: '#ffffff',
+    backgroundColor: theme.colors.surface,
+    backgroundGradientFrom: theme.colors.surface,
+    backgroundGradientTo: theme.colors.surface,
     decimalPlaces: 0,
-    color: (opacity = 1) => `rgba(33, 150, 243, ${opacity})`,
-    labelColor: () => '#666666',
-    style: { borderRadius: 16 },
-    propsForDots: { r: '4', strokeWidth: '2', stroke: '#2196F3' }
-  };
-
-  const handleChangeList = async (newListId: number) => {
-    if (inventoryItem?.id && newListId !== selectedListId) {
-      await updateInventoryItemList(inventoryItem.id, newListId);
-      setSelectedListId(newListId);
-      navigation.setParams({ inventoryItem: { ...inventoryItem, listId: newListId } });
-    }
-    setListModalVisible(false);
-  };
-
-  const handleCategorySelect = async (categoryId: number) => {
-    if (inventoryItem?.productId) {
-      await updateProductCategory(inventoryItem.productId, categoryId);
-      setSelectedCategoryId(categoryId);
-    }
-    setCategoryModalVisible(false);
-  };
-
-  const handleCategoryCreate = async (categoryName: string) => {
-    try {
-      const newCategoryId = await addCategory(categoryName);
-      if (inventoryItem?.productId) {
-        await updateProductCategory(inventoryItem.productId, newCategoryId);
-        setSelectedCategoryId(newCategoryId);
-      }
-      // Refresh categories list
-      const updatedCategories = await getCategories();
-      setCategories(updatedCategories);
-    } catch (error) {
-      console.error("Erro ao criar categoria:", error);
-    }
-    setCategoryModalVisible(false);
-  };
-
-  const getQuantityDiff = (current: number, previous: number | undefined) => {
-    if (previous === undefined) return null;
-    const diff = current - previous;
-    return diff > 0 ? `+${diff}` : diff.toString();
-  };
-
-  const getQuantityDiffColor = (diff: string | null) => {
-    if (!diff) return '#666';
-    return diff.startsWith('+') ? '#4CAF50' : '#F44336';
+    color: (opacity = 1) => `rgba(${hexToRgb(theme.colors.primary)}, ${opacity})`,
+    labelColor: () => theme.colors.onSurfaceVariant,
+    propsForDots: { r: '4', strokeWidth: '2', stroke: theme.colors.primary },
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }}>
       <ContextualHeader
-        listName={name}
-        onListNameSave={handleNameUpdate}
+        listName={inventoryItem?.listId ? lists.find(l => l.id === inventoryItem.listId)?.name ?? '' : ''}
         onListDelete={handleDelete}
       />
 
-      <ScrollView style={styles.scrollView}>
-        <Card style={styles.card}>
-          <Card.Content>
-            <View style={styles.chipsRow}>
-              <Chip
-                icon="format-list-bulleted"
-                onPress={() => setListModalVisible(true)}
-                style={styles.chip}
-              >
-                {lists.find((l) => l.id === selectedListId)?.name || "Selecionar Lista"}
-              </Chip>
-              
-              <Chip
-                icon="tag"
-                onPress={() => setCategoryModalVisible(true)}
-                style={styles.chip}
-              >
-                {categories.find((c) => c.id === selectedCategoryId)?.name || "Sem categoria"}
-              </Chip>
-            </View>
+      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32 }}>
 
-            <PaperTextInput
-              label="Quantidade"
-              value={quantity}
-              onChangeText={setQuantity}
-              keyboardType="numeric"
-              style={styles.input}
-              mode="outlined"
-              testID="quantity-input"
+        {/* Name row */}
+        <View style={localStyles.nameRow}>
+          {isEditingName ? (
+            <RNTextInput
+              value={name}
+              onChangeText={setName}
+              autoFocus
+              onBlur={() => setIsEditingName(false)}
+              style={[localStyles.nameInput, { 
+                color: theme.colors.onSurface,
+                borderBottomColor: theme.colors.primary,
+              }]}
             />
+          ) : (
+            <Pressable onPress={() => setIsEditingName(true)} style={{ flex: 1 }}>
+              <Text style={[localStyles.nameText, { color: theme.colors.onSurface }]}>
+                {name}
+              </Text>
+            </Pressable>
+          )}
+          <IconButton icon="pencil-outline" size={20} onPress={() => setIsEditingName(true)} />
+          <IconButton icon="delete-outline" size={20} iconColor={theme.colors.error} onPress={handleDelete} />
+        </View>
 
-            <PaperTextInput
-              label="Observações"
-              value={notes}
-              onChangeText={setNotes}
-              multiline
-              numberOfLines={3}
-              style={styles.input}
-              mode="outlined"
-              testID="notes-input"
-            />
-
-            <Button
-              mode="contained"
-              onPress={handleUpdate}
-              style={styles.saveButton}
-              disabled={!quantity}
-              testID="update-button"
+        {/* Quantity row */}
+        <View style={localStyles.quantityRow}>
+          <Text style={[localStyles.label, { color: theme.colors.onSurfaceVariant }]}>
+            Quantidade
+          </Text>
+          <View style={localStyles.quantityControls}>
+            <Pressable
+              onPress={() => updateInventoryItemQuantity(Math.max(0, liveQuantity - 1))}
+              onLongPress={() => startContinuousAdjustment(false)}
+              onPressOut={stopContinuousAdjustment}
+              style={[localStyles.qtyButton, { borderColor: theme.colors.outline }]}
             >
-              Salvar
-            </Button>
-          </Card.Content>
-        </Card>
+              <MaterialCommunityIcons name="minus" size={20} color={theme.colors.primary} />
+            </Pressable>
+            <RNTextInput
+              value={quantityInput}
+              onChangeText={setQuantityInput}
+              onBlur={() => updateInventoryItemQuantity(parseInt(quantityInput) || 0)}
+              keyboardType="numeric"
+              style={[localStyles.qtyInput, { 
+                color: theme.colors.onSurface,
+                borderColor: theme.colors.outline,
+              }]}
+            />
+            <Pressable
+              onPress={() => updateInventoryItemQuantity(liveQuantity + 1)}
+              onLongPress={() => startContinuousAdjustment(true)}
+              onPressOut={stopContinuousAdjustment}
+              style={[localStyles.qtyButton, { borderColor: theme.colors.outline }]}
+            >
+              <MaterialCommunityIcons name="plus" size={20} color={theme.colors.primary} />
+            </Pressable>
 
-        <Card style={styles.card}>
-          <Card.Content>
-            <Text variant="titleMedium" style={styles.subtitle}>
-              Histórico de Quantidades
-            </Text>
-
-            {history.length > 1 ? (
-              <>
-                <LineChart
-                  data={chartData}
-                  width={Dimensions.get("window").width - 64}
-                  height={220}
-                  chartConfig={chartConfig}
-                  bezier
-                  style={styles.chart}
+            {/* Price + shopping list inline */}
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
+              <MaterialCommunityIcons name="currency-usd" size={16} color={theme.colors.onSurfaceVariant} />
+              {editingPrice ? (
+                <RNTextInput
+                  value={priceInput}
+                  onChangeText={setPriceInput}
+                  keyboardType="decimal-pad"
+                  autoFocus
+                  onBlur={handlePriceSave}
+                  style={[localStyles.priceInput, { 
+                    color: theme.colors.onSurface,
+                    borderBottomColor: theme.colors.primary,
+                  }]}
                 />
-                <Divider style={styles.divider} />
-              </>
-            ) : history.length === 1 ? (
-              <Text style={styles.singlePointText}>Apenas um ponto no histórico</Text>
-            ) : (
-              <Text style={styles.emptyText}>Nenhum histórico de quantidades disponível</Text>
-            )}
+              ) : (
+                <Pressable onPress={() => setEditingPrice(true)}>
+                  <Text style={{ color: theme.colors.onSurface, fontSize: 14 }}>
+                    {suggestedPrice > 0 ? formatCurrency(suggestedPrice) : '—'}
+                  </Text>
+                </Pressable>
+              )}
+              <Pressable onPress={handleToggleShoppingList}>
+                <MaterialCommunityIcons
+                  name={shoppingListItem ? 'cart-check' : 'cart-plus'}
+                  size={22}
+                  color={shoppingListItem ? theme.colors.primary : theme.colors.onSurfaceVariant}
+                />
+              </Pressable>
+            </View>
+          </View>
+        </View>
 
-            {history.length > 0 && (
-              <View style={styles.historyList}>
-                {history.map((item, index) => {
-                  const previousQuantity = history[index + 1]?.quantity;
-                  const diff = getQuantityDiff(item.quantity, previousQuantity);
+        {/* Category + List chips */}
+        <View style={localStyles.chipsRow}>
+          <Chip
+            icon="tag-outline"
+            onPress={() => setCategoryModalVisible(true)}
+            style={localStyles.chip}
+            mode="outlined"
+          >
+            {categories.find(c => c.id === selectedCategoryId)?.name || 'Sem categoria'}
+          </Chip>
+          <Chip
+            icon="format-list-bulleted"
+            onPress={() => setListModalVisible(true)}
+            style={localStyles.chip}
+            mode="outlined"
+          >
+            {lists.find(l => l.id === selectedListId)?.name || 'Lista'}
+          </Chip>
+        </View>
 
-                  return (
-                    <View key={item.id} style={styles.historyItem}>
-                      <View style={styles.historyItemLeft}>
-                        <Text variant="bodyMedium">
-                          {formatHistoryDate(item.date)}
-                        </Text>
-                        <Text variant="bodyMedium">
-                          Quantidade: {item.quantity}
-                        </Text>
-                      </View>
-                      {diff && (
-                        <Text style={[styles.quantityDiff, { color: getQuantityDiffColor(diff) }]}>
-                          {diff}
-                        </Text>
-                      )}
-                    </View>
-                  );
-                })}
+        {/* Notes */}
+        <RNTextInput
+          value={notes}
+          onChangeText={setNotes}
+          placeholder="Observações..."
+          placeholderTextColor={theme.colors.outline}
+          multiline
+          style={[localStyles.notesInput, { 
+            color: theme.colors.onSurface,
+            borderColor: theme.colors.outlineVariant,
+          }]}
+        />
+
+        {/* Save + Delete buttons */}
+        <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+          <Button
+            mode="contained"
+            onPress={handleSaveAndGoBack}
+            style={{ flex: 1 }}
+            icon="content-save"
+          >
+            Salvar alterações
+          </Button>
+        </View>
+
+        {/* Derived stats */}
+        {stats && (
+          <View style={[localStyles.statsRow, { borderColor: theme.colors.outlineVariant }]}>
+            {stats.avgWeeklyConsumption !== null && (
+              <View style={localStyles.statItem}>
+                <MaterialCommunityIcons name="trending-down" size={16} color={theme.colors.onSurfaceVariant} />
+                <Text style={[localStyles.statText, { color: theme.colors.onSurfaceVariant }]}>
+                  ~{stats.avgWeeklyConsumption.toFixed(1)}/semana
+                </Text>
               </View>
             )}
-          </Card.Content>
-        </Card>
+            {stats.avgPrice90d !== null && (
+              <View style={localStyles.statItem}>
+                <MaterialCommunityIcons name="tag-outline" size={16} color={theme.colors.onSurfaceVariant} />
+                <Text style={[localStyles.statText, { color: theme.colors.onSurfaceVariant }]}>
+                  Média: {formatCurrency(stats.avgPrice90d)}
+                </Text>
+              </View>
+            )}
+            {stats.lowestPrice90d !== null && (
+              <View style={localStyles.statItem}>
+                <MaterialCommunityIcons name="sale" size={16} color={theme.colors.onSurfaceVariant} />
+                <Text style={[localStyles.statText, { color: theme.colors.onSurfaceVariant }]}>
+                  Menor: {formatCurrency(stats.lowestPrice90d.price)} ({stats.lowestPrice90d.storeName})
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
 
-        <Card style={styles.card}>
-          <Card.Content>
-            <Text variant="titleMedium" style={styles.subtitle}>
-              Histórico de Preços
-            </Text>
+        <Divider style={{ marginVertical: 16 }} />
 
-            {priceHistory.length > 0 ? (
-              <View style={styles.priceHistoryList}>
-                {priceHistory.map((item, index) => (
-                  <View key={index} style={styles.priceHistoryRow}>
-                    <View style={styles.priceHistoryTopRow}>
-                      <Text variant="bodyMedium">
-                        {formatPriceDate(item.date)}
-                      </Text>
-                      <Text variant="bodyMedium">
-                        R$ {item.price != null ? item.price.toFixed(2) : 'Preço não informado'}
-                      </Text>
-                    </View>
-                    <Text 
-                      variant="bodyMedium" 
-                      style={styles.storeName}
-                      numberOfLines={1}
-                      ellipsizeMode="tail"
-                    >
-                      {item.storeName || "Loja não informada"}
+        {/* Quantity history chart */}
+        <Pressable
+          onPress={() => setQuantityHistoryCollapsed(p => !p)}
+          style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}
+        >
+          <Text variant="labelMedium" style={{ 
+            color: theme.colors.onSurfaceVariant,
+            textTransform: 'uppercase',
+            letterSpacing: 0.5,
+          }}>
+            Histórico de Quantidades
+          </Text>
+          <MaterialCommunityIcons
+            name={quantityHistoryCollapsed ? 'chevron-down' : 'chevron-up'}
+            size={18}
+            color={theme.colors.onSurfaceVariant}
+          />
+        </Pressable>
+        {!quantityHistoryCollapsed && history.length > 1 && (
+          <>
+            <LineChart
+              data={chartData}
+              width={Dimensions.get('window').width - 32}
+              height={200}
+              chartConfig={chartConfig}
+              bezier
+              style={{ borderRadius: 8, marginBottom: 12 }}
+            />
+            {history.map((item, index) => {
+              const next = history[index + 1];
+              const diff = next ? item.quantity - next.quantity : null;
+              return (
+                <View key={item.id} style={[localStyles.historyRow, { borderBottomColor: theme.colors.outlineVariant }]}>
+                  <Text style={{ color: theme.colors.onSurfaceVariant, fontSize: 13 }}>
+                    {formatDate(item.date)}
+                  </Text>
+                  <Text style={{ color: theme.colors.onSurface, fontSize: 13, fontWeight: '500' }}>
+                    {item.quantity}
+                  </Text>
+                  {diff !== null && (
+                    <Text style={{ 
+                      fontSize: 12, 
+                      color: diff > 0 ? theme.colors.error : diff < 0 ? '#4CAF50' : theme.colors.outline,
+                      fontWeight: '600',
+                    }}>
+                      {diff > 0 ? `-${diff}` : diff < 0 ? `+${Math.abs(diff)}` : '—'}
                     </Text>
-                  </View>
-                ))}
+                  )}
+                  {item.notes ? (
+                    <Text style={{ color: theme.colors.outline, fontSize: 11, fontStyle: 'italic', flex: 1, textAlign: 'right' }}>
+                      {item.notes}
+                    </Text>
+                  ) : null}
+                </View>
+              );
+            })}
+          </>
+        )}
+        {!quantityHistoryCollapsed && history.length <= 1 && (
+          <Text style={{ color: theme.colors.outline, textAlign: 'center', marginVertical: 16 }}>
+            Histórico insuficiente
+          </Text>
+        )}
+
+        {/* Price history — collapsible */}
+        <Pressable
+          onPress={() => setPriceHistoryCollapsed(p => !p)}
+          style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}
+        >
+          <Text variant="labelMedium" style={{ 
+            color: theme.colors.onSurfaceVariant,
+            textTransform: 'uppercase',
+            letterSpacing: 0.5,
+          }}>
+            Histórico de Preços
+          </Text>
+          <MaterialCommunityIcons
+            name={priceHistoryCollapsed ? 'chevron-down' : 'chevron-up'}
+            size={18}
+            color={theme.colors.onSurfaceVariant}
+          />
+        </Pressable>
+        {!priceHistoryCollapsed && (
+          <View>
+            {priceHistory.length > 0 ? priceHistory.map((item, index) => (
+              <View key={index} style={[localStyles.historyRow, { borderBottomColor: theme.colors.outlineVariant }]}>
+                <Text style={{ color: theme.colors.onSurfaceVariant, fontSize: 13 }}>
+                  {formatFullDate(item.date)}
+                </Text>
+                <Text style={{ color: theme.colors.onSurface, fontSize: 13 }}>
+                  {formatCurrency(item.price)}
+                </Text>
+                <Text style={{ color: theme.colors.outline, fontSize: 12, fontStyle: 'italic' }}>
+                  {item.storeName || '—'}
+                </Text>
               </View>
-            ) : (
-              <Text style={styles.emptyText}>Nenhum histórico de preços disponível</Text>
+            )) : (
+              <Text style={{ color: theme.colors.outline, textAlign: 'center', marginVertical: 16 }}>
+                Nenhum histórico de preços
+              </Text>
             )}
-          </Card.Content>
-        </Card>
+          </View>
+        )}
+
       </ScrollView>
 
       <ItemPickerDialog
@@ -427,7 +590,6 @@ export default function EditInventoryItem() {
         onSelect={handleChangeList}
         title="Escolher Lista"
       />
-
       <SearchablePickerDialog
         visible={categoryModalVisible}
         onDismiss={() => setCategoryModalVisible(false)}
@@ -442,86 +604,112 @@ export default function EditInventoryItem() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f5f5f5",
-  },
-  scrollView: {
-    flex: 1,
-  },
-  card: {
-    margin: 16,
-  },
-  input: {
+// Helper to convert hex color to rgb for chart
+function hexToRgb(hex: string): string {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return result
+    ? `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}` 
+    : '0, 0, 0';
+}
+
+const localStyles = StyleSheet.create({
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 16,
   },
-  chipsRow: {
-    flexDirection: "row",
+  nameText: {
+    fontSize: 22,
+    fontWeight: '700',
+    flex: 1,
+  },
+  nameInput: {
+    flex: 1,
+    fontSize: 22,
+    fontWeight: '700',
+    borderBottomWidth: 2,
+    paddingBottom: 4,
+  },
+  label: {
+    fontSize: 13,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  quantityRow: {
+    marginBottom: 16,
+  },
+  quantityControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  qtyButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  qtyInput: {
+    width: 64,
+    height: 40,
+    borderWidth: 1,
+    borderRadius: 8,
+    textAlign: 'center',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  priceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
     marginBottom: 16,
+  },
+  priceInput: {
+    fontSize: 15,
+    borderBottomWidth: 2,
+    minWidth: 80,
+    paddingBottom: 2,
+  },
+  chipsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
   },
   chip: {
     flex: 1,
   },
-  saveButton: {
-    marginTop: 8,
-  },
-  subtitle: {
-    marginBottom: 16,
-  },
-  chart: {
-    marginVertical: 8,
-    borderRadius: 16,
-  },
-  divider: {
-    marginVertical: 16,
-  },
-  historyList: {
-    marginTop: 16,
-  },
-  historyItem: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
-  },
-  historyItemLeft: {
-    flex: 1,
-  },
-  quantityDiff: {
-    fontWeight: "600",
+  notesInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 10,
     fontSize: 14,
+    minHeight: 60,
+    marginBottom: 8,
+    textAlignVertical: 'top',
   },
-  singlePointText: {
-    textAlign: "center",
-    color: "#666",
-    fontStyle: "italic",
-    marginVertical: 16,
-  },
-  emptyText: {
-    textAlign: "center",
-    color: "#666",
-    marginVertical: 32,
-  },
-  priceHistoryList: {
+  statsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
     marginTop: 16,
+    paddingTop: 12,
+    borderTopWidth: 1,
   },
-  priceHistoryRow: {
+  statItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  statText: {
+    fontSize: 12,
+  },
+  historyRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
-  },
-  priceHistoryTopRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 4,
-  },
-  storeName: {
-    fontStyle: "italic",
-    color: "#666",
   },
 });
