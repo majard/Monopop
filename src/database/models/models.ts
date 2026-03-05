@@ -2,6 +2,7 @@ export interface Product {
   id: number;
   name: string; // "Rice", "Coffee", "Shampoo"
   categoryId?: number; // FK to Category 
+  categoryName?: string | null;
   createdAt: string;
   updatedAt: string;
 }

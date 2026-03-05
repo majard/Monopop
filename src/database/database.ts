@@ -292,7 +292,7 @@ export const getProducts = async (): Promise<Product[]> => {
   const db = getDb();
   try {
     const result = await db.getAllAsync<Product>(
-      "SELECT * FROM products ORDER BY name ASC;"
+      "SELECT p.*, c.name as categoryName FROM products p LEFT JOIN categories c ON p.categoryId = c.id ORDER BY p.name ASC;"
     );
     return result;
   } catch (error: any) {

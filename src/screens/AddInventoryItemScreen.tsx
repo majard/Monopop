@@ -15,7 +15,7 @@ import { RootStackParamList } from '../types/navigation';
 import { Product } from '../database/models';
 import { createHomeScreenStyles } from '../styles/HomeScreenStyles';
 import SearchBar from '../components/SearchBar';
-import { sortInventoryItems, SortOrder } from '../utils/sortUtils';
+import { sortItems, SortOrder } from '../utils/sortUtils';
 import { preprocessName, calculateSimilarity } from '../utils/similarityUtils';
 import { useListContext } from '../context/ListContext';
 import { ProductSearchRow } from '../components/ProductSearchRow';
@@ -156,10 +156,14 @@ export default function AddInventoryItemScreen() {
       }
       return calculateSimilarity(processedName, processedQuery) >= searchSimilarityThreshold;
     });
-    return filtered
-      .map(p => ({ ...p, productName: p.name, sortOrder: p.order }))
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [allProducts, existingInventoryProductIds, justAdded, searchQuery]);
+    const mapped = filtered.map(p => ({ 
+      ...p, 
+      productName: p.name, 
+      sortOrder: p.sortOrder ?? 0,
+      categoryName: p.categoryName,
+    }));
+    return sortItems(mapped, sortOrder, searchQuery);
+  }, [allProducts, existingInventoryProductIds, justAdded, searchQuery, sortOrder]);
 
   const handleAddNewProduct = useCallback(async () => {
     if (!searchQuery.trim()) return;
