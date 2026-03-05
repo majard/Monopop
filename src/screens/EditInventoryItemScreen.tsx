@@ -40,6 +40,8 @@ import ContextualHeader from '../components/ContextualHeader';
 import { ItemPickerDialog } from '../components/ItemPickerDialog';
 import { SearchablePickerDialog } from '../components/SearchablePickerDialog';
 import { useInventoryItem } from '../hooks/useInventoryItem';
+import QuantityHistorySection from '../components/QuantityHistorySection';
+import PriceHistorySection from '../components/PriceHistorySection';
 
 type EditInventoryItemProps = NativeStackScreenProps<RootStackParamList, 'EditInventoryItem'>;
 
@@ -306,21 +308,10 @@ export default function EditInventoryItem() {
 
   const formatCurrency = (v: number) => `R$ ${v.toFixed(2).replace('.', ',')}`;
   const formatDate = (d: string) => format(parseISO(d.includes('T') ? d : d + 'T00:00:00'), 'dd/MM', { locale: ptBR });
-  const formatFullDate = (d: string) => format(parseISO(d.includes('T') ? d : d + 'T00:00:00'), 'dd/MM/yyyy', { locale: ptBR });
 
   const chartData = {
     labels: [...history].reverse().slice(-7).map(h => formatDate(h.date)),
     datasets: [{ data: [...history].reverse().slice(-7).map(h => h.quantity) }],
-  };
-
-  const chartConfig = {
-    backgroundColor: theme.colors.surface,
-    backgroundGradientFrom: theme.colors.surface,
-    backgroundGradientTo: theme.colors.surface,
-    decimalPlaces: 0,
-    color: (opacity = 1) => `rgba(${hexToRgb(theme.colors.primary)}, ${opacity})`,
-    labelColor: () => theme.colors.onSurfaceVariant,
-    propsForDots: { r: '4', strokeWidth: '2', stroke: theme.colors.primary },
   };
 
   return (
@@ -499,109 +490,33 @@ export default function EditInventoryItem() {
 
         <Divider style={{ marginVertical: 16 }} />
 
-        {/* Quantity history chart */}
-        <Pressable
-          onPress={() => setQuantityHistoryCollapsed(p => !p)}
-          style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}
-        >
-          <Text variant="labelMedium" style={{
-            color: theme.colors.onSurfaceVariant,
-            textTransform: 'uppercase',
-            letterSpacing: 0.5,
-          }}>
-            Histórico de Quantidades
-          </Text>
-          <MaterialCommunityIcons
-            name={quantityHistoryCollapsed ? 'chevron-down' : 'chevron-up'}
-            size={18}
-            color={theme.colors.onSurfaceVariant}
-          />
-        </Pressable>
-        {!quantityHistoryCollapsed && history.length > 1 && (
-          <>
-            <LineChart
-              data={chartData}
-              width={Dimensions.get('window').width - 32}
-              height={200}
-              chartConfig={chartConfig}
-              bezier
-              style={{ borderRadius: 8, marginBottom: 12 }}
-            />
-            {history.map((item, index) => {
-              const next = history[index + 1];
-              const diff = next ? item.quantity - next.quantity : null;
-              return (
-                <View key={item.id} style={[localStyles.historyRow, { borderBottomColor: theme.colors.outlineVariant }]}>
-                  <Text style={{ color: theme.colors.onSurfaceVariant, fontSize: 13 }}>
-                    {formatDate(item.date)}
-                  </Text>
-                  <Text style={{ color: theme.colors.onSurface, fontSize: 13, fontWeight: '500' }}>
-                    {item.quantity}
-                  </Text>
-                  {diff !== null && (
-                    <Text style={{
-                      fontSize: 12,
-                      color: diff > 0 ? theme.colors.error : diff < 0 ? '#4CAF50' : theme.colors.outline,
-                      fontWeight: '600',
-                    }}>
-                      {diff > 0 ? `-${diff}` : diff < 0 ? `+${Math.abs(diff)}` : '—'}
-                    </Text>
-                  )}
-                  {item.notes ? (
-                    <Text style={{ color: theme.colors.outline, fontSize: 11, fontStyle: 'italic', flex: 1, textAlign: 'right' }}>
-                      {item.notes}
-                    </Text>
-                  ) : null}
-                </View>
-              );
-            })}
-          </>
-        )}
-        {!quantityHistoryCollapsed && history.length <= 1 && (
-          <Text style={{ color: theme.colors.outline, textAlign: 'center', marginVertical: 16 }}>
-            Histórico insuficiente
-          </Text>
-        )}
+        <QuantityHistorySection
+          history={history}
+          collapsed={quantityHistoryCollapsed}
+          onToggle={() => setQuantityHistoryCollapsed(p => !p)}
+          chartData={chartData}
+          themeColors={{
+            onSurfaceVariant: theme.colors.onSurfaceVariant,
+            onSurface: theme.colors.onSurface,
+            outline: theme.colors.outline,
+            outlineVariant: theme.colors.outlineVariant,
+            error: theme.colors.error,
+            primary: theme.colors.primary,
+            surface: theme.colors.surface,
+          }}
+        />
 
-        {/* Price history — collapsible */}
-        <Pressable
-          onPress={() => setPriceHistoryCollapsed(p => !p)}
-          style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}
-        >
-          <Text variant="labelMedium" style={{
-            color: theme.colors.onSurfaceVariant,
-            textTransform: 'uppercase',
-            letterSpacing: 0.5,
-          }}>
-            Histórico de Preços
-          </Text>
-          <MaterialCommunityIcons
-            name={priceHistoryCollapsed ? 'chevron-down' : 'chevron-up'}
-            size={18}
-            color={theme.colors.onSurfaceVariant}
-          />
-        </Pressable>
-        {!priceHistoryCollapsed && (
-          <View>
-            {priceHistory.length > 0 ? priceHistory.map((item, index) => (
-              <View key={index} style={[localStyles.historyRow, { borderBottomColor: theme.colors.outlineVariant }]}>
-                <Text style={{ color: theme.colors.onSurfaceVariant, fontSize: 13 }}>
-                  {formatFullDate(item.date)}
-                </Text>
-                <Text style={{ color: theme.colors.onSurface, fontSize: 13 }}>
-                  {formatCurrency(item.price)}
-                </Text>
-                <Text style={{ color: theme.colors.outline, fontSize: 12, fontStyle: 'italic' }}>
-                  {item.storeName || '—'}
-                </Text>
-              </View>
-            )) : (
-              <Text style={{ color: theme.colors.outline, textAlign: 'center', marginVertical: 16 }}>
-                Nenhum histórico de preços
-              </Text>
-            )}
-          </View>
-        )}
+        <PriceHistorySection
+          priceHistory={priceHistory}
+          collapsed={priceHistoryCollapsed}
+          onToggle={() => setPriceHistoryCollapsed(p => !p)}
+          themeColors={{
+            onSurfaceVariant: theme.colors.onSurfaceVariant,
+            onSurface: theme.colors.onSurface,
+            outline: theme.colors.outline,
+            outlineVariant: theme.colors.outlineVariant,
+          }}
+        />
 
       </ScrollView>
 
@@ -625,14 +540,6 @@ export default function EditInventoryItem() {
       />
     </SafeAreaView>
   );
-}
-
-// Helper to convert hex color to rgb for chart
-function hexToRgb(hex: string): string {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  return result
-    ? `${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}`
-    : '0, 0, 0';
 }
 
 const localStyles = StyleSheet.create({
