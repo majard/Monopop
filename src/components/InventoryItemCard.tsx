@@ -99,7 +99,7 @@ export const InventoryItemCard = ({
   );
 
   const cardContent = (
-    <Card.Content style={{ paddingVertical: 8 }}>
+    <Card.Content style={{ paddingVertical: 4, paddingHorizontal: 12 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
         {isSelectionMode && (
           <View style={{ marginRight: 8 }}>
@@ -150,7 +150,7 @@ export const InventoryItemCard = ({
 
   if (isSelectionMode) {
     return (
-      <Card style={[styles.card, { opacity: isActive ? 0.5 : 1, marginBottom: 8 }]}>
+      <Card style={[styles.card, { opacity: isActive ? 0.5 : 1, marginBottom: 4 }]}>
         <Pressable
           onPress={handleCardPress}
           onLongPress={handleLongPress}
@@ -163,7 +163,7 @@ export const InventoryItemCard = ({
   }
 
   return (
-    <View style={{ overflow: 'hidden', borderRadius: 12, marginBottom: 8 }}>
+    <View style={{ overflow: 'hidden', borderRadius: 12, marginBottom: 4, marginHorizontal: 8 }}>
       <Swipeable
         renderRightActions={renderSwipeActions}
         overshootLeft={false}

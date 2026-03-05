@@ -53,7 +53,7 @@ export default function InventoryList({
             onDragEnd={({data}) => handleInventoryItemOrderChange(data)}
             keyExtractor={(item) => item.id.toString()}
             renderItem={renderItem}
-            contentContainerStyle={styles.list}
+            contentContainerStyle={{ paddingBottom: 80, paddingTop: 8 }}
             testID="draggable-flatlist"
         />
     );
