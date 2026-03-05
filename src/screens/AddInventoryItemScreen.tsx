@@ -78,6 +78,7 @@ export default function AddInventoryItemScreen() {
   const justAddedRef = useRef<Map<number, number>>(new Map()); // productId -> inventoryItemId
   const [justAdded, setJustAdded] = useState<Map<number, number>>(new Map());
   const confirmedRef = useRef(false);
+  const flatListRef = useRef<FlatList>(null);
   const [sortOrder, setSortOrder] = useState<SortOrder>('custom');
   const { listName, handleListNameSave, handleListDelete } = useList(listId);
 
@@ -225,7 +226,7 @@ export default function AddInventoryItemScreen() {
     if (!searchQuery.trim()) return null;
     return (
       <Pressable onPress={handleAddNewProduct}>
-        <Surface style={{ marginBottom: 8, borderRadius: 8, elevation: 1 }}>
+        <Surface style={{ borderRadius: 8, elevation: 1, marginBottom: 8 }}>
           <View style={{
             flexDirection: 'row',
             alignItems: 'center',
@@ -264,19 +265,47 @@ export default function AddInventoryItemScreen() {
           placeholder="Buscar ou criar produto"
           autoFocus
         />
+        {searchQuery.trim() ? (
+          <Pressable onPress={handleAddNewProduct}>
+            <Surface style={{ borderRadius: 8, elevation: 1, marginBottom: 8 }}>
+              <View style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                paddingVertical: 12,
+                paddingHorizontal: 16,
+                gap: 12,
+              }}>
+                <Chip icon="plus" mode="outlined" onPress={handleAddNewProduct}>
+                  Criar produto "{searchQuery.trim()}"
+                </Chip>
+              </View>
+            </Surface>
+          </Pressable>
+        ) : null}
         <View style={styles.buttonRow}>
+          {justAdded.size > 0 ? (
+            <Chip
+              icon="arrow-up"
+              onPress={() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true })}
+              mode="flat"
+              style={{ backgroundColor: theme.colors.primaryContainer }}
+              textStyle={{ color: theme.colors.primary }}
+            >
+              {justAdded.size} {justAdded.size === 1 ? 'adicionado' : 'adicionados'}
+            </Chip>
+          ) : null}
           <SortMenu setSortOrder={setSortOrder} />
         </View>
       </View>
       <FlatList
+        ref={flatListRef}
         data={filteredProducts}
         keyExtractor={(item) => item.id.toString()}
         renderItem={renderInventoryRow}
         ListHeaderComponent={() => (
           <View>
-            {renderNewProductRow()}
             {renderJustAddedSection()}
-            {filteredProducts.length > 0 && (
+            {filteredProducts.length > 0 ? (
               <Text variant="labelMedium" style={{
                 paddingHorizontal: 4,
                 paddingBottom: 8,
@@ -286,7 +315,7 @@ export default function AddInventoryItemScreen() {
               }}>
                 Produtos
               </Text>
-            )}
+            ) : null}
           </View>
         )}
         contentContainerStyle={styles.list}

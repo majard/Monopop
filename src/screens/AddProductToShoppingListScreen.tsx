@@ -49,6 +49,7 @@ export default function AddProductToShoppingListScreen() {
   const sessionChangesRef = useRef<Map<number, { inventoryItemId: number; originalQuantity: number | null }>>(new Map());
   const [sessionChanges, setSessionChanges] = useState<Map<number, { inventoryItemId: number; originalQuantity: number | null }>>(new Map());
   const confirmedRef = useRef(false);
+  const flatListRef = useRef<FlatList>(null);
 
   const updateSessionChanges = useCallback((
     inventoryItemId: number, 
@@ -204,30 +205,6 @@ export default function AddProductToShoppingListScreen() {
     }
   }, [shoppingListByInventoryId, loadData, updateSessionChanges]);
 
-  const renderNewProductRow = useCallback(() => {
-    if (!searchQuery.trim()) return null;
-    return (
-      <Pressable onPress={handleAddNewProduct}>
-        <Surface style={{ marginBottom: 8, borderRadius: 8, elevation: 1 }}>
-          <View style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            paddingVertical: 12,
-            paddingHorizontal: 16,
-            gap: 12,
-          }}>
-            <Chip icon="plus" mode="outlined" onPress={handleAddNewProduct}>
-              Criar "{searchQuery.trim()}"
-            </Chip>
-            <Text style={{ color: theme.colors.onSurfaceVariant, fontSize: 13 }}>
-              novo produto
-            </Text>
-          </View>
-        </Surface>
-      </Pressable>
-    );
-  }, [searchQuery, handleAddNewProduct, theme]);
-
   const renderSessionChangesSection = useCallback(() => {
     if (sessionChanges.size === 0) return null;
     const changedItems = inventoryItems.filter(item => 
@@ -295,19 +272,50 @@ export default function AddProductToShoppingListScreen() {
           setSearchQuery={setSearchQuery}
           placeholder="Procurar ou incluir novo item"
         />
+        {searchQuery.trim() ? (
+          <Pressable onPress={handleAddNewProduct}>
+            <Surface style={{ borderRadius: 8, elevation: 1, marginBottom: 8 }}>
+              <View style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                paddingVertical: 12,
+                paddingHorizontal: 16,
+                gap: 12,
+              }}>
+                <Chip icon="plus" mode="outlined" onPress={handleAddNewProduct}>
+                  Criar "{searchQuery.trim()}"
+                </Chip>
+                <Text style={{ color: theme.colors.onSurfaceVariant, fontSize: 13 }}>
+                  novo produto
+                </Text>
+              </View>
+            </Surface>
+          </Pressable>
+        ) : null}
         <View style={styles.buttonRow}>
+          {sessionChanges.size > 0 ? (
+            <Chip
+              icon="arrow-up"
+              mode="flat"
+              onPress={() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true })}
+              style={{ backgroundColor: theme.colors.primaryContainer }}
+              textStyle={{ color: theme.colors.primary }}
+            >
+              {sessionChanges.size} {sessionChanges.size === 1 ? 'modificado' : 'modificados'}
+            </Chip>
+          ) : null}
           <SortMenu setSortOrder={setSortOrder} />
         </View>
       </View>
       <FlatList
+        ref={flatListRef}
         data={filteredAndSortedInventory}
         keyExtractor={(item) => item.id.toString()}
         renderItem={renderInventoryRow}
         ListHeaderComponent={() => (
           <View>
-            {renderNewProductRow()}
             {renderSessionChangesSection()}
-            {filteredAndSortedInventory.length > 0 && (
+            {filteredAndSortedInventory.length > 0 ? (
               <Text variant="labelMedium" style={{
                 paddingHorizontal: 4,
                 paddingBottom: 8,
@@ -317,7 +325,7 @@ export default function AddProductToShoppingListScreen() {
               }}>
                 Produtos
               </Text>
-            )}
+            ) : null}
           </View>
         )}
         contentContainerStyle={styles.list}
