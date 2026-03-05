@@ -22,25 +22,14 @@ export const ProductSearchRow = React.memo(({
   isOnList,
 }: ProductSearchRowProps) => {
   const theme = useTheme();
-  const isQtyOne = isOnList && listQuantity === 1;
 
   return (
     <Surface style={styles.surface}>
       <View style={styles.row}>
-        {/* Left — minus/delete or emoji */}
-        {isOnList ? (
-          <IconButton
-            icon={isQtyOne ? 'delete' : 'minus'}
-            size={24}
-            onPress={onMinus}
-            iconColor={theme.colors.error}
-            style={{ margin: 0 }}
-          />
-        ) : (
-          <View style={{ width: 48, height: 48, justifyContent: 'center', alignItems: 'center' }}>
-            <EmojiAvatar emoji={getEmojiForProduct(productName)} size="medium" />
-          </View>
-        )}
+        {/* Left — always emoji */}
+        <View style={{ width: 48, height: 48, justifyContent: 'center', alignItems: 'center' }}>
+          <EmojiAvatar emoji={getEmojiForProduct(productName)} size="medium" />
+        </View>
 
         {/* Center — name + stock */}
         <View style={styles.center}>
@@ -54,14 +43,24 @@ export const ProductSearchRow = React.memo(({
           ) : null}
         </View>
 
-        {/* Right — quantity + plus */}
+        {/* Right — remove + quantity + plus */}
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          {isOnList ? (
+            <IconButton
+              icon={listQuantity === 1 ? 'close' : 'minus'}
+              size={20}
+              onPress={onMinus}
+              iconColor={theme.colors.error}
+              style={{ margin: 0 }}
+              hitSlop={{ top: 16, bottom: 16, left: 16, right: 8 }}
+            />
+          ) : null}
           {isOnList && listQuantity !== undefined ? (
             <Text style={{ 
               fontSize: 16, 
               fontWeight: '700', 
               color: theme.colors.primary,
-              marginRight: 4,
+              marginHorizontal: 12,
             }}>
               {listQuantity}
             </Text>
@@ -72,6 +71,7 @@ export const ProductSearchRow = React.memo(({
             onPress={onPlus}
             iconColor={isOnList ? theme.colors.primary : theme.colors.outline}
             style={{ margin: 0 }}
+            hitSlop={{ top: 16, bottom: 16, left: 8, right: 16 }}
           />
         </View>
       </View>
