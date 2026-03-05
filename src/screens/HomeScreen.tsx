@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from "react";
-import { View, Alert, } from "react-native";
+import { View, Alert, Modal, Pressable, StyleSheet } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import {
   Button,
@@ -15,6 +15,7 @@ import {
   NativeStackNavigationProp,
 } from "@react-navigation/native-stack";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { RootStackParamList } from "../types/navigation";
 import { createHomeScreenStyles } from "../styles/HomeScreenStyles";
 import { generateStockListText } from "../utils/stringUtils";
@@ -47,6 +48,7 @@ export default function HomeScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [actionsVisible, setActionsVisible] = useState(false);
 
   const {
     inventoryItems,
@@ -82,19 +84,35 @@ export default function HomeScreen() {
     setSelectedIds([]);
   }, []);
 
-  const saveAndCopyStockList = useCallback(async () => {
+  const saveStockList = useCallback(async () => {
     try {
       for (const inventoryItem of inventoryItems) {
         await saveInventoryHistorySnapshot(inventoryItem.id);
       }
-      const text = generateStockListText(inventoryItems);
-      Clipboard.setStringAsync(text);
-      Alert.alert("Sucesso", "Lista de estoque copiada para a área de transferência!");
+      Alert.alert("Sucesso", "Histórico de estoque salvo!");
     } catch (error) {
-      console.error("Erro ao salvar histórico e copiar lista:", error);
-      Alert.alert("Erro", "Não foi possível copiar a lista de estoque.");
+      console.error("Erro ao salvar histórico:", error);
+      Alert.alert("Erro", "Não foi possível salvar o histórico.");
     }
   }, [inventoryItems, saveInventoryHistorySnapshot]);
+
+  const copyStockList = useCallback(async () => {
+    try {
+      const text = generateStockListText(inventoryItems);
+      await Clipboard.setStringAsync(text);
+      Alert.alert(
+        "Lista copiada!",
+        "Deseja também salvar o histórico de estoque?",
+        [
+          { text: "Não", style: "cancel" },
+          { text: "Salvar", onPress: saveStockList },
+        ]
+      );
+    } catch (error) {
+      console.error("Erro ao copiar lista:", error);
+      Alert.alert("Erro", "Não foi possível copiar a lista.");
+    }
+  }, [inventoryItems, saveStockList]);
 
   const handleDeleteSelected = useCallback(() => {
     Alert.alert(
@@ -135,33 +153,25 @@ export default function HomeScreen() {
         onListDelete={handleListDelete}
       />
       
-      <View style={styles.header}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <View style={{ flex: 1 }}>
-            <SearchBar searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
-          </View>
-          <SortMenu setSortOrder={handleSortOrderChange} sortOrder={sortOrder} iconOnly />
+      <View style={[homeStyles.topRow, { borderBottomColor: theme.colors.outlineVariant }]}>
+        <View style={homeStyles.searchWrapper}>
+          <SearchBar searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
         </View>
-        <View style={styles.buttonRow}>
-          <Button
-            mode="contained"
-            onPress={saveAndCopyStockList}
-            style={styles.button}
-            icon="content-copy"
-            labelStyle={styles.buttonText}
-          >
-            Salvar
-          </Button>
-          <Button
-            mode="contained"
-            onPress={handleImportButtonClick}
-            icon="import"
-            style={styles.button}
-            labelStyle={styles.buttonText}
-          >
-            Importar
-          </Button>
-        </View>
+        <SortMenu setSortOrder={handleSortOrderChange} sortOrder={sortOrder} iconOnly />
+        <Pressable
+          onPress={() => setActionsVisible(true)}
+          style={({ pressed }) => ({
+            padding: 8,
+            borderRadius: 20,
+            backgroundColor: pressed ? theme.colors.surfaceVariant : 'transparent',
+          })}
+        >
+          <MaterialCommunityIcons
+            name="dots-vertical"
+            size={22}
+            color={theme.colors.onSurfaceVariant}
+          />
+        </Pressable>
       </View>
 
       {isSelectionMode && (
@@ -211,6 +221,89 @@ export default function HomeScreen() {
         loadItems={loadInventoryItems}
         listId={listId}
       />
+      <Modal
+        visible={actionsVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setActionsVisible(false)}
+      >
+        <Pressable
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' }}
+          onPress={() => setActionsVisible(false)}
+        >
+          <Pressable
+            style={{
+              backgroundColor: theme.colors.surface,
+              borderTopLeftRadius: 20,
+              borderTopRightRadius: 20,
+              paddingHorizontal: 16,
+              paddingBottom: 32,
+              paddingTop: 12,
+              elevation: 8,
+            }}
+            onPress={() => {}}
+          >
+            <View style={{
+              width: 40, height: 4, borderRadius: 2,
+              backgroundColor: theme.colors.outlineVariant,
+              alignSelf: 'center', marginBottom: 16,
+            }} />
+            <Text variant="titleSmall" style={{
+              textTransform: 'uppercase',
+              letterSpacing: 1,
+              color: theme.colors.onSurfaceVariant,
+              marginBottom: 8,
+              paddingHorizontal: 4,
+            }}>
+              Ações
+            </Text>
+
+            {[
+              { icon: 'content-copy', label: 'Copiar lista', onPress: copyStockList },
+              { icon: 'content-save-outline', label: 'Salvar histórico', onPress: saveStockList },
+              { icon: 'import', label: 'Importar', onPress: handleImportButtonClick },
+            ].map(action => (
+              <Pressable
+                key={action.label}
+                onPress={() => { setActionsVisible(false); action.onPress(); }}
+                style={({ pressed }) => ({
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  paddingVertical: 14,
+                  paddingHorizontal: 12,
+                  borderRadius: 10,
+                  marginBottom: 2,
+                  backgroundColor: pressed ? theme.colors.surfaceVariant : 'transparent',
+                })}
+              >
+                <MaterialCommunityIcons
+                  name={action.icon as any}
+                  size={20}
+                  color={theme.colors.onSurface}
+                  style={{ marginRight: 12 }}
+                />
+                <Text style={{ fontSize: 15, color: theme.colors.onSurface }}>
+                  {action.label}
+                </Text>
+              </Pressable>
+            ))}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
+
+const homeStyles = StyleSheet.create({
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    gap: 4,
+  },
+  searchWrapper: {
+    flex: 1,
+  },
+});

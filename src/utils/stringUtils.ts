@@ -128,7 +128,7 @@ export const generateStockListText = (inventoryItems: InventoryItem[]): string =
   inventoryItems.forEach((inventoryItem) => {
     const emoji = getEmojiForProduct(inventoryItem.productName);
     text += `- ${inventoryItem.productName}: ${inventoryItem.quantity} ${emoji}\n`;
-    text += inventoryItem.notes ? `  -   ${inventoryItem.notes}\n` : "";
+    text += inventoryItem.notes ? `  obs:   ${inventoryItem.notes}\n` : "";
   });
   return text;
 };
