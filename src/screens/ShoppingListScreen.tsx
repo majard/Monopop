@@ -1,5 +1,5 @@
 import React, { useRef, useState, useCallback } from 'react';
-import { View, StyleSheet, Text, SectionList } from 'react-native';
+import { View, StyleSheet, Text, FlatList } from 'react-native';
 import { Button, Surface, useTheme } from 'react-native-paper';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -8,7 +8,6 @@ import { RootStackParamList } from '../types/navigation';
 import { ShoppingListItem } from '../database/models';
 import { useListContext } from '../context/ListContext';
 import { useList } from '../hooks/useList';
-import { ShoppingListItemCard } from '../components/ShoppingListItemCard';
 import { EditShoppingItemModal } from '../components/EditShoppingItemModal';
 import { ConfirmInvoiceModal, StoreOption } from '../components/ConfirmInvoiceModal';
 import ContextualHeader from '../components/ContextualHeader';
@@ -18,6 +17,7 @@ import { ItemPickerDialog } from '../components/ItemPickerDialog';
 import { createHomeScreenStyles } from '../styles/HomeScreenStyles';
 import { SortMenu } from '../components/SortMenu';
 import { sortItems, SortOrder } from '../utils/sortUtils';
+import ShoppingList from '../components/ShoppingList';
 
 type ShoppingListScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'ShoppingList'>;
 
@@ -28,11 +28,6 @@ interface ShoppingListItemWithDetails extends Omit<ShoppingListItem, 'checked'> 
   currentInventoryQuantity: number;
   price?: number;
   categoryName?: string | null;
-}
-
-interface ShoppingSection {
-  title: string;
-  data: ShoppingListItemWithDetails[];
 }
 
 export default function ShoppingListScreen() {
@@ -184,15 +179,6 @@ export default function ShoppingListScreen() {
     }
   }, [editingItem]);
 
-  const renderShoppingListItem = useCallback(({ item }: { item: ShoppingListItemWithDetails }) => (
-    <ShoppingListItemCard
-      item={item}
-      onToggleChecked={() => handleToggleChecked(item)}
-      onDelete={() => handleDeleteItem(item)}
-      onEdit={() => setEditingItem(item)}
-    />
-  ), [handleToggleChecked, handleDeleteItem]);
-
   const sortShoppingItems = useCallback((items: ShoppingListItemWithDetails[]) => {
     const mapped = items.map(item => ({
       ...item,
@@ -205,7 +191,6 @@ export default function ShoppingListScreen() {
     return sortItems(mapped, sortOrder, '') as ShoppingListItemWithDetails[];
   }, [sortOrder]);
 
-  // Computed values — declared once, before any usage
   const checkedItems = shoppingListItems.filter(item => item.checked);
   const uncheckedItems = shoppingListItems.filter(item => !item.checked);
 
@@ -231,17 +216,6 @@ export default function ShoppingListScreen() {
       setLoading(false);
     }
   }, [checkedItems.length, listId, stores, loadData]);
-
-  const sections: ShoppingSection[] = [
-    {
-      title: `Pendentes (${uncheckedItems.length})`,
-      data: sortShoppingItems(uncheckedItems),
-    },
-    {
-      title: `No carrinho (${checkedItems.length})`,
-      data: isCartCollapsed ? [] : sortShoppingItems(checkedItems),
-    },
-  ];
 
   const totalCheckedPrice = checkedItems.reduce((total, item) => {
     if (item.price) return total + item.quantity * item.price;
@@ -278,35 +252,78 @@ export default function ShoppingListScreen() {
         />
       </View>
 
-      <SectionList
-        sections={sections}
-        keyExtractor={(item) => item.id.toString()}
-        renderItem={renderShoppingListItem}
-        renderSectionHeader={({ section }) => {
-          const isCarrinho = section.title.startsWith('No carrinho');
-          if (!isCarrinho && section.data.length === 0) return null;
-          return (
-            <View style={localStyles.sectionHeader}>
-              <Text style={[localStyles.subsectionTitle, { color: theme.colors.onSurfaceVariant }]}>
-                {section.title}
-              </Text>
-              {isCarrinho && (
-                <Button mode="text" onPress={() => setIsCartCollapsed(!isCartCollapsed)} compact>
-                  {isCartCollapsed ? 'Mostrar' : 'Ocultar'}
-                </Button>
-              )}
-            </View>
-          );
-        }}
-        ListEmptyComponent={() => (
-          <Surface style={localStyles.emptyState}>
-            <Text style={{ textAlign: 'center', color: theme.colors.onSurfaceVariant, fontSize: 16, lineHeight: 24 }}>
-              Sua lista de compras está vazia.{'\n'}
-              Toque no botão abaixo para adicionar produtos!
-            </Text>
-          </Surface>
+      <FlatList
+        data={[]}
+        renderItem={null}
+        keyExtractor={() => ''}
+        scrollEnabled={true}
+        ListHeaderComponent={() => (
+          <View style={{ paddingHorizontal: 16 }}>
+            {uncheckedItems.length > 0 && (
+              <>
+                <Text style={[localStyles.subsectionTitle, { 
+                  color: theme.colors.onSurfaceVariant,
+                  paddingVertical: 8,
+                  paddingHorizontal: 4,
+                }]}>
+                  Pendentes ({uncheckedItems.length})
+                </Text>
+                <ShoppingList
+                  items={sortShoppingItems(uncheckedItems)}
+                  sortOrder={sortOrder}
+                  onToggleChecked={handleToggleChecked}
+                  onDelete={handleDeleteItem}
+                  onEdit={(item) => setEditingItem(item)}
+                />
+              </>
+            )}
+
+            {checkedItems.length > 0 || true ? (
+              <>
+                <View style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  paddingVertical: 8,
+                  paddingHorizontal: 4,
+                }}>
+                  <Text style={[localStyles.subsectionTitle, { 
+                    color: theme.colors.onSurfaceVariant 
+                  }]}>
+                    No carrinho ({checkedItems.length})
+                  </Text>
+                  <Button mode="text" onPress={() => setIsCartCollapsed(!isCartCollapsed)} compact>
+                    {isCartCollapsed ? 'Mostrar' : 'Ocultar'}
+                  </Button>
+                </View>
+                {!isCartCollapsed && (
+                  <ShoppingList
+                    items={sortShoppingItems(checkedItems)}
+                    sortOrder={sortOrder}
+                    onToggleChecked={handleToggleChecked}
+                    onDelete={handleDeleteItem}
+                    onEdit={(item) => setEditingItem(item)}
+                  />
+                )}
+              </>
+            ) : null}
+
+            {shoppingListItems.length === 0 && (
+              <Surface style={localStyles.emptyState}>
+                <Text style={{ 
+                  textAlign: 'center', 
+                  color: theme.colors.onSurfaceVariant, 
+                  fontSize: 16, 
+                  lineHeight: 24 
+                }}>
+                  Sua lista de compras está vazia.{'\n'}
+                  Toque no botão abaixo para adicionar produtos!
+                </Text>
+              </Surface>
+            )}
+          </View>
         )}
-        contentContainerStyle={{ paddingBottom: bottomBarHeight + 96, paddingHorizontal: 16 }}
+        contentContainerStyle={{ paddingBottom: bottomBarHeight + 96 }}
       />
 
       <AddItemButton
@@ -379,13 +396,6 @@ const localStyles = StyleSheet.create({
   },
   storeSelectorButtonContent: {
     justifyContent: 'flex-start',
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-    paddingHorizontal: 4,
   },
   subsectionTitle: {
     fontSize: 16,
