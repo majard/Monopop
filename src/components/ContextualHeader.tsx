@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Pressable } from 'react-native';
 import { IconButton, useTheme } from 'react-native-paper';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { RootStackParamList } from '../types/navigation';
 
 interface ContextualHeaderProps {
@@ -11,10 +12,10 @@ interface ContextualHeaderProps {
   onListDelete?: () => void;
 }
 
-export default function ContextualHeader({ 
-  listName, 
-  onListNameSave, 
-  onListDelete 
+export default function ContextualHeader({
+  listName,
+  onListNameSave,
+  onListDelete
 }: ContextualHeaderProps) {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute();
@@ -22,8 +23,12 @@ export default function ContextualHeader({
   const [isEditing, setIsEditing] = useState(false);
   const [input, setInput] = useState(listName);
 
-  const handleBackToLists = () => {
-    navigation.navigate('Lists');
+  const handleBack = () => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      navigation.navigate('Lists');
+    }
   };
 
   const handleEdit = () => {
@@ -57,12 +62,11 @@ export default function ContextualHeader({
         icon="arrow-left"
         size={24}
         iconColor="#fff"
-        onPress={handleBackToLists}
+        onPress={handleBack}
+        style={styles.iconButton}
       />
-      
+
       <View style={styles.centerContent}>
-        <Text style={styles.tabName}>{getTabName()}</Text>
-        
         {isEditing ? (
           <View style={styles.editRow}>
             <TextInput
@@ -72,44 +76,38 @@ export default function ContextualHeader({
               autoFocus
               selectTextOnFocus
             />
-            <IconButton
-              icon="check"
-              size={20}
-              iconColor="#fff"
-              onPress={handleSave}
-            />
-            <IconButton
-              icon="close"
-              size={20}
-              iconColor={theme.colors.error}
-              onPress={handleCancel}
-            />
+            <IconButton icon="check" size={18} iconColor="#fff" onPress={handleSave} style={styles.iconButton} />
+            <IconButton icon="close" size={18} iconColor="rgba(255,255,255,0.7)" onPress={handleCancel} style={styles.iconButton} />
           </View>
         ) : (
           <View style={styles.nameRow}>
-            <Text style={styles.listName} numberOfLines={1}>
-              {listName}
-            </Text>
-            <IconButton
-              icon="pencil"
-              size={18}
-              iconColor="#fff"
-              onPress={handleEdit}
-              style={styles.editButton}
-            />
+
+            <Text style={styles.tabName}>{getTabName()}</Text>
+            <Text style={styles.separator}>|</Text>
+            <Pressable onPress={handleEdit} style={styles.listNamePressable}>
+              <Text style={styles.listName} numberOfLines={1}>{listName}</Text>
+              <MaterialCommunityIcons
+                name="pencil-outline"
+                size={18}
+                color="rgba(255,255,255,0.7)"
+                style={{ marginLeft: 4 }}
+              />
+            </Pressable>
           </View>
         )}
       </View>
-      
-      {!isEditing && onListDelete && (
+
+      {!isEditing && onListDelete ? (
         <IconButton
           icon="delete"
           size={20}
-          iconColor={theme.colors.error}
+          iconColor="rgba(255,255,255,0.6)"
           onPress={onListDelete}
+          style={styles.iconButton}
         />
+      ) : (
+        <View style={styles.iconButton} />
       )}
-      {isEditing && <View style={styles.placeholder} />}
     </View>
   );
 }
@@ -119,55 +117,60 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 4,
-    paddingVertical: 8,
-    paddingTop: 12,
-    minHeight: 64,
+    minHeight: 52,
+  },
+  iconButton: {
+    margin: 0,
+    width: 40,
+    height: 40,
   },
   centerContent: {
     flex: 1,
     alignItems: 'center',
   },
-  tabName: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#fff',
-    opacity: 0.9,
-    letterSpacing: 0.5,
-    marginBottom: 2,
-  },
   nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    minWidth: '70%',
+  },
+  listNamePressable: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  tabName: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#fff',
+    opacity: 0.85,
+    letterSpacing: 0.5,
+    
+  },
+  separator: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 12,
   },
   listName: {
-    fontSize: 17,
+    fontSize: 15,
     fontWeight: 'bold',
     color: '#fff',
-    textAlign: 'center',
-  },
-  editButton: {
-    margin: 0,
-    marginLeft: 2,
+    flexShrink: 1,
   },
   editRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    width: '100%',
   },
   input: {
     backgroundColor: '#fff',
     color: '#333',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: 4,
-    minWidth: 150,
+    minWidth: 140,
     maxWidth: 200,
-  },
-  placeholder: {
-    width: 40,
   },
 });
