@@ -199,6 +199,7 @@ export default function HomeScreen() {
         selectedIds={selectedIds}
         onToggleSelect={handleToggleSelect}
         onLongPressStart={handleEnterSelectionMode}
+        sortOrder={sortOrder}
       />
       <AddItemButton
         onPress={() => navigation.navigate("AddInventoryItem", { listId })}
