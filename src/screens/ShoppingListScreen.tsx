@@ -1,5 +1,5 @@
-import React, { useRef, useState, useCallback } from 'react';
-import { View, StyleSheet, Text, FlatList } from 'react-native';
+import React, { useRef, useState, useCallback, useMemo } from 'react';
+import { View, StyleSheet, Text, FlatList, Pressable } from 'react-native';
 import { Button, Surface, useTheme } from 'react-native-paper';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -18,6 +18,8 @@ import { createHomeScreenStyles } from '../styles/HomeScreenStyles';
 import { SortMenu } from '../components/SortMenu';
 import { sortItems, SortOrder } from '../utils/sortUtils';
 import ShoppingList from '../components/ShoppingList';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import SearchBar from '../components/SearchBar';
 
 type ShoppingListScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'ShoppingList'>;
 
@@ -34,6 +36,7 @@ export default function ShoppingListScreen() {
   const { listId } = useListContext();
   const { listName, handleListNameSave, handleListDelete } = useList(listId);
   const [shoppingListItems, setShoppingListItems] = useState<ShoppingListItemWithDetails[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [editingItem, setEditingItem] = useState<ShoppingListItemWithDetails | null>(null);
   const [isCartCollapsed, setIsCartCollapsed] = useState(false);
@@ -191,8 +194,16 @@ export default function ShoppingListScreen() {
     return sortItems(mapped, sortOrder, '') as ShoppingListItemWithDetails[];
   }, [sortOrder]);
 
-  const checkedItems = shoppingListItems.filter(item => item.checked);
-  const uncheckedItems = shoppingListItems.filter(item => !item.checked);
+  const filteredShoppingItems = useMemo(() => {
+    if (!searchQuery.trim()) return shoppingListItems;
+    const q = searchQuery.toLowerCase().trim();
+    return shoppingListItems.filter(item =>
+      item.productName.toLowerCase().includes(q)
+    );
+  }, [shoppingListItems, searchQuery]);
+
+  const checkedItems = filteredShoppingItems.filter(item => item.checked);
+  const uncheckedItems = filteredShoppingItems.filter(item => !item.checked);
 
   const openConfirmConclude = useCallback(() => {
     if (checkedItems.length === 0) return;
@@ -234,16 +245,25 @@ export default function ShoppingListScreen() {
         onListDelete={handleListDelete}
       />
 
-      <View style={[localStyles.storeSelector, { borderBottomColor: theme.colors.outlineVariant }]}>
-        <Text style={[localStyles.storeSelectorLabel, { color: theme.colors.onSurface }]}>Loja:</Text>
-        <Button
-          mode="outlined"
+      <View style={[localStyles.topRow, { borderBottomColor: theme.colors.outlineVariant }]}>
+        <Pressable
           onPress={() => setStorePickerVisible(true)}
-          style={localStyles.storeSelectorButton}
-          contentStyle={localStyles.storeSelectorButtonContent}
+          style={[localStyles.storeButton, { borderColor: theme.colors.outline }]}
         >
-          {defaultStoreName || 'Selecionar loja'}
-        </Button>
+          <MaterialCommunityIcons
+            name="store-outline"
+            size={18}
+            color={defaultStoreName ? theme.colors.primary : theme.colors.onSurfaceVariant}
+          />
+        </Pressable>
+
+        <View style={localStyles.searchWrapper}>
+          <SearchBar
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+          />
+        </View>
+
         <SortMenu
           sortOrder={sortOrder}
           setSortOrder={setSortOrder}
@@ -308,7 +328,7 @@ export default function ShoppingListScreen() {
               </>
             ) : null}
 
-            {shoppingListItems.length === 0 && (
+            {filteredShoppingItems.length === 0 && (
               <Surface style={localStyles.emptyState}>
                 <Text style={{ 
                   textAlign: 'center', 
@@ -379,23 +399,23 @@ export default function ShoppingListScreen() {
 }
 
 const localStyles = StyleSheet.create({
-  storeSelector: {
+  topRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderBottomWidth: 1,
+    gap: 8,
   },
-  storeSelectorLabel: {
-    fontSize: 16,
-    fontWeight: '500',
-    marginRight: 12,
+  storeButton: {
+    padding: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  storeSelectorButton: {
+  searchWrapper: {
     flex: 1,
-  },
-  storeSelectorButtonContent: {
-    justifyContent: 'flex-start',
   },
   subsectionTitle: {
     fontSize: 16,
