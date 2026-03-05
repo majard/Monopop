@@ -26,7 +26,8 @@ export const useInventoryItem = ({
   // --- Debounced DB Update Logic ---
   const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const debouncedDbUpdate = useCallback(async (id: number, newQuantity: number) => {
+  const debouncedDbUpdate = useCallback(async (id: number, newQuantity: number, skipDb: boolean = false) => {
+    if (skipDb) return;
     if (updateTimeoutRef.current) {
       clearTimeout(updateTimeoutRef.current);
     }
@@ -44,13 +45,13 @@ export const useInventoryItem = ({
 
   // --- Public Quantity Update Function (UI + Triggers Debounced DB Update) ---
   const updateInventoryItemQuantity = useCallback(
-    (newQuantity: number) => {
+    (newQuantity: number, skipDb: boolean = false) => {
       const clampedQuantity = Math.max(0, newQuantity); // Ensure quantity doesn't go below zero
       setQuantity(clampedQuantity); // Optimistic UI update
       latestQuantityRef.current = clampedQuantity; // Keep track of the latest quantity for DB update
 
       // Trigger the debounced DB update
-      debouncedDbUpdate(inventoryItemId, clampedQuantity);
+      debouncedDbUpdate(inventoryItemId, clampedQuantity, skipDb);
     },
     [inventoryItemId, debouncedDbUpdate]
   );
@@ -101,7 +102,7 @@ export const useInventoryItem = ({
   }, [isAdjusting, adjustmentIncrement]);
 
 
-  const startContinuousAdjustment = useCallback((increment: boolean) => {
+  const startContinuousAdjustment = useCallback((increment: boolean, skipDb: boolean = false) => {
     // Perform an immediate UI update on the initial press
     setQuantity((prevQuantity) => {
       const newQuantity = increment ? prevQuantity + 1 : Math.max(0, prevQuantity - 1);
@@ -113,10 +114,10 @@ export const useInventoryItem = ({
     setIsAdjusting(true);
   }, []); // Dependencies are empty as it sets flags and updates state
 
-  const stopContinuousAdjustment = useCallback(() => {
+  const stopContinuousAdjustment = useCallback((skipDb: boolean = false) => {
     setIsAdjusting(false);
     // When adjustment stops, trigger a final debounced DB update with the latest quantity
-    debouncedDbUpdate(inventoryItemId, latestQuantityRef.current);
+    debouncedDbUpdate(inventoryItemId, latestQuantityRef.current, skipDb);
   }, [inventoryItemId, debouncedDbUpdate]);
 
 

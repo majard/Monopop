@@ -113,6 +113,11 @@ export default function EditInventoryItem() {
   const loadingRef = useRef(true); // starts true, set false after first load
   const savedRef = useRef(false);
 
+  // Initial value refs for revert functionality
+  const initialQuantityRef = useRef(inventoryItem?.quantity ?? 0);
+  const initialPriceRef = useRef<number>(0);
+  const initialShoppingListItemRef = useRef<{ id: number; quantity: number; price?: number } | null>(null);
+
   // Mark dirty on any field change (but not on initial mount)
   useEffect(() => {
     if (!mountedRef.current) {
@@ -121,7 +126,7 @@ export default function EditInventoryItem() {
     }
     if (loadingRef.current) return;
     isDirtyRef.current = true;
-  }, [name, notes, selectedCategoryId, selectedListId]);
+  }, [name, notes, selectedCategoryId, selectedListId, liveQuantity, suggestedPrice, shoppingListItem]);
 
   const handleSave = useCallback(async () => {
     if (!inventoryItem?.id) return;
@@ -138,12 +143,25 @@ export default function EditInventoryItem() {
         await updateInventoryItemList(inventoryItem.id, selectedListId);
       }
 
+      // Handle price and shopping list changes
+      if (suggestedPrice !== initialPriceRef.current && shoppingListItem?.id && shoppingListItem.id > 0) {
+        await updateShoppingListItem(shoppingListItem.id, { price: suggestedPrice });
+      }
+      
+      const originalSli = initialShoppingListItemRef.current;
+      if (shoppingListItem === null && originalSli) {
+        await deleteShoppingListItem(originalSli.id);
+      }
+      if (shoppingListItem?.id === -1 && !originalSli) {
+        await addShoppingListItem(inventoryItem.listId, inventoryItem.productName, shoppingListItem.quantity, shoppingListItem.price);
+      }
+
       savedRef.current = true;
       isDirtyRef.current = false;
     } catch (error) {
       console.error('Erro ao salvar:', error);
     }
-  }, [inventoryItem, liveQuantity, notes, name, selectedCategoryId, selectedListId]);
+  }, [inventoryItem, liveQuantity, notes, name, selectedCategoryId, selectedListId, suggestedPrice, shoppingListItem]);
 
   const handleSaveAndGoBack = useCallback(async () => {
     await handleSave();
@@ -192,6 +210,10 @@ export default function EditInventoryItem() {
     }
     const lastPrice = await getLastUnitPriceForProduct(inventoryItem.productId);
     if (lastPrice) { setSuggestedPrice(lastPrice); setPriceInput(lastPrice.toFixed(2)); }
+
+    // Set initial refs after loadAll completes
+    initialPriceRef.current = suggestedPrice;
+    initialShoppingListItemRef.current = sli;
 
     // Reset dirty after load
     isDirtyRef.current = false;
@@ -244,28 +266,20 @@ export default function EditInventoryItem() {
     isDirtyRef.current = true;
   }, []);
 
-  const handleToggleShoppingList = useCallback(async () => {
+  const handleToggleShoppingList = useCallback(() => {
     if (!inventoryItem) return;
-    if (shoppingListItem) {
-      await deleteShoppingListItem(shoppingListItem.id);
-      setShoppingListItem(null);
-    } else {
-      await addShoppingListItem(inventoryItem.listId, inventoryItem.productName, 1, suggestedPrice || undefined);
-      const sli = await getShoppingListItemForInventoryItem(inventoryItem.id);
-      setShoppingListItem(sli);
-    }
-  }, [inventoryItem, shoppingListItem, suggestedPrice]);
+    setShoppingListItem(prev => prev ? null : { id: -1, quantity: 1, price: suggestedPrice || undefined });
+    isDirtyRef.current = true;
+  }, [inventoryItem, suggestedPrice]);
 
-  const handlePriceSave = useCallback(async () => {
+  const handlePriceSave = useCallback(() => {
     const parsed = parseFloat(priceInput.replace(',', '.'));
     if (isNaN(parsed)) return;
     setSuggestedPrice(parsed);
+    setPriceInput(parsed.toFixed(2));
     setEditingPrice(false);
-    if (shoppingListItem) {
-      await updateShoppingListItem(shoppingListItem.id, { price: parsed });
-      setShoppingListItem(prev => prev ? { ...prev, price: parsed } : null);
-    }
-  }, [priceInput, shoppingListItem]);
+    isDirtyRef.current = true;
+  }, [priceInput]);
 
   const handleDelete = useCallback(() => {
     Alert.alert(
@@ -340,9 +354,9 @@ export default function EditInventoryItem() {
           </Text>
           <View style={localStyles.quantityControls}>
             <Pressable
-              onPress={() => updateInventoryItemQuantity(Math.max(0, liveQuantity - 1))}
-              onLongPress={() => startContinuousAdjustment(false)}
-              onPressOut={stopContinuousAdjustment}
+              onPress={() => updateInventoryItemQuantity(Math.max(0, liveQuantity - 1), true)}
+              onLongPress={() => startContinuousAdjustment(false, true)}
+              onPressOut={() => stopContinuousAdjustment(true)}
               style={[localStyles.qtyButton, { borderColor: theme.colors.outline }]}
             >
               <MaterialCommunityIcons name="minus" size={20} color={theme.colors.primary} />
@@ -350,7 +364,7 @@ export default function EditInventoryItem() {
             <RNTextInput
               value={quantityInput}
               onChangeText={setQuantityInput}
-              onBlur={() => updateInventoryItemQuantity(parseInt(quantityInput) || 0)}
+              onBlur={() => updateInventoryItemQuantity(parseInt(quantityInput) || 0, true)}
               keyboardType="numeric"
               style={[localStyles.qtyInput, { 
                 color: theme.colors.onSurface,
@@ -358,9 +372,9 @@ export default function EditInventoryItem() {
               }]}
             />
             <Pressable
-              onPress={() => updateInventoryItemQuantity(liveQuantity + 1)}
-              onLongPress={() => startContinuousAdjustment(true)}
-              onPressOut={stopContinuousAdjustment}
+              onPress={() => updateInventoryItemQuantity(liveQuantity + 1, true)}
+              onLongPress={() => startContinuousAdjustment(true, true)}
+              onPressOut={() => stopContinuousAdjustment(true)}
               style={[localStyles.qtyButton, { borderColor: theme.colors.outline }]}
             >
               <MaterialCommunityIcons name="plus" size={20} color={theme.colors.primary} />
