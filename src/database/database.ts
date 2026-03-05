@@ -1278,3 +1278,93 @@ export const deleteStore = async (id: number): Promise<void> => {
     throw error;
   }
 };
+
+// --- CONSUMPTION AND SHOPPING LIST FUNCTIONS ---
+
+export const getProductConsumptionStats = async (
+  inventoryItemId: number,
+  productId: number,
+): Promise<{
+  avgWeeklyConsumption: number | null;
+  avgPrice90d: number | null;
+  lowestPrice90d: { price: number; storeName: string } | null;
+}> => {
+  const db = getDb();
+  const now = new Date();
+  const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+  const ninetyDaysAgoStr = ninetyDaysAgo.toISOString().split('T')[0];
+
+  // Get history entries ordered by date ASC, last 90 days
+  const history = await db.getAllAsync<{ date: string; quantity: number }>(
+    `SELECT date, quantity FROM inventory_history 
+     WHERE inventoryItemId = ? AND date >= ?
+     ORDER BY date ASC;`,
+    [inventoryItemId, ninetyDaysAgoStr]
+  );
+
+  let avgWeeklyConsumption: number | null = null;
+
+  if (history.length >= 2) {
+    // Sum all drops between consecutive snapshots
+    let totalConsumed = 0;
+    for (let i = 1; i < history.length; i++) {
+      const drop = history[i - 1].quantity - history[i].quantity;
+      if (drop > 0) totalConsumed += drop;
+    }
+    // Days in interval
+    const firstDate = new Date(history[0].date + 'T00:00:00');
+    const lastDate = new Date(history[history.length - 1].date + 'T00:00:00');
+    const days = Math.max(1, (lastDate.getTime() - firstDate.getTime()) / (1000 * 60 * 60 * 24));
+    avgWeeklyConsumption = (totalConsumed / days) * 7;
+  } else if (history.length === 1) {
+    // Only one point — can't calculate consumption
+    avgWeeklyConsumption = null;
+  }
+
+  // Price stats from invoice_items last 90 days
+  const priceRows = await db.getAllAsync<{ unitPrice: number; storeName: string }>(
+    `SELECT ii.unitPrice, s.name as storeName
+     FROM invoice_items ii
+     JOIN invoices inv ON ii.invoiceId = inv.id
+     LEFT JOIN stores s ON inv.storeId = s.id
+     WHERE ii.productId = ? 
+       AND ii.unitPrice IS NOT NULL 
+       AND ii.unitPrice > 0
+       AND inv.createdAt >= ?
+     ORDER BY ii.unitPrice ASC;`,
+    [productId, ninetyDaysAgo.toISOString()]
+  );
+
+  const avgPrice90d = priceRows.length > 0
+    ? priceRows.reduce((sum, r) => sum + r.unitPrice, 0) / priceRows.length
+    : null;
+
+  const lowestPrice90d = priceRows.length > 0
+    ? { price: priceRows[0].unitPrice, storeName: priceRows[0].storeName }
+    : null;
+
+  return { avgWeeklyConsumption, avgPrice90d, lowestPrice90d };
+};
+
+export const getShoppingListItemForInventoryItem = async (
+  inventoryItemId: number
+): Promise<{ id: number; quantity: number; price?: number } | null> => {
+  const db = getDb();
+  const result = await db.getFirstAsync<{ id: number; quantity: number; price: number | null }>(
+    `SELECT id, quantity, price FROM shopping_list_items WHERE inventoryItemId = ?;`,
+    [inventoryItemId]
+  );
+  return result ?? null;
+};
+
+export const getPriceHistory = async (productId: number): Promise<{ date: string; price: number; storeName: string }[]> => {
+  const db = getDb();
+  return db.getAllAsync(`
+    SELECT inv_i.createdAt as date, inv_i.unitPrice as price, s.name as storeName
+    FROM invoice_items inv_i
+    JOIN invoices inv ON inv_i.invoiceId = inv.id
+    LEFT JOIN stores s ON inv.storeId = s.id
+    WHERE inv_i.productId = ? AND inv_i.unitPrice IS NOT NULL
+    ORDER BY inv_i.createdAt DESC LIMIT 20
+  `, [productId]);
+};
