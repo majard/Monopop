@@ -75,8 +75,10 @@ export default function AddProductToShoppingListScreen() {
         map.set(item.inventoryItemId, { id: item.id, quantity: item.quantity });
       });
       setShoppingListByInventoryId(map);
+      return inventory; // return fresh data
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
+      return [];
     }
   }, [listId]);
 
@@ -153,14 +155,24 @@ export default function AddProductToShoppingListScreen() {
 
   const handleAddNewProduct = useCallback(async () => {
     if (!searchQuery.trim()) return;
+    const name = searchQuery.trim();
+    setSearchQuery('');
     try {
-      await addShoppingListItem(listId, searchQuery.trim(), 1);
-      await loadData();
-      setSearchQuery('');
+      await addShoppingListItem(listId, name, 1);
+      const freshInventory = await loadData();
+      const newItem = freshInventory.find(
+        item => preprocessName(item.productName) === preprocessName(name)
+      );
+      if (newItem && !sessionChangesRef.current.has(newItem.id)) {
+        updateSessionChanges(newItem.id, {
+          inventoryItemId: newItem.id,
+          originalQuantity: null,
+        });
+      }
     } catch (error) {
       console.error('Erro ao adicionar novo produto:', error);
     }
-  }, [searchQuery, listId, loadData]);
+  }, [searchQuery, listId, loadData, updateSessionChanges]);
 
   const handlePlus = useCallback(async (item: InventoryItem) => {
     try {
