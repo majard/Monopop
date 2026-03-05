@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useMemo } from 'react';
-import { View, FlatList, Pressable } from 'react-native';
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import { View, FlatList, Pressable, Alert } from 'react-native';
 import { Surface, Text, useTheme, FAB, Chip } from 'react-native-paper';
 import { useRoute, useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -45,6 +45,22 @@ export default function AddProductToShoppingListScreen() {
   const [shoppingListByInventoryId, setShoppingListByInventoryId] = useState<
     Map<number, { id: number; quantity: number }>
   >(new Map());
+  // originalQuantity: null means item didn't exist before this session
+  const sessionChangesRef = useRef<Map<number, { inventoryItemId: number; originalQuantity: number | null }>>(new Map());
+  const [sessionChanges, setSessionChanges] = useState<Map<number, { inventoryItemId: number; originalQuantity: number | null }>>(new Map());
+  const confirmedRef = useRef(false);
+
+  const updateSessionChanges = useCallback((
+    inventoryItemId: number, 
+    data: { inventoryItemId: number; originalQuantity: number | null } | null
+  ) => {
+    if (data === null) {
+      sessionChangesRef.current.delete(inventoryItemId);
+    } else {
+      sessionChangesRef.current.set(inventoryItemId, data);
+    }
+    setSessionChanges(new Map(sessionChangesRef.current));
+  }, []);
 
   const loadData = useCallback(async () => {
     try {
@@ -68,6 +84,55 @@ export default function AddProductToShoppingListScreen() {
       loadData();
     }, [loadData])
   );
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+      if (sessionChangesRef.current.size === 0 || confirmedRef.current) return;
+      
+      e.preventDefault();
+      
+      const count = sessionChangesRef.current.size;
+      Alert.alert(
+        'Sair sem confirmar?',
+        `Você modificou ${count} ${count === 1 ? 'item' : 'itens'} na lista.`,
+        [
+          {
+            text: 'Descartar',
+            style: 'destructive',
+            onPress: async () => {
+              // Revert all session changes
+              for (const [inventoryItemId, change] of sessionChangesRef.current) {
+                const current = shoppingListByInventoryId.get(inventoryItemId);
+                if (change.originalQuantity === null) {
+                  // Was added this session — delete it
+                  if (current) await deleteShoppingListItem(current.id);
+                } else {
+                  // Was modified — restore original quantity
+                  if (current) {
+                    if (change.originalQuantity === 0) {
+                      await deleteShoppingListItem(current.id);
+                    } else {
+                      await updateShoppingListItem(current.id, { quantity: change.originalQuantity });
+                    }
+                  }
+                }
+              }
+              navigation.dispatch(e.data.action);
+            },
+          },
+          {
+            text: 'Confirmar',
+            style: 'default',
+            onPress: () => {
+              confirmedRef.current = true;
+              navigation.dispatch(e.data.action);
+            },
+          },
+        ]
+      );
+    });
+    return unsubscribe;
+  }, [navigation, shoppingListByInventoryId]);
 
   const filteredAndSortedInventory = useMemo(() => {
     const filtered = inventoryItems.filter((item) => {
@@ -99,6 +164,13 @@ export default function AddProductToShoppingListScreen() {
   const handlePlus = useCallback(async (item: InventoryItem) => {
     try {
       const existing = shoppingListByInventoryId.get(item.id);
+      // Record original state before first modification
+      if (!sessionChangesRef.current.has(item.id)) {
+        updateSessionChanges(item.id, {
+          inventoryItemId: item.id,
+          originalQuantity: existing ? existing.quantity : null,
+        });
+      }
       if (existing) {
         await updateShoppingListItem(existing.id, { quantity: existing.quantity + 1 });
       } else {
@@ -108,12 +180,19 @@ export default function AddProductToShoppingListScreen() {
     } catch (error) {
       console.error('Erro ao adicionar:', error);
     }
-  }, [shoppingListByInventoryId, listId, loadData]);
+  }, [shoppingListByInventoryId, listId, loadData, updateSessionChanges]);
 
   const handleMinus = useCallback(async (item: InventoryItem) => {
     const existing = shoppingListByInventoryId.get(item.id);
     if (!existing) return;
     try {
+      // Record original state before first modification
+      if (!sessionChangesRef.current.has(item.id)) {
+        updateSessionChanges(item.id, {
+          inventoryItemId: item.id,
+          originalQuantity: existing.quantity,
+        });
+      }
       if (existing.quantity <= 1) {
         await deleteShoppingListItem(existing.id);
       } else {
@@ -123,7 +202,7 @@ export default function AddProductToShoppingListScreen() {
     } catch (error) {
       console.error('Erro ao decrementar:', error);
     }
-  }, [shoppingListByInventoryId, loadData]);
+  }, [shoppingListByInventoryId, loadData, updateSessionChanges]);
 
   const renderNewProductRow = useCallback(() => {
     if (!searchQuery.trim()) return null;
@@ -148,6 +227,49 @@ export default function AddProductToShoppingListScreen() {
       </Pressable>
     );
   }, [searchQuery, handleAddNewProduct, theme]);
+
+  const renderSessionChangesSection = useCallback(() => {
+    if (sessionChanges.size === 0) return null;
+    const changedItems = inventoryItems.filter(item => 
+      sessionChanges.has(item.id)
+    );
+    if (changedItems.length === 0) return null;
+    return (
+      <View>
+        <Text variant="labelMedium" style={{
+          paddingHorizontal: 4,
+          paddingBottom: 8,
+          paddingTop: 4,
+          color: theme.colors.primary,
+          fontWeight: '700',
+          textTransform: 'uppercase',
+          fontSize: 11,
+        }}>
+          Modificados agora
+        </Text>
+        {changedItems.map(item => {
+          const listInfo = shoppingListByInventoryId.get(item.id);
+          const isOnList = !!listInfo;
+          return (
+            <ProductSearchRow
+              key={item.id}
+              productName={item.productName}
+              stockQuantity={item.quantity}
+              listQuantity={listInfo?.quantity}
+              isOnList={isOnList}
+              onPlus={() => handlePlus(item)}
+              onMinus={() => handleMinus(item)}
+            />
+          );
+        })}
+        <View style={{
+          height: 1,
+          backgroundColor: theme.colors.outlineVariant,
+          marginVertical: 12,
+        }} />
+      </View>
+    );
+  }, [sessionChanges, inventoryItems, shoppingListByInventoryId, handlePlus, handleMinus, theme]);
 
   const renderInventoryRow = useCallback(({ item }: { item: InventoryItem }) => {
     const listInfo = shoppingListByInventoryId.get(item.id);
@@ -181,13 +303,32 @@ export default function AddProductToShoppingListScreen() {
         data={filteredAndSortedInventory}
         keyExtractor={(item) => item.id.toString()}
         renderItem={renderInventoryRow}
-        ListHeaderComponent={renderNewProductRow}
+        ListHeaderComponent={() => (
+          <View>
+            {renderNewProductRow()}
+            {renderSessionChangesSection()}
+            {filteredAndSortedInventory.length > 0 && (
+              <Text variant="labelMedium" style={{
+                paddingHorizontal: 4,
+                paddingBottom: 8,
+                color: theme.colors.onSurfaceVariant,
+                textTransform: 'uppercase',
+                fontSize: 11,
+              }}>
+                Produtos
+              </Text>
+            )}
+          </View>
+        )}
         contentContainerStyle={styles.list}
       />
       <FAB
         style={styles.fab}
         icon="check"
-        onPress={() => navigation.goBack()}
+        onPress={() => {
+          confirmedRef.current = true;
+          navigation.goBack();
+        }}
         label="Concluído"
       />
     </SafeAreaView>

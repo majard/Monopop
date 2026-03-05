@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { View, FlatList, Pressable } from 'react-native';
+import { View, FlatList, Pressable, Alert } from 'react-native';
 import { Surface, Text, useTheme, FAB, Chip } from 'react-native-paper';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -77,6 +77,7 @@ export default function AddInventoryItemScreen() {
   const [existingInventoryProductIds, setExistingInventoryProductIds] = useState<Set<number>>(new Set());
   const justAddedRef = useRef<Map<number, number>>(new Map()); // productId -> inventoryItemId
   const [justAdded, setJustAdded] = useState<Map<number, number>>(new Map());
+  const confirmedRef = useRef(false);
   const [sortOrder, setSortOrder] = useState<SortOrder>('custom');
   const { listName, handleListNameSave, handleListDelete } = useList(listId);
 
@@ -102,6 +103,38 @@ export default function AddInventoryItemScreen() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+      if (justAddedRef.current.size === 0 || confirmedRef.current) return;
+      
+      e.preventDefault();
+      
+      Alert.alert(
+        'Sair sem confirmar?',
+        `Você adicionou ${justAddedRef.current.size} ${justAddedRef.current.size === 1 ? 'produto' : 'produtos'} ao estoque. Deseja mantê-los ou desfazer?`,
+        [
+          {
+            text: 'Desfazer',
+            style: 'destructive',
+            onPress: async () => {
+              await Promise.all(
+                Array.from(justAddedRef.current.values()).map(id => deleteInventoryItem(id))
+              );
+              navigation.dispatch(e.data.action);
+            },
+          },
+          {
+            text: 'Manter',
+            style: 'default',
+            onPress: () => navigation.dispatch(e.data.action),
+          },
+        ]
+      );
+    });
+
+    return unsubscribe;
+  }, [navigation]);
 
   const filteredProducts = useMemo(() => {
     const filtered = allProducts.filter((product) => {
@@ -261,7 +294,10 @@ export default function AddInventoryItemScreen() {
       <FAB
         style={styles.fab}
         icon="check"
-        onPress={() => navigation.goBack()}
+        onPress={() => {
+          confirmedRef.current = true;
+          navigation.goBack();
+        }}
         label="Concluído"
       />
     </SafeAreaView>
