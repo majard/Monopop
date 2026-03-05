@@ -3,7 +3,7 @@ import { View, StyleSheet, Text, FlatList, Pressable } from 'react-native';
 import { Button, Surface, useTheme } from 'react-native-paper';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { concludeShoppingForListWithInvoice, getLastStoreName, getShoppingListItemsByListId, getInventoryItems, getStores, updateShoppingListItem, deleteShoppingListItem, getSetting, setSetting, getLastUnitPriceForProductAtStore, getLastUnitPriceForProduct } from '../database/database';
+import { concludeShoppingForListWithInvoice, getLastStoreName, getShoppingListItemsByListId, getInventoryItems, getStores, updateShoppingListItem, deleteShoppingListItem, getSetting, setSetting, getLastUnitPriceForProductAtStore, getLastUnitPriceForProduct, getProductConsumptionStats } from '../database/database';
 import { RootStackParamList } from '../types/navigation';
 import { ShoppingListItem } from '../database/models';
 import { useListContext } from '../context/ListContext';
@@ -30,6 +30,7 @@ interface ShoppingListItemWithDetails extends Omit<ShoppingListItem, 'checked'> 
   currentInventoryQuantity: number;
   price?: number;
   categoryName?: string | null;
+  lowestPrice90d: { price: number; storeName: string } | null;
 }
 
 export default function ShoppingListScreen() {
@@ -82,7 +83,14 @@ export default function ShoppingListScreen() {
         };
       });
 
-      setShoppingListItems(enhancedShoppingItems);
+      const withStats = await Promise.all(
+        enhancedShoppingItems.map(async (item) => {
+          if (!item.productId) return { ...item, lowestPrice90d: null };
+          const stats = await getProductConsumptionStats(item.inventoryItemId, item.productId);
+          return { ...item, lowestPrice90d: stats.lowestPrice90d };
+        })
+      );
+      setShoppingListItems(withStats);
       setStores(storesList);
 
       const [defaultStoreMode, defaultStoreId] = await Promise.all([
@@ -111,7 +119,7 @@ export default function ShoppingListScreen() {
         isFirstLoad.current = false;
 
         if (storeIdToSet !== null) {
-          updatePricesForStore(storeIdToSet, enhancedShoppingItems);
+          updatePricesForStore(storeIdToSet, withStats);
         }
       }
     } catch (error) {

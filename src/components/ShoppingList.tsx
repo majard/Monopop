@@ -18,6 +18,7 @@ export interface ShoppingListItem {
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
+  lowestPrice90d: { price: number; storeName: string } | null;
 }
 
 interface ShoppingListProps {

@@ -6,6 +6,7 @@ import {
   IconButton,
   useTheme,
 } from "react-native-paper";
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 export interface ShoppingListItemCardItem {
   id: number;
@@ -14,6 +15,7 @@ export interface ShoppingListItemCardItem {
   productName: string;
   currentInventoryQuantity: number;
   price?: number;
+  lowestPrice90d: { price: number; storeName: string } | null;
 }
 
 interface ShoppingListItemCardProps {
@@ -63,9 +65,19 @@ export function ShoppingListItemCard({
 
           {/* Right column: qty+price top, total middle, stock bottom */}
           <View style={cardStyles.rightCol}>
-            <Text style={[cardStyles.detail, { color: theme.colors.onSurfaceVariant }]}>
-              {item.quantity}× {item.price ? formatCurrency(item.price) : '—'}
-            </Text>
+            <View style={cardStyles.priceRow}>
+              <Text style={[cardStyles.detail, { color: theme.colors.onSurfaceVariant }]}>
+                {item.quantity}× {item.price ? formatCurrency(item.price) : '—'}
+              </Text>
+              {item.price && item.lowestPrice90d && item.price > item.lowestPrice90d.price && (
+                <MaterialCommunityIcons
+                  name="alert-circle-outline"
+                  size={14}
+                  color="orange"
+                  style={cardStyles.warningIcon}
+                />
+              )}
+            </View>
             {itemTotal && item.checked && (
               <Text style={[cardStyles.total, { color: theme.colors.primary }]}>
                 {itemTotal}
@@ -111,8 +123,16 @@ const cardStyles = StyleSheet.create({
   rightCol: {
     alignItems: 'flex-end',
   },
+  priceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
   detail: {
     fontSize: 13,
+  },
+  warningIcon: {
+    marginLeft: 2,
   },
   total: {
     fontSize: 13,

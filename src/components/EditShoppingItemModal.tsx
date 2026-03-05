@@ -18,6 +18,7 @@ interface EditShoppingItemModalProps {
     productName: string;
     quantity: number;
     price?: number;
+    lowestPrice90d: { price: number; storeName: string } | null;
   } | null;
   onSave: (quantity: number, price: number | undefined) => void;
   onDismiss: () => void;
@@ -108,6 +109,12 @@ export function EditShoppingItemModal({
             </View>
           )}
 
+          {item?.lowestPrice90d && item.price && item.price > item.lowestPrice90d.price && (
+            <Text style={styles.lowestPriceWarning}>
+              Menor preço (90d): R$ {item.lowestPrice90d.price.toFixed(2).replace('.', ',')} em {item.lowestPrice90d.storeName}
+            </Text>
+          )}
+
           <View style={styles.buttonRow}>
             <Button onPress={onDismiss} style={styles.button}>
               Cancelar
@@ -182,6 +189,13 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "600",
     color: "#2196F3",
+  },
+  lowestPriceWarning: {
+    fontSize: 12,
+    color: "orange",
+    fontStyle: 'italic',
+    textAlign: 'center',
+    marginBottom: 8,
   },
   buttonRow: {
     flexDirection: "row",
