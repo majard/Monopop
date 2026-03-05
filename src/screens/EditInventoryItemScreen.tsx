@@ -133,11 +133,12 @@ export default function EditInventoryItem() {
   }, [name, notes, selectedCategoryId, selectedListId, liveQuantity, suggestedPrice, shoppingListItem]);
 
   const handleSave = useCallback(async () => {
+
     if (!inventoryItem?.id) return;
     try {
       const resolvedPrice = parseFloat(priceInput.replace(',', '.'));
       const finalPrice = isNaN(resolvedPrice) ? suggestedPrice : resolvedPrice;
-
+      
       await updateInventoryItem(inventoryItem.id, liveQuantity, notes);
 
       if (name !== inventoryItem.productName) {
@@ -151,10 +152,10 @@ export default function EditInventoryItem() {
       }
 
       // Handle price and shopping list changes
-      if (finalPrice !== initialPriceRef.current && shoppingListItem?.id && shoppingListItem.id > 0) {
-        await updateShoppingListItem(shoppingListItem.id, { price: finalPrice });
-      }
+      if (shoppingListItem?.id && shoppingListItem.id > 0) {
+        const updateResult = await updateShoppingListItem(shoppingListItem.id, { price: finalPrice });
 
+      }
       const originalSli = initialShoppingListItemRef.current;
       if (shoppingListItem === null && originalSli) {
         await deleteShoppingListItem(originalSli.id);
@@ -164,6 +165,8 @@ export default function EditInventoryItem() {
       }
 
       savedRef.current = true;
+      setSuggestedPrice(finalPrice);
+      setPriceInput(finalPrice.toFixed(2));
       isDirtyRef.current = false;
     } catch (error) {
       console.error('Erro ao salvar:', error);
@@ -176,6 +179,7 @@ export default function EditInventoryItem() {
   }, [handleSave, navigation]);
 
   const loadAll = useCallback(async () => {
+
     if (!inventoryItem) return;
     loadingRef.current = true;
 
@@ -214,9 +218,10 @@ export default function EditInventoryItem() {
     } else if (defaultStoreMode === 'fixed' && defaultStoreId) {
       const storePrice = await getLastUnitPriceForProductAtStore(inventoryItem.productId, parseInt(defaultStoreId));
       if (storePrice) { setSuggestedPrice(storePrice); setPriceInput(storePrice.toFixed(2)); return; }
+    } else {
+      const lastPrice = await getLastUnitPriceForProduct(inventoryItem.productId);
+      if (lastPrice) { setSuggestedPrice(lastPrice); setPriceInput(lastPrice.toFixed(2)); }
     }
-    const lastPrice = await getLastUnitPriceForProduct(inventoryItem.productId);
-    if (lastPrice) { setSuggestedPrice(lastPrice); setPriceInput(lastPrice.toFixed(2)); }
 
     // Set initial refs after loadAll completes
     initialPriceRef.current = suggestedPrice;
@@ -225,6 +230,8 @@ export default function EditInventoryItem() {
     // Reset dirty after load
     //workaround for the issue where the component is unmounted before the loadAll is completed
     isDirtyRef.current = false;
+    console.log('loadAll price', { sliPrice: sli?.price, defaultStoreMode, lastPrice });
+
     setTimeout(() => {
       loadingRef.current = false;
     }, 0);
