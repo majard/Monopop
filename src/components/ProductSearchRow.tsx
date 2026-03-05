@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Pressable } from 'react-native';
 import { Surface, IconButton, Text, useTheme } from 'react-native-paper';
 import { EmojiAvatar } from './EmojiAvatar';
 import { getEmojiForProduct } from '../utils/stringUtils';
@@ -11,6 +11,9 @@ interface ProductSearchRowProps {
   onPlus: () => void;
   onMinus?: () => void;
   isOnList: boolean;
+  onStartContinuousIncrement?: () => void;
+  onStartContinuousDecrement?: () => void;
+  onStopContinuous?: () => void;
 }
 
 export const ProductSearchRow = React.memo(({
@@ -20,6 +23,9 @@ export const ProductSearchRow = React.memo(({
   onPlus,
   onMinus,
   isOnList,
+  onStartContinuousIncrement,
+  onStartContinuousDecrement,
+  onStopContinuous,
 }: ProductSearchRowProps) => {
   const theme = useTheme();
 
@@ -45,15 +51,22 @@ export const ProductSearchRow = React.memo(({
 
         {/* Right — remove + quantity + plus */}
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          {isOnList ? (
-            <IconButton
-              icon={listQuantity === 1 ? 'close' : 'minus'}
-              size={20}
+          {isOnList && listQuantity !== undefined && listQuantity >= 1 ? (
+            <Pressable
               onPress={onMinus}
-              iconColor={theme.colors.error}
-              style={{ margin: 0 }}
+              onLongPress={onStartContinuousDecrement}
+              onPressOut={onStopContinuous}
               hitSlop={{ top: 16, bottom: 16, left: 16, right: 8 }}
-            />
+              style={{ padding: 8 }}
+            >
+              <IconButton
+                icon={listQuantity === 1 ? 'close' : 'minus'}
+                size={20}
+                iconColor={theme.colors.error}
+                style={{ margin: 0 }}
+                pointerEvents="none"
+              />
+            </Pressable>
           ) : null}
           {isOnList && listQuantity !== undefined ? (
             <Text style={{ 
@@ -65,14 +78,21 @@ export const ProductSearchRow = React.memo(({
               {listQuantity}
             </Text>
           ) : null}
-          <IconButton
-            icon="plus"
-            size={24}
+          <Pressable
             onPress={onPlus}
-            iconColor={isOnList ? theme.colors.primary : theme.colors.outline}
-            style={{ margin: 0 }}
+            onLongPress={onStartContinuousIncrement}
+            onPressOut={onStopContinuous}
             hitSlop={{ top: 16, bottom: 16, left: 8, right: 16 }}
-          />
+            style={{ padding: 8 }}
+          >
+            <IconButton
+              icon="plus"
+              size={24}
+              iconColor={isOnList ? theme.colors.primary : theme.colors.outline}
+              style={{ margin: 0 }}
+              pointerEvents="none"
+            />
+          </Pressable>
         </View>
       </View>
     </Surface>

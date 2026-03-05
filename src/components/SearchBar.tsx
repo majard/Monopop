@@ -8,9 +8,10 @@ interface SearchBarProps {
   searchQuery: string;
   setSearchQuery: (q: string) => void;
   placeholder?: string;
+  autoFocus?: boolean;
 }
 
-export default function SearchBar({ searchQuery, setSearchQuery, placeholder = "Buscar produtos..." }: SearchBarProps) {
+export default function SearchBar({ searchQuery, setSearchQuery, placeholder = "Buscar produtos...", autoFocus }: SearchBarProps) {
     const theme = useTheme();
     const styles = createHomeScreenStyles(theme);
     return (
@@ -21,6 +22,7 @@ export default function SearchBar({ searchQuery, setSearchQuery, placeholder = "
                 onChangeText={setSearchQuery}
                 mode="outlined"
                 style={styles.searchInput}
+                autoFocus={autoFocus}
                 right={
                     searchQuery.trim() ? (
                         <PaperTextInput.Icon
