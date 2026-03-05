@@ -729,10 +729,12 @@ export const getShoppingListItemsByListId = async (listId: number): Promise<Shop
           sli.createdAt,
           sli.updatedAt,
           p.name AS productName,       -- Add product name for convenience
-          ii.productId AS productId    -- Add productId for convenience
+          ii.productId AS productId,    -- Add productId for convenience
+          c.name AS categoryName        -- Add category name for convenience
        FROM shopping_list_items sli
        JOIN inventory_items ii ON sli.inventoryItemId = ii.id
        JOIN products p ON ii.productId = p.id
+       LEFT JOIN categories c ON p.categoryId = c.id
        WHERE ii.listId = ?
        ORDER BY sli.sortOrder ASC;`,
       [listId]

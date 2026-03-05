@@ -1,12 +1,13 @@
 import { calculateSimilarity, preprocessName } from "./similarityUtils";
 
-export type SortOrder = "custom" | "alphabetical" | "category" | "quantityAsc" | "quantityDesc";
+export type SortOrder = "custom" | "alphabetical" | "category" | "quantityAsc" | "quantityDesc" | "stockAsc" | "stockDesc";
 
 export interface SortableItem {
   productName: string;
   quantity?: number;
   sortOrder?: number;
   categoryName?: string | null;
+  stockQuantity?: number;
 }
 
 export function sortItems<T extends SortableItem>(
@@ -43,6 +44,12 @@ export function sortItems<T extends SortableItem>(
       break;
     case "quantityDesc":
       sorted.sort((a, b) => (b.quantity ?? 0) - (a.quantity ?? 0));
+      break;
+    case "stockAsc":
+      sorted.sort((a, b) => (a.stockQuantity ?? 0) - (b.stockQuantity ?? 0));
+      break;
+    case "stockDesc":
+      sorted.sort((a, b) => (b.stockQuantity ?? 0) - (a.stockQuantity ?? 0));
       break;
     default: // custom
       sorted.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));

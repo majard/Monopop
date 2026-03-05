@@ -16,6 +16,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AddItemButton } from '../components/AddItemButton';
 import { ItemPickerDialog } from '../components/ItemPickerDialog';
 import { createHomeScreenStyles } from '../styles/HomeScreenStyles';
+import { SortMenu } from '../components/SortMenu';
+import { sortItems, SortOrder } from '../utils/sortUtils';
 
 type ShoppingListScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'ShoppingList'>;
 
@@ -25,6 +27,7 @@ interface ShoppingListItemWithDetails extends Omit<ShoppingListItem, 'checked'> 
   productId: number;
   currentInventoryQuantity: number;
   price?: number;
+  categoryName?: string | null;
 }
 
 interface ShoppingSection {
@@ -45,6 +48,7 @@ export default function ShoppingListScreen() {
   const [selectedStoreId, setSelectedStoreId] = useState<number | null>(null);
   const [lastStoreId, setLastStoreId] = useState<number | null>(null);
   const [storePickerVisible, setStorePickerVisible] = useState(false);
+  const [sortOrder, setSortOrder] = useState<SortOrder>('alphabetical');
   const navigation = useNavigation<ShoppingListScreenNavigationProp>();
   const theme = useTheme();
   const styles = createHomeScreenStyles(theme);
@@ -76,6 +80,7 @@ export default function ShoppingListScreen() {
           productId: inventoryItem?.productId || 0,
           currentInventoryQuantity: inventoryItem?.quantity || 0,
           price: manualPrices.current.has(item.id) ? manualPrices.current.get(item.id)! : item.price,
+          categoryName: item.categoryName ?? null,
         };
       });
 
@@ -188,6 +193,18 @@ export default function ShoppingListScreen() {
     />
   ), [handleToggleChecked, handleDeleteItem]);
 
+  const sortShoppingItems = useCallback((items: ShoppingListItemWithDetails[]) => {
+    const mapped = items.map(item => ({
+      ...item,
+      productName: item.productName,
+      quantity: item.quantity,
+      stockQuantity: item.currentInventoryQuantity,
+      sortOrder: 0,
+      categoryName: item.categoryName ?? null,
+    }));
+    return sortItems(mapped, sortOrder, '') as ShoppingListItemWithDetails[];
+  }, [sortOrder]);
+
   // Computed values — declared once, before any usage
   const checkedItems = shoppingListItems.filter(item => item.checked);
   const uncheckedItems = shoppingListItems.filter(item => !item.checked);
@@ -218,11 +235,11 @@ export default function ShoppingListScreen() {
   const sections: ShoppingSection[] = [
     {
       title: `Pendentes (${uncheckedItems.length})`,
-      data: uncheckedItems,
+      data: sortShoppingItems(uncheckedItems),
     },
     {
       title: `No carrinho (${checkedItems.length})`,
-      data: isCartCollapsed ? [] : checkedItems,
+      data: isCartCollapsed ? [] : sortShoppingItems(checkedItems),
     },
   ];
 
@@ -253,6 +270,12 @@ export default function ShoppingListScreen() {
         >
           {defaultStoreName || 'Selecionar loja'}
         </Button>
+        <SortMenu
+          sortOrder={sortOrder}
+          setSortOrder={setSortOrder}
+          mode="shoppingList"
+          iconOnly
+        />
       </View>
 
       <SectionList

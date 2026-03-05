@@ -9,7 +9,7 @@ import { Text, useTheme } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { SortOrder } from '../utils/sortUtils';
 
-type SortMenuMode = 'inventoryItem' | 'product';
+type SortMenuMode = 'inventoryItem' | 'product' | 'shoppingList';
 
 interface SortOption {
   label: string;
@@ -25,6 +25,15 @@ const INVENTORY_ITEM_OPTIONS: SortOption[] = [
   { label: 'Quantidade (Menor Primeiro)', value: 'quantityAsc', icon: 'sort-numeric-ascending' },
 ];
 
+const SHOPPING_LIST_OPTIONS: SortOption[] = [
+  { label: 'Alfabética', value: 'alphabetical', icon: 'sort-alphabetical-ascending' },
+  { label: 'Por Categoria', value: 'category', icon: 'tag-outline' },
+  { label: 'Qtd. desejada (maior)', value: 'quantityDesc', icon: 'sort-numeric-descending' },
+  { label: 'Qtd. desejada (menor)', value: 'quantityAsc', icon: 'sort-numeric-ascending' },
+  { label: 'Estoque (menor primeiro)', value: 'stockAsc', icon: 'warehouse' },
+  { label: 'Estoque (maior primeiro)', value: 'stockDesc', icon: 'warehouse' },
+];
+
 const PRODUCT_OPTIONS: SortOption[] = [
   { label: 'Alfabética', value: 'alphabetical', icon: 'sort-alphabetical-ascending' },
   { label: 'Por Categoria', value: 'category', icon: 'tag-outline' },
@@ -34,14 +43,20 @@ interface SortMenuProps {
   sortOrder: SortOrder;
   setSortOrder: (order: SortOrder) => void;
   mode?: SortMenuMode;
+  iconOnly?: boolean;
 }
 
-export const SortMenu = ({ sortOrder, setSortOrder, mode = 'inventoryItem' }: SortMenuProps) => {
+export const SortMenu = ({ sortOrder, setSortOrder, mode = 'inventoryItem', iconOnly = false }: SortMenuProps) => {
   const [visible, setVisible] = useState(false);
   const theme = useTheme();
 
-  const options = mode === 'product' ? PRODUCT_OPTIONS : INVENTORY_ITEM_OPTIONS;
+  const options = mode === 'product'
+    ? PRODUCT_OPTIONS
+    : mode === 'shoppingList'
+      ? SHOPPING_LIST_OPTIONS
+      : INVENTORY_ITEM_OPTIONS;
   const activeOption = options.find(o => o.value === sortOrder) ?? options[0];
+  const isDefault = sortOrder === options[0].value;
 
   const handleSelect = useCallback((order: SortOrder) => {
     setSortOrder(order);
@@ -50,32 +65,56 @@ export const SortMenu = ({ sortOrder, setSortOrder, mode = 'inventoryItem' }: So
 
   return (
     <>
-      <Pressable
-        onPress={() => setVisible(true)}
-        style={({ pressed }) => [
-          styles.trigger,
-          {
-            backgroundColor: pressed
-              ? theme.colors.surfaceVariant
-              : theme.colors.surface,
-            borderColor: theme.colors.outline,
-          },
-        ]}
-      >
-        <MaterialCommunityIcons
-          name="sort"
-          size={16}
-          color={theme.colors.primary}
-        />
-        <Text style={[styles.triggerText, { color: theme.colors.primary }]}>
-          {activeOption.label}
-        </Text>
-        <MaterialCommunityIcons
-          name="chevron-down"
-          size={16}
-          color={theme.colors.primary}
-        />
-      </Pressable>
+      {iconOnly ? (
+        <Pressable
+          onPress={() => setVisible(true)}
+          style={({ pressed }) => ({
+            padding: 8,
+            borderRadius: 20,
+            backgroundColor: pressed ? theme.colors.surfaceVariant : 'transparent',
+          })}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+            <MaterialCommunityIcons
+              name="sort"
+              size={18}
+              color={isDefault ? theme.colors.onSurfaceVariant : theme.colors.primary}
+            />
+            <MaterialCommunityIcons
+              name={activeOption.icon as any}
+              size={18}
+              color={isDefault ? theme.colors.onSurfaceVariant : theme.colors.primary}
+            />
+          </View>
+        </Pressable>
+      ) : (
+        <Pressable
+          onPress={() => setVisible(true)}
+          style={({ pressed }) => [
+            styles.trigger,
+            {
+              backgroundColor: pressed
+                ? theme.colors.surfaceVariant
+                : theme.colors.surface,
+              borderColor: theme.colors.outline,
+            },
+          ]}
+        >
+          <MaterialCommunityIcons
+            name="sort"
+            size={16}
+            color={theme.colors.primary}
+          />
+          <Text style={[styles.triggerText, { color: theme.colors.primary }]}>
+            {activeOption.label}
+          </Text>
+          <MaterialCommunityIcons
+            name="chevron-down"
+            size={16}
+            color={theme.colors.primary}
+          />
+        </Pressable>
+      )}
 
       <Modal
         visible={visible}
@@ -92,7 +131,7 @@ export const SortMenu = ({ sortOrder, setSortOrder, mode = 'inventoryItem' }: So
               styles.sheet,
               { backgroundColor: theme.colors.surface }
             ]}
-            onPress={() => {}} // prevent backdrop dismiss when tapping sheet
+            onPress={() => { }} // prevent backdrop dismiss when tapping sheet
           >
             <View style={[styles.handle, { backgroundColor: theme.colors.outlineVariant }]} />
             <Text variant="titleSmall" style={[styles.sheetTitle, { color: theme.colors.onSurfaceVariant }]}>
@@ -110,8 +149,8 @@ export const SortMenu = ({ sortOrder, setSortOrder, mode = 'inventoryItem' }: So
                       backgroundColor: isActive
                         ? theme.colors.primaryContainer
                         : pressed
-                        ? theme.colors.surfaceVariant
-                        : 'transparent',
+                          ? theme.colors.surfaceVariant
+                          : 'transparent',
                     },
                   ]}
                 >

@@ -51,6 +51,7 @@ export interface ShoppingListItem {
   notes?: string;
   createdAt: string;
   updatedAt: string;
+  categoryName?: string | null;
 }
 
 export interface Store {
