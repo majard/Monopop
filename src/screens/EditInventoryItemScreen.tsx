@@ -131,6 +131,9 @@ export default function EditInventoryItem() {
   const handleSave = useCallback(async () => {
     if (!inventoryItem?.id) return;
     try {
+      const resolvedPrice = parseFloat(priceInput.replace(',', '.'));
+      const finalPrice = isNaN(resolvedPrice) ? suggestedPrice : resolvedPrice;
+
       await updateInventoryItem(inventoryItem.id, liveQuantity, notes);
 
       if (name !== inventoryItem.productName) {
@@ -144,8 +147,8 @@ export default function EditInventoryItem() {
       }
 
       // Handle price and shopping list changes
-      if (suggestedPrice !== initialPriceRef.current && shoppingListItem?.id && shoppingListItem.id > 0) {
-        await updateShoppingListItem(shoppingListItem.id, { price: suggestedPrice });
+      if (finalPrice !== initialPriceRef.current && shoppingListItem?.id && shoppingListItem.id > 0) {
+        await updateShoppingListItem(shoppingListItem.id, { price: finalPrice });
       }
       
       const originalSli = initialShoppingListItemRef.current;
@@ -153,7 +156,7 @@ export default function EditInventoryItem() {
         await deleteShoppingListItem(originalSli.id);
       }
       if (shoppingListItem?.id === -1 && !originalSli) {
-        await addShoppingListItem(inventoryItem.listId, inventoryItem.productName, shoppingListItem.quantity, shoppingListItem.price);
+        await addShoppingListItem(inventoryItem.listId, inventoryItem.productName, shoppingListItem.quantity, finalPrice);
       }
 
       savedRef.current = true;
@@ -161,7 +164,7 @@ export default function EditInventoryItem() {
     } catch (error) {
       console.error('Erro ao salvar:', error);
     }
-  }, [inventoryItem, liveQuantity, notes, name, selectedCategoryId, selectedListId, suggestedPrice, shoppingListItem]);
+  }, [inventoryItem, liveQuantity, notes, name, selectedCategoryId, selectedListId, priceInput, suggestedPrice, shoppingListItem]);
 
   const handleSaveAndGoBack = useCallback(async () => {
     await handleSave();
@@ -386,7 +389,7 @@ export default function EditInventoryItem() {
               {editingPrice ? (
                 <RNTextInput
                   value={priceInput}
-                  onChangeText={setPriceInput}
+                  onChangeText={text => { setPriceInput(text); isDirtyRef.current = true; }}
                   keyboardType="decimal-pad"
                   autoFocus
                   onBlur={handlePriceSave}
