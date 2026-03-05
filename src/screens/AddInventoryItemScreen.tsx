@@ -156,7 +156,9 @@ export default function AddInventoryItemScreen() {
       }
       return calculateSimilarity(processedName, processedQuery) >= searchSimilarityThreshold;
     });
-    return filtered.sort((a, b) => a.name.localeCompare(b.name));
+    return filtered
+      .map(p => ({ ...p, productName: p.name, sortOrder: p.order }))
+      .sort((a, b) => a.name.localeCompare(b.name));
   }, [allProducts, existingInventoryProductIds, justAdded, searchQuery]);
 
   const handleAddNewProduct = useCallback(async () => {
@@ -294,7 +296,7 @@ export default function AddInventoryItemScreen() {
               {justAdded.size} {justAdded.size === 1 ? 'adicionado' : 'adicionados'}
             </Chip>
           ) : null}
-          <SortMenu setSortOrder={setSortOrder} />
+          <SortMenu setSortOrder={setSortOrder} sortOrder={sortOrder} mode="product" />
         </View>
       </View>
       <FlatList

@@ -316,7 +316,7 @@ export default function AddProductToShoppingListScreen() {
               {sessionChanges.size} {sessionChanges.size === 1 ? 'modificado' : 'modificados'}
             </Chip>
           ) : null}
-          <SortMenu setSortOrder={setSortOrder} />
+          <SortMenu setSortOrder={setSortOrder} sortOrder={sortOrder} />
         </View>
       </View>
       <FlatList

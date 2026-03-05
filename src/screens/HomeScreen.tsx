@@ -163,7 +163,7 @@ export default function HomeScreen() {
             Importar
           </Button>
 
-          <SortMenu setSortOrder={handleSortOrderChange} />
+          <SortMenu setSortOrder={handleSortOrderChange} sortOrder={sortOrder} />
         </View>
       </View>
 
