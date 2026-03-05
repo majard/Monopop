@@ -124,6 +124,7 @@ export default function EditInventoryItem() {
 
   // Mark dirty on any field change (but not on initial mount)
   useEffect(() => {
+
     if (!mountedRef.current) {
       mountedRef.current = true;
       return;
@@ -138,7 +139,7 @@ export default function EditInventoryItem() {
     try {
       const resolvedPrice = parseFloat(priceInput.replace(',', '.'));
       const finalPrice = isNaN(resolvedPrice) ? suggestedPrice : resolvedPrice;
-      
+
       await updateInventoryItem(inventoryItem.id, liveQuantity, notes);
 
       if (name !== inventoryItem.productName) {
@@ -164,7 +165,6 @@ export default function EditInventoryItem() {
         await addShoppingListItem(inventoryItem.listId, inventoryItem.productName, shoppingListItem.quantity, finalPrice);
       }
 
-      savedRef.current = true;
       setSuggestedPrice(finalPrice);
       setPriceInput(finalPrice.toFixed(2));
       isDirtyRef.current = false;
@@ -217,7 +217,7 @@ export default function EditInventoryItem() {
       setPriceInput(sli.price.toFixed(2));
     } else if (defaultStoreMode === 'fixed' && defaultStoreId) {
       const storePrice = await getLastUnitPriceForProductAtStore(inventoryItem.productId, parseInt(defaultStoreId));
-      if (storePrice) { setSuggestedPrice(storePrice); setPriceInput(storePrice.toFixed(2)); return; }
+      if (storePrice) { setSuggestedPrice(storePrice); setPriceInput(storePrice.toFixed(2)); }
     } else {
       const lastPrice = await getLastUnitPriceForProduct(inventoryItem.productId);
       if (lastPrice) { setSuggestedPrice(lastPrice); setPriceInput(lastPrice.toFixed(2)); }
@@ -230,8 +230,6 @@ export default function EditInventoryItem() {
     // Reset dirty after load
     //workaround for the issue where the component is unmounted before the loadAll is completed
     isDirtyRef.current = false;
-    console.log('loadAll price', { sliPrice: sli?.price, defaultStoreMode, lastPrice });
-
     setTimeout(() => {
       loadingRef.current = false;
     }, 0);
@@ -242,6 +240,7 @@ export default function EditInventoryItem() {
   // beforeRemove guard
   useEffect(() => {
     const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+
       if (!isDirtyRef.current || savedRef.current) return;
       e.preventDefault();
       Alert.alert(
