@@ -89,6 +89,7 @@ export default function EditInventoryItem() {
   const [priceHistory, setPriceHistory] = useState<PriceHistory[]>([]);
   const [quantityHistoryCollapsed, setQuantityHistoryCollapsed] = useState(false);
   const [priceHistoryCollapsed, setPriceHistoryCollapsed] = useState(false);
+  const [statsCollapsed, setStatsCollapsed] = useState(true);
 
   // Derived stats
   const [stats, setStats] = useState<ConsumptionStats | null>(null);
@@ -222,8 +223,11 @@ export default function EditInventoryItem() {
     initialShoppingListItemRef.current = sli;
 
     // Reset dirty after load
+    //workaround for the issue where the component is unmounted before the loadAll is completed
     isDirtyRef.current = false;
-    loadingRef.current = false;
+    setTimeout(() => {
+      loadingRef.current = false;
+    }, 0);
   }, [inventoryItem]);
 
   useFocusEffect(useCallback(() => { loadAll(); }, [loadAll]));
@@ -461,32 +465,61 @@ export default function EditInventoryItem() {
 
         {/* Derived stats */}
         {stats && (
-          <View style={[editInventoryItemStyles.statsRow, { borderColor: theme.colors.outlineVariant }]}>
-            {stats.avgWeeklyConsumption !== null && (
-              <View style={editInventoryItemStyles.statItem}>
-                <MaterialCommunityIcons name="trending-down" size={16} color={theme.colors.onSurfaceVariant} />
-                <Text style={[editInventoryItemStyles.statText, { color: theme.colors.onSurfaceVariant }]}>
-                  Consumo médio: ~{stats.avgWeeklyConsumption.toFixed(1)}/semana
-                </Text>
+          <>
+            <Pressable
+              onPress={() => setStatsCollapsed(p => !p)}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginTop: 16,
+              }}
+            >
+              <Text
+                variant="labelMedium"
+                style={{
+                  textTransform: 'uppercase',
+                  letterSpacing: 0.5,
+                  color: theme.colors.onSurfaceVariant,
+                }}
+              >
+                Estatísticas
+              </Text>
+              <MaterialCommunityIcons
+                name={statsCollapsed ? "chevron-down" : "chevron-up"}
+                size={18}
+                color={theme.colors.onSurfaceVariant}
+              />
+            </Pressable>
+            {!statsCollapsed && (
+              <View style={[editInventoryItemStyles.statsRow, { borderColor: theme.colors.outlineVariant }]}>
+                {stats.avgWeeklyConsumption !== null && (
+                  <View style={editInventoryItemStyles.statItem}>
+                    <MaterialCommunityIcons name="trending-down" size={16} color={theme.colors.onSurfaceVariant} />
+                    <Text style={[editInventoryItemStyles.statText, { color: theme.colors.onSurfaceVariant }]}>
+                      Consumo médio: ~{stats.avgWeeklyConsumption.toFixed(1)}/semana
+                    </Text>
+                  </View>
+                )}
+                {stats.avgPrice90d !== null && (
+                  <View style={editInventoryItemStyles.statItem}>
+                    <MaterialCommunityIcons name="tag-outline" size={16} color={theme.colors.onSurfaceVariant} />
+                    <Text style={[editInventoryItemStyles.statText, { color: theme.colors.onSurfaceVariant }]}>
+                      Preço médio (90d): {formatCurrency(stats.avgPrice90d)}
+                    </Text>
+                  </View>
+                )}
+                {stats.lowestPrice90d !== null && (
+                  <View style={editInventoryItemStyles.statItem}>
+                    <MaterialCommunityIcons name="sale" size={16} color={theme.colors.onSurfaceVariant} />
+                    <Text style={[editInventoryItemStyles.statText, { color: theme.colors.onSurfaceVariant }]}>
+                      Menor preço (90d): {formatCurrency(stats.lowestPrice90d.price)} em {stats.lowestPrice90d.storeName}
+                    </Text>
+                  </View>
+                )}
               </View>
             )}
-            {stats.avgPrice90d !== null && (
-              <View style={editInventoryItemStyles.statItem}>
-                <MaterialCommunityIcons name="tag-outline" size={16} color={theme.colors.onSurfaceVariant} />
-                <Text style={[editInventoryItemStyles.statText, { color: theme.colors.onSurfaceVariant }]}>
-                  Preço médio (90d): {formatCurrency(stats.avgPrice90d)}
-                </Text>
-              </View>
-            )}
-            {stats.lowestPrice90d !== null && (
-              <View style={editInventoryItemStyles.statItem}>
-                <MaterialCommunityIcons name="sale" size={16} color={theme.colors.onSurfaceVariant} />
-                <Text style={[editInventoryItemStyles.statText, { color: theme.colors.onSurfaceVariant }]}>
-                  Menor preço (90d): {formatCurrency(stats.lowestPrice90d.price)} em {stats.lowestPrice90d.storeName}
-                </Text>
-              </View>
-            )}
-          </View>
+          </>
         )}
 
         <Divider style={{ marginVertical: 16 }} />

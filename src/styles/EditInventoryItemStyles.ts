@@ -82,7 +82,7 @@ export const editInventoryItemStyles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
-    marginTop: 16,
+    marginTop: 8,
     paddingTop: 12,
     borderTopWidth: 1,
   },
