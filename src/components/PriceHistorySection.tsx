@@ -29,7 +29,7 @@ export default function PriceHistorySection({
   onToggle,
   themeColors,
 }: PriceHistorySectionProps) {
-  const formatFullDate = (d: string) => format(parseISO(d.includes('T') ? d : d + 'T00:00:00'), 'dd/MM/yyyy', { locale: ptBR });
+  const formatFullDate = (d: string) => format(parseISO(d), 'dd/MM/yyyy HH:mm', { locale: ptBR });
   const formatCurrency = (v: number) => `R$ ${v.toFixed(2).replace('.', ',')}`;
   return (
     <>

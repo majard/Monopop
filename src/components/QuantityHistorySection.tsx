@@ -30,7 +30,7 @@ export default function QuantityHistorySection({
   chartData,
   themeColors,
 }: QuantityHistorySectionProps) {
-  const formatDate = (d: string) => format(parseISO(d.includes('T') ? d : d + 'T00:00:00'), 'dd/MM', { locale: ptBR });
+  const formatDate = (d: string) => format(parseISO(d.includes('T') ? d : d + 'T00:00:00'), 'dd/MM/yyyy HH:mm', { locale: ptBR });
 
   const hexToRgb = (hex: string): string => {
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -82,10 +82,10 @@ export default function QuantityHistorySection({
             const diff = next ? item.quantity - next.quantity : null;
             return (
               <View key={item.id} style={[localStyles.historyRow, { borderBottomColor: themeColors.outlineVariant }]}>
-                <Text style={{ color: themeColors.onSurfaceVariant, fontSize: 13 }}>
+                <Text style={{ color: themeColors.onSurfaceVariant, fontSize: 13, marginRight: 4 }}>
                   {formatDate(item.date)}
                 </Text>
-                <Text style={{ color: themeColors.onSurface, fontSize: 13, fontWeight: '500' }}>
+                <Text style={{ color: themeColors.onSurface, fontSize: 13, fontWeight: '500', marginRight: 4 }}>
                   {item.quantity}
                 </Text>
                 {diff !== null && (
