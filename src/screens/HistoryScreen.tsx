@@ -66,7 +66,6 @@ export default function HistoryScreen() {
   // Use inventory hook for fuzzy search and finding items
   const { findByProductId, inventoryItems, filteredInventoryItems } = useInventory(listId, 'alphabetical', searchQuery);
 
-  //console.log('inventoryItems in historyscreen', inventoryItems);
   const loadHistory = async () => {
     try {
       const db = getDb();
@@ -263,14 +262,12 @@ export default function HistoryScreen() {
   const formatCurrency = (value: number) => `R$ ${value.toFixed(2).replace('.', ',')}`;
   
   const formatDate = (dateString: string) => {
-    console.log('dateString', dateString);
     const date = parseISO(dateString);
     return format(date, 'dd MMM yyyy', { locale: ptBR });
   };
 
   const handleItemPress = (productId: number) => {
     // Find full inventory item using findByProductId
-    console.log('finding inventory item for product id', productId);
     const inventoryItem = findByProductId(productId);
     if (inventoryItem) {
       navigation.navigate('EditInventoryItem', { inventoryItem });

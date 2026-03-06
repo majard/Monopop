@@ -200,12 +200,9 @@ export default function AddInventoryItemScreen() {
   }, [searchQuery, listId, updateJustAdded, loadData]);
 
   const handlePlus = useCallback(async (product: Product) => {
-    console.log('handlePlus called with product:', product);
-    console.log('product.id:', product?.id);
-    console.log('listId:', listId);
+    
     try {
       const inventoryItemId = await addInventoryItem(listId, product.id, 1);
-      console.log('addInventoryItem returned:', inventoryItemId);
       updateJustAdded(product.id, inventoryItemId);
     } catch (error) {
       console.error('Erro ao adicionar ao inventário:', error);
