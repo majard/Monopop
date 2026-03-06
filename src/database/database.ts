@@ -3,14 +3,18 @@ import { Product, InventoryItem, InventoryHistory, List, ShoppingListItem, Categ
 import { CURRENT_DATABASE_VERSION, runMigrations } from "./migrations";
 
 let db: SQLite.SQLiteDatabase | null = null;
+let initPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
 export const initializeDatabase = async (
   databaseName: string = "listai.db"
 ): Promise<SQLite.SQLiteDatabase> => {
-  if (!db) {
+  if (db) return db;
+  if (initPromise) return initPromise;
+
+  initPromise = (async () => {
     db = await SQLite.openDatabaseAsync(databaseName);
-    // Enable foreign key constraints (sqlite3 default is OFF)
     await db.execAsync('PRAGMA foreign_keys = ON;');
+
 
     try {
       const result = db.getFirstSync<{ user_version: number }>('PRAGMA user_version;');
@@ -18,27 +22,26 @@ export const initializeDatabase = async (
 
       if (currentVersion < CURRENT_DATABASE_VERSION) {
         console.log(`Migrating database from v${currentVersion} to v${CURRENT_DATABASE_VERSION}...`);
-        // The transaction for migration is handled inside runMigrations now
         await runMigrations(db, currentVersion);
-        console.log('Database migration complete.');
 
         // Reopen to clear any cached prepared statements
         db = await SQLite.openDatabaseAsync(databaseName);
         await db.execAsync('PRAGMA foreign_keys = ON;');
-        // PRAGMA user_version is also handled inside runMigrations within the transaction
         console.log('Database migration complete.');
       } else {
         console.log('Database is already up to date.');
       }
-
     } catch (error) {
       console.error("Error during database initialization or migration:", error);
-      // It's crucial to throw the error to prevent the app from continuing with a potentially broken DB
       throw error;
     }
-  }
-  return db;
+
+    return db;
+  })();
+
+  return initPromise;
 };
+
 
 export const getDb = (): SQLite.SQLiteDatabase => {
   if (!db) {

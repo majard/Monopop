@@ -39,7 +39,7 @@ export default function useInventory(listId: number, sortOrder: SortOrder, searc
       const loaded = await getInventoryItems(listId);
       setInventoryItems(loaded);
     } catch (err) {
-      console.error("Erro ao carregar produtos:", err);
+      console.error("Erro ao carregar estoque:", err);
     }
   }, [listId]);
 
