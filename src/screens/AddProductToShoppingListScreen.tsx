@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { View, FlatList, Pressable, Alert } from 'react-native';
+import { View, FlatList, SectionList, Pressable, Alert } from 'react-native';
 import { Surface, Text, useTheme, FAB, Chip } from 'react-native-paper';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRoute, useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -40,7 +41,8 @@ export default function AddProductToShoppingListScreen() {
   const styles = createHomeScreenStyles(theme);
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortOrder, setSortOrder] = useState<SortOrder>('quantityAsc');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('category');
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [shoppingListByInventoryId, setShoppingListByInventoryId] = useState<
     Map<number, { id: number; quantity: number }>
@@ -49,7 +51,7 @@ export default function AddProductToShoppingListScreen() {
   const sessionChangesRef = useRef<Map<number, { inventoryItemId: number; originalQuantity: number | null }>>(new Map());
   const [sessionChanges, setSessionChanges] = useState<Map<number, { inventoryItemId: number; originalQuantity: number | null }>>(new Map());
   const confirmedRef = useRef(false);
-  const flatListRef = useRef<FlatList>(null);
+  const flatListRef = useRef<any>(null);
 
   const updateSessionChanges = useCallback((
     inventoryItemId: number, 
@@ -152,6 +154,25 @@ export default function AddProductToShoppingListScreen() {
     });
     return sortInventoryItems(filtered, sortOrder, searchQuery);
   }, [inventoryItems, searchQuery, sortOrder]);
+
+  const toggleCategory = useCallback((category: string) => {
+    setCollapsedCategories(prev => {
+      const next = new Set(prev);
+      if (next.has(category)) next.delete(category);
+      else next.add(category);
+      return next;
+    });
+  }, []);
+
+  const categorySections = useMemo(() => {
+    const grouped = new Map<string, InventoryItem[]>();
+    for (const item of filteredAndSortedInventory) {
+      const key = item.categoryName ?? 'Sem categoria';
+      if (!grouped.has(key)) grouped.set(key, []);
+      grouped.get(key)!.push(item);
+    }
+    return Array.from(grouped.entries()).map(([title, data]) => ({ title, data }));
+  }, [filteredAndSortedInventory]);
 
   const handleAddNewProduct = useCallback(async () => {
     if (!searchQuery.trim()) return;
@@ -276,6 +297,22 @@ export default function AddProductToShoppingListScreen() {
     );
   }, [shoppingListByInventoryId, handlePlus, handleMinus]);
 
+  const renderInventoryRowForSection = useCallback(({ item }: { item: InventoryItem }) => {
+    const listInfo = shoppingListByInventoryId.get(item.id);
+    const isOnList = !!listInfo;
+
+    return (
+      <ProductSearchRow
+        productName={item.productName}
+        stockQuantity={item.quantity}
+        listQuantity={listInfo?.quantity}
+        isOnList={isOnList}
+        onPlus={() => handlePlus(item)}
+        onMinus={() => handleMinus(item)}
+      />
+    );
+  }, [shoppingListByInventoryId, handlePlus, handleMinus]);
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -309,7 +346,17 @@ export default function AddProductToShoppingListScreen() {
             <Chip
               icon="arrow-up"
               mode="flat"
-              onPress={() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true })}
+              onPress={() => {
+                if (sortOrder === 'category') {
+                  flatListRef.current?.scrollToLocation({
+                    sectionIndex: 0,
+                    itemIndex: 0,
+                    animated: true,
+                  });
+                } else {
+                  flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+                }
+              }}
               style={{ backgroundColor: theme.colors.primaryContainer }}
               textStyle={{ color: theme.colors.primary }}
             >
@@ -319,29 +366,93 @@ export default function AddProductToShoppingListScreen() {
           <SortMenu setSortOrder={setSortOrder} sortOrder={sortOrder} />
         </View>
       </View>
-      <FlatList
-        ref={flatListRef}
-        data={filteredAndSortedInventory}
-        keyExtractor={(item) => item.id.toString()}
-        renderItem={renderInventoryRow}
-        ListHeaderComponent={() => (
-          <View>
-            {renderSessionChangesSection()}
-            {filteredAndSortedInventory.length > 0 ? (
-              <Text variant="labelMedium" style={{
-                paddingHorizontal: 4,
-                paddingBottom: 8,
-                color: theme.colors.onSurfaceVariant,
-                textTransform: 'uppercase',
-                fontSize: 11,
-              }}>
-                Produtos
-              </Text>
-            ) : null}
-          </View>
-        )}
-        contentContainerStyle={styles.list}
-      />
+      {sortOrder === 'category' ? (
+        <SectionList
+          ref={flatListRef as React.RefObject<SectionList>}
+          sections={categorySections.map(s => ({
+            ...s,
+            data: collapsedCategories.has(s.title) ? [] : s.data,
+          }))}
+          keyExtractor={(item) => item.id.toString()}
+          renderItem={renderInventoryRowForSection}
+          renderSectionHeader={({ section }) => {
+            const fullCount = categorySections.find(s => s.title === section.title)?.data.length ?? 0;
+            const isCollapsed = collapsedCategories.has(section.title);
+            return (
+              <Pressable
+                onPress={() => toggleCategory(section.title)}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  paddingHorizontal: 12,
+                  paddingVertical: 10,
+                  backgroundColor: theme.colors.surfaceVariant,
+                  borderRadius: 8,
+                  marginBottom: 4,
+                  marginTop: 8,
+                }}
+              >
+                <Text variant="labelLarge" style={{
+                  color: theme.colors.onSurfaceVariant,
+                  textTransform: 'uppercase',
+                  fontSize: 12,
+                  fontWeight: '700',
+                  letterSpacing: 0.8,
+                }}>
+                  {section.title} ({fullCount})
+                </Text>
+                <MaterialCommunityIcons
+                  name={isCollapsed ? 'chevron-down' : 'chevron-up'}
+                  size={20}
+                  color={theme.colors.onSurfaceVariant}
+                />
+              </Pressable>
+            );
+          }}
+          ListHeaderComponent={() => (
+            <View>
+              {renderSessionChangesSection()}
+              {filteredAndSortedInventory.length > 0 ? (
+                <Text variant="labelMedium" style={{
+                  paddingHorizontal: 4,
+                  paddingBottom: 8,
+                  color: theme.colors.onSurfaceVariant,
+                  textTransform: 'uppercase',
+                  fontSize: 11,
+                }}>
+                  Produtos
+                </Text>
+              ) : null}
+            </View>
+          )}
+          contentContainerStyle={{ paddingBottom: 80, paddingTop: 8, paddingHorizontal: 16 }}
+        />
+      ) : (
+        <FlatList
+          ref={flatListRef as React.RefObject<FlatList>}
+          data={filteredAndSortedInventory}
+          keyExtractor={(item) => item.id.toString()}
+          renderItem={renderInventoryRow}
+          ListHeaderComponent={() => (
+            <View>
+              {renderSessionChangesSection()}
+              {filteredAndSortedInventory.length > 0 ? (
+                <Text variant="labelMedium" style={{
+                  paddingHorizontal: 4,
+                  paddingBottom: 8,
+                  color: theme.colors.onSurfaceVariant,
+                  textTransform: 'uppercase',
+                  fontSize: 11,
+                }}>
+                  Produtos
+                </Text>
+              ) : null}
+            </View>
+          )}
+          contentContainerStyle={styles.list}
+        />
+      )}
       <FAB
         style={styles.fab}
         icon="check"
