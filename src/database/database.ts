@@ -20,6 +20,11 @@ export const initializeDatabase = async (
         console.log(`Migrating database from v${currentVersion} to v${CURRENT_DATABASE_VERSION}...`);
         // The transaction for migration is handled inside runMigrations now
         await runMigrations(db, currentVersion);
+        console.log('Database migration complete.');
+
+        // Reopen to clear any cached prepared statements
+        db = await SQLite.openDatabaseAsync(databaseName);
+        await db.execAsync('PRAGMA foreign_keys = ON;');
         // PRAGMA user_version is also handled inside runMigrations within the transaction
         console.log('Database migration complete.');
       } else {
@@ -370,7 +375,7 @@ export const addInventoryItem = async (
         "INSERT INTO inventory_items (listId, productId, quantity, sortOrder, notes, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?);",
         [listId, productId, quantity, sortOrder, notes, now, now]
       );
-
+      
       if (result.lastInsertRowId) {
         return result.lastInsertRowId;
       } else {
@@ -413,7 +418,7 @@ export const updateInventoryItem = async (
 ): Promise<void> => {
   const db = getDb();
   const now = new Date().toISOString();
-  
+
   let query = `UPDATE inventory_items SET updatedAt = ?`;
   const params: (string | number | boolean | undefined)[] = [now];
 

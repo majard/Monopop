@@ -3,8 +3,9 @@ import { migrateToV1 } from './migrateToV1';
 import { migrateToV2 } from './migrateToV2';
 import { migrateToV3 } from './migrateToV3';
 import { migrateToV4 } from './migrateToV4';
+import { migrateToV5 } from './migrateToV5';
 
-export const CURRENT_DATABASE_VERSION = 4;
+export const CURRENT_DATABASE_VERSION = 5;
 
 export const runMigrations = async (db: SQLite.SQLiteDatabase, currentVersion: number) => {
     if (currentVersion < 1) {
@@ -45,5 +46,9 @@ export const runMigrations = async (db: SQLite.SQLiteDatabase, currentVersion: n
             console.error("Migration to V4 failed:", e);
             throw e;
           }
+    }
+    if (currentVersion < 5) {
+        await migrateToV5(db);
+        await db.runAsync('PRAGMA user_version = 5;');
     }
 };
