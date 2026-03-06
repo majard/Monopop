@@ -79,7 +79,7 @@ export default function QuantityHistorySection({
           />
           {history.map((item, index) => {
             const next = history[index + 1];
-            const diff = next ? item.quantity - next.quantity : null;
+            const diff = next ? next.quantity - item.quantity : null;
             return (
               <View key={item.id} style={[localStyles.historyRow, { borderBottomColor: themeColors.outlineVariant }]}>
                 <Text style={{ color: themeColors.onSurfaceVariant, fontSize: 13, marginRight: 4 }}>
