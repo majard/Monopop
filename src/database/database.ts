@@ -599,11 +599,16 @@ export const addCategory = async (name: string): Promise<number> => {
   }
 };
 
-export const getCategories = async (): Promise<Category[]> => {
+export const getCategories = async (orderBy: 'name' | 'usage' = 'usage'): Promise<Category[]> => {
   const db = getDb();
   try {
-    const result = await db.getAllAsync<Category>("SELECT * FROM categories ORDER BY name ASC;");
-    return result;
+    const query = orderBy === 'usage'
+      ? `SELECT c.* FROM categories c
+         LEFT JOIN products p ON p.categoryId = c.id
+         GROUP BY c.id
+         ORDER BY COUNT(p.id) DESC, c.name ASC;`
+      : `SELECT * FROM categories ORDER BY name ASC;`;
+    return await db.getAllAsync<Category>(query);
   } catch (error) {
     console.error("Error getting categories:", error);
     throw error;
