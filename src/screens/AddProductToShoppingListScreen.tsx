@@ -21,6 +21,7 @@ import { sortInventoryItems, SortOrder } from '../utils/sortUtils';
 import { preprocessName, calculateSimilarity } from '../utils/similarityUtils';
 import { useListContext } from '../context/ListContext';
 import { ProductSearchRow } from '../components/ProductSearchRow';
+import { ScreenContainer } from '../components/ScreenContainer';
 
 const searchSimilarityThreshold = 0.4;
 
@@ -54,7 +55,7 @@ export default function AddProductToShoppingListScreen() {
   const flatListRef = useRef<any>(null);
 
   const updateSessionChanges = useCallback((
-    inventoryItemId: number, 
+    inventoryItemId: number,
     data: { inventoryItemId: number; originalQuantity: number | null } | null
   ) => {
     if (data === null) {
@@ -93,9 +94,9 @@ export default function AddProductToShoppingListScreen() {
   useEffect(() => {
     const unsubscribe = navigation.addListener('beforeRemove', (e) => {
       if (sessionChangesRef.current.size === 0 || confirmedRef.current) return;
-      
+
       e.preventDefault();
-      
+
       const count = sessionChangesRef.current.size;
       Alert.alert(
         'Sair sem confirmar?',
@@ -240,7 +241,7 @@ export default function AddProductToShoppingListScreen() {
 
   const renderSessionChangesSection = useCallback(() => {
     if (sessionChanges.size === 0) return null;
-    const changedItems = inventoryItems.filter(item => 
+    const changedItems = inventoryItems.filter(item =>
       sessionChanges.has(item.id)
     );
     if (changedItems.length === 0) return null;
@@ -314,7 +315,7 @@ export default function AddProductToShoppingListScreen() {
   }, [shoppingListByInventoryId, handlePlus, handleMinus]);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <ScreenContainer>
       <View style={styles.header}>
         <SearchBar
           searchQuery={searchQuery}
@@ -454,7 +455,13 @@ export default function AddProductToShoppingListScreen() {
         />
       )}
       <FAB
-        style={styles.fab}
+        style={[
+          styles.fab,
+          {
+            bottom: 42, // Ele vai ficar 16px ACIMA do paddingBottom do ScreenContainer
+            right: 16
+          }
+        ]}
         icon="check"
         onPress={() => {
           confirmedRef.current = true;
@@ -462,6 +469,6 @@ export default function AddProductToShoppingListScreen() {
         }}
         label="Concluído"
       />
-    </SafeAreaView>
+    </ScreenContainer>
   );
 }

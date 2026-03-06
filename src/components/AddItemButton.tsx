@@ -17,7 +17,7 @@ export const AddItemButton = ({ onPress, label, style}: AddItemProps) => {
 
     return (
         <FAB
-            style={[styles.fab, style]}
+            style={[styles.fabBottomInset, style]}
             icon="plus"
             onPress={onPress}
             label={label}

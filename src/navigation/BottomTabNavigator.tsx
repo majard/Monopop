@@ -33,6 +33,7 @@ export default function BottomTabNavigator({ listId = 1 }: BottomTabNavigatorPro
 
           return <MaterialCommunityIcons name={iconName} size={size} color={color} />;
         },
+        tabBarSafeAreaInsets: { bottom: 80 }, // Diz para as abas ignorarem o recuo já que o App.tsx já resolveu
         tabBarActiveTintColor: '#2196F3',
         tabBarInactiveTintColor: 'gray',
         headerShown: false,
@@ -40,9 +41,8 @@ export default function BottomTabNavigator({ listId = 1 }: BottomTabNavigatorPro
           backgroundColor: '#fff',
           borderTopWidth: 1,
           borderTopColor: '#e0e0e0',
-          paddingBottom: 80,
           paddingTop: 5,
-          height: 60,
+          height: 110,
         },
         tabBarLabelStyle: {
           fontSize: 12,

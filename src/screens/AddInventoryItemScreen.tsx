@@ -5,10 +5,10 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { 
-  getInventoryItems, 
-  addInventoryItem, 
-  addProduct, 
+import {
+  getInventoryItems,
+  addInventoryItem,
+  addProduct,
   getProducts,
   deleteInventoryItem,
 } from '../database/database';
@@ -110,9 +110,9 @@ export default function AddInventoryItemScreen() {
   useEffect(() => {
     const unsubscribe = navigation.addListener('beforeRemove', (e) => {
       if (justAddedRef.current.size === 0 || confirmedRef.current) return;
-      
+
       e.preventDefault();
-      
+
       Alert.alert(
         'Sair sem confirmar?',
         `Você adicionou ${justAddedRef.current.size} ${justAddedRef.current.size === 1 ? 'produto' : 'produtos'} ao estoque. Deseja mantê-los ou desfazer?`,
@@ -145,7 +145,7 @@ export default function AddInventoryItemScreen() {
       if (existingInventoryProductIds.has(product.id)) return false;
       // Exclude products just added in this session
       if (justAdded.has(product.id)) return false;
-      
+
       // Apply search filter
       const processedName = preprocessName(product.name);
       const processedQuery = preprocessName(searchQuery);
@@ -158,9 +158,9 @@ export default function AddInventoryItemScreen() {
       }
       return calculateSimilarity(processedName, processedQuery) >= searchSimilarityThreshold;
     });
-    const mapped = filtered.map(p => ({ 
-      ...p, 
-      productName: p.name, 
+    const mapped = filtered.map(p => ({
+      ...p,
+      productName: p.name,
       sortOrder: p.sortOrder ?? 0,
       categoryName: p.categoryName,
     }));
@@ -217,8 +217,8 @@ export default function AddInventoryItemScreen() {
     const items = allProducts.filter(p => justAdded.has(p.id));
     return (
       <View>
-        <Text variant="labelMedium" style={{ 
-          paddingHorizontal: 4, 
+        <Text variant="labelMedium" style={{
+          paddingHorizontal: 4,
           paddingBottom: 8,
           paddingTop: 4,
           color: theme.colors.primary,
@@ -240,8 +240,8 @@ export default function AddInventoryItemScreen() {
             }}
           />
         ))}
-        <View style={{ 
-          height: 1, 
+        <View style={{
+          height: 1,
           backgroundColor: theme.colors.outlineVariant,
           marginVertical: 12,
         }} />
@@ -422,7 +422,12 @@ export default function AddInventoryItemScreen() {
         />
       )}
       <FAB
-        style={styles.fab}
+        style={[
+          styles.fab,
+          {
+            right: 16
+          }
+        ]}
         icon="check"
         onPress={() => {
           confirmedRef.current = true;
