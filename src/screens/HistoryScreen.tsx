@@ -156,7 +156,7 @@ export default function HistoryScreen() {
         .map(([date, changes], index) => ({
           type: 'inventory' as const,
           id: 1000000 + index, // Unique ID for inventory events
-          date: date + 'T00:00:00',
+          date: date.includes('T') ? date : date + 'T00:00:00',
           changes,
         }));
 
@@ -263,6 +263,7 @@ export default function HistoryScreen() {
   const formatCurrency = (value: number) => `R$ ${value.toFixed(2).replace('.', ',')}`;
   
   const formatDate = (dateString: string) => {
+    console.log('dateString', dateString);
     const date = parseISO(dateString);
     return format(date, 'dd MMM yyyy', { locale: ptBR });
   };

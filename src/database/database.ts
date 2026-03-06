@@ -1312,8 +1312,10 @@ export const getProductConsumptionStats = async (
       if (drop > 0) totalConsumed += drop;
     }
     // Days in interval
-    const firstDate = new Date(history[0].date + 'T00:00:00');
-    const lastDate = new Date(history[history.length - 1].date + 'T00:00:00');
+    const firstDateStr = history[0].date.includes('T') ? history[0].date : history[0].date + 'T00:00:00';
+    const lastDateStr = history[history.length - 1].date.includes('T') ? history[history.length - 1].date : history[history.length - 1].date + 'T00:00:00';
+    const firstDate = new Date(firstDateStr);
+    const lastDate = new Date(lastDateStr);
     const days = Math.max(1, (lastDate.getTime() - firstDate.getTime()) / (1000 * 60 * 60 * 24));
     avgWeeklyConsumption = (totalConsumed / days) * 7;
   } else if (history.length === 1) {
