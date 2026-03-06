@@ -2,7 +2,7 @@
   "expo": {
     "name": "Listai",
     "slug": "listai",
-    "version": "1.5.1",
+    "version": "1.5.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -16,7 +16,7 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "buildNumber": "4" 
+      "buildNumber": "5" 
     },
     "android": {
       "adaptiveIcon": {
@@ -24,7 +24,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.mahjard.listai",
-      "versionCode": 4
+      "versionCode": 5
     },
     "extra": {
       "eas": {
