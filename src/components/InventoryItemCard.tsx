@@ -115,7 +115,7 @@ export const InventoryItemCard = ({
 
         {/* Name — takes remaining space, wraps up to 3 lines */}
         <View style={{ flex: 1, marginHorizontal: 8 }}>
-          <Text variant="titleMedium" numberOfLines={3} style={{ fontSize: 17 }}>
+          <Text variant="titleMedium" numberOfLines={3} style={{ fontSize: 16 }}>
             {inventoryItem.productName}
           </Text>
           {inventoryItem.notes ? (
@@ -163,7 +163,7 @@ export const InventoryItemCard = ({
   }
 
   return (
-    <View style={{ overflow: 'hidden', borderRadius: 12, marginBottom: 0, marginHorizontal: 8 }}>
+    <View style={{ overflow: 'hidden', borderRadius: 12, marginBottom: 0, marginHorizontal: 4 }}>
       <Swipeable
         renderRightActions={renderSwipeActions}
         overshootLeft={false}
