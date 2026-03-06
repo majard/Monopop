@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from "react";
-import { View, StyleSheet } from "react-native";
+import { View, StyleSheet, Pressable, TextInput as RNTextInput } from "react-native";
 import {
   Modal,
   Portal,
-  Text,
-  TextInput,
-  Button,
-  IconButton,
-  useTheme,
   Surface,
+  Text,
+  Button,
+  Chip,
+  useTheme,
 } from "react-native-paper";
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { SearchablePickerDialog } from './SearchablePickerDialog';
 
 interface EditShoppingItemModalProps {
   visible: boolean;
@@ -18,41 +19,57 @@ interface EditShoppingItemModalProps {
     productName: string;
     quantity: number;
     price?: number;
+    checked: boolean;
+    currentInventoryQuantity: number;
+    categoryName?: string | null;
     lowestPrice90d: { price: number; storeName: string } | null;
   } | null;
   onSave: (quantity: number, price: number | undefined) => void;
+  onToggleChecked: () => void;
+  onDelete: () => void;
   onDismiss: () => void;
+  onCategoryChange: () => void;
+  categories: { id: number; name: string }[];
+  onCategorySelect: (categoryId: number) => void;
 }
 
 export function EditShoppingItemModal({
   visible,
   item,
   onSave,
+  onToggleChecked,
+  onDelete,
   onDismiss,
+  onCategoryChange,
+  categories,
+  onCategorySelect,
 }: EditShoppingItemModalProps) {
   const theme = useTheme();
   const [quantity, setQuantity] = useState(1);
-  const [price, setPrice] = useState("");
+  const [priceInput, setPriceInput] = useState("");
+  const [categoryModalVisible, setCategoryModalVisible] = useState(false);
 
   useEffect(() => {
     if (item) {
       setQuantity(item.quantity);
-      setPrice(item.price ? item.price.toString() : "");
+      setPriceInput(item.price ? item.price.toFixed(2).replace('.', ',') : "");
     }
   }, [item]);
 
   const handleSave = () => {
-    const priceValue = price.trim() ? parseFloat(price.replace(",", ".")) : undefined;
-    onSave(quantity, priceValue);
+    const parsedPrice = priceInput.trim() ? parseFloat(priceInput.replace(",", ".")) : undefined;
+    onSave(quantity, parsedPrice);
   };
 
   const formatCurrency = (value: number) => {
     return `R$ ${value.toFixed(2).replace(".", ",")}`;
   };
 
-  const totalPreview = price.trim()
-    ? formatCurrency(quantity * parseFloat(price.replace(",", ".")))
-    : null;
+  const parsedPrice = priceInput.trim() ? parseFloat(priceInput.replace(",", ".")) : null;
+  const totalPreview = parsedPrice && parsedPrice > 0 ? formatCurrency(quantity * parsedPrice) : null;
+  
+  // Find category ID from categories list based on categoryName
+  const selectedCategoryId = item?.categoryName ? categories.find(cat => cat.name === item.categoryName)?.id : undefined;
 
   return (
     <Portal>
@@ -62,73 +79,164 @@ export function EditShoppingItemModal({
         contentContainerStyle={styles.modalContainer}
       >
         <Surface style={styles.surface}>
-          <Text style={styles.title}>{item?.productName}</Text>
-
-          <View style={styles.section}>
-            <Text style={styles.label}>Quantidade</Text>
-            <View style={styles.quantityRow}>
-              <IconButton
-                icon="minus"
-                size={24}
-                onPress={() => setQuantity(Math.max(1, quantity - 1))}
-              />
-              <TextInput
-                mode="outlined"
-                value={quantity.toString()}
-                onChangeText={(value) => {
-                  const num = parseInt(value, 10);
-                  setQuantity(isNaN(num) ? 1 : Math.max(1, num));
-                }}
-                keyboardType="numeric"
-                style={styles.quantityInput}
-              />
-              <IconButton
-                icon="plus"
-                size={24}
-                onPress={() => setQuantity(quantity + 1)}
-              />
-            </View>
-          </View>
-
-          <View style={styles.section}>
-            <Text style={styles.label}>Preço unitário (opcional)</Text>
-            <TextInput
+          {/* HEADER ROW */}
+          <View style={styles.headerRow}>
+            <Text style={styles.productName}>{item?.productName}</Text>
+            <Chip
+              icon="tag-outline"
               mode="outlined"
-              value={price}
-              onChangeText={setPrice}
-              keyboardType="decimal-pad"
-              placeholder="R$ 0,00"
-              style={styles.priceInput}
-            />
+              onPress={() => setCategoryModalVisible(true)}
+              compact
+              textStyle={styles.categoryChipText}
+            >
+              {item?.categoryName ?? 'Sem categoria'}
+            </Chip>
           </View>
 
+          {/* CONTEXT ROW */}
+          <View style={styles.contextRow}>
+            <View style={styles.contextLeft}>
+              <MaterialCommunityIcons
+                name="package-variant"
+                size={13}
+                color={theme.colors.onSurfaceVariant}
+              />
+              <Text style={styles.contextText}>
+                Estoque: {item?.currentInventoryQuantity} un.
+              </Text>
+            </View>
+            {item?.lowestPrice90d && item.price && item.price > item.lowestPrice90d.price && (
+              <View style={styles.contextRight}>
+                <MaterialCommunityIcons
+                  name="alert-circle-outline"
+                  size={13}
+                  color="orange"
+                />
+                <Text style={styles.warningText}>
+                  Preço acima do menor (90d)
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* DIVIDER */}
+          <View style={[styles.divider, { backgroundColor: theme.colors.outlineVariant }]} />
+
+          {/* CONTROLS ROW */}
+          <View style={styles.controlsRow}>
+            {/* LEFT - Quantidade */}
+            <View style={styles.controlHalf}>
+              <Text style={[styles.label, { color: theme.colors.onSurfaceVariant }]}>QUANTIDADE</Text>
+              <View style={styles.quantityRow}>
+                <Pressable
+                  style={[styles.quantityButton, { borderColor: theme.colors.outline }]}
+                  onPress={() => setQuantity(Math.max(1, quantity - 1))}
+                >
+                  <MaterialCommunityIcons
+                    name="minus"
+                    size={18}
+                    color={theme.colors.primary}
+                  />
+                </Pressable>
+                <RNTextInput
+                  style={styles.quantityInput}
+                  value={quantity.toString()}
+                  onChangeText={(value) => {
+                    const num = parseInt(value, 10);
+                    setQuantity(isNaN(num) ? 1 : Math.max(1, num));
+                  }}
+                  keyboardType="numeric"
+                />
+                <Pressable
+                  style={[styles.quantityButton, { borderColor: theme.colors.outline }]}
+                  onPress={() => setQuantity(quantity + 1)}
+                >
+                  <MaterialCommunityIcons
+                    name="plus"
+                    size={18}
+                    color={theme.colors.primary}
+                  />
+                </Pressable>
+              </View>
+            </View>
+
+            {/* RIGHT - Preço unit. */}
+            <View style={styles.controlHalf}>
+              <Text style={[styles.label, { color: theme.colors.onSurfaceVariant }]}>PREÇO UNIT.</Text>
+              <View style={styles.priceRow}>
+                <Text style={[styles.priceSymbol, { color: theme.colors.onSurface }]}>R$</Text>
+                <RNTextInput
+                  style={[styles.priceInput, { borderColor: theme.colors.outline }]}
+                  value={priceInput}
+                  onChangeText={setPriceInput}
+                  keyboardType="decimal-pad"
+                  placeholder="0,00"
+                />
+              </View>
+              {item?.lowestPrice90d && item.price && item.price > item.lowestPrice90d.price && (
+                <Text style={styles.lowestPriceInfo}>
+                  Mín. 90d: R$ {item.lowestPrice90d.price.toFixed(2).replace('.', ',')} em {item.lowestPrice90d.storeName}
+                </Text>
+              )}
+            </View>
+          </View>
+
+          {/* TOTAL PREVIEW */}
           {totalPreview && (
-            <View style={styles.totalPreview}>
-              <Text style={styles.totalLabel}>Total:</Text>
-              <Text style={styles.totalValue}>{totalPreview}</Text>
+            <View style={[styles.totalPreview, { backgroundColor: theme.colors.surfaceVariant }]}>
+              <Text style={[styles.totalLabel, { color: theme.colors.onSurfaceVariant }]}>Total</Text>
+              <Text style={[styles.totalValue, { color: theme.colors.primary }]}>{totalPreview}</Text>
             </View>
           )}
 
-          {item?.lowestPrice90d && item.price && item.price > item.lowestPrice90d.price && (
-            <Text style={styles.lowestPriceWarning}>
-              Menor preço (90d): R$ {item.lowestPrice90d.price.toFixed(2).replace('.', ',')} em {item.lowestPrice90d.storeName}
-            </Text>
-          )}
+          {/* DIVIDER */}
+          <View style={[styles.divider, { backgroundColor: theme.colors.outlineVariant }]} />
 
-          <View style={styles.buttonRow}>
-            <Button onPress={onDismiss} style={styles.button}>
-              Cancelar
-            </Button>
+          {/* CART TOGGLE BUTTON */}
+          <Button
+            mode="outlined"
+            icon={item?.checked ? "cart-minus" : "cart-plus"}
+            onPress={onToggleChecked}
+            style={styles.cartButton}
+          >
+            {item?.checked ? "Remover do carrinho" : "Mover pro carrinho"}
+          </Button>
+
+          {/* ACTION ROW */}
+          <View style={styles.actionRow}>
             <Button
               mode="contained"
               onPress={handleSave}
-              style={styles.button}
+              style={styles.actionButton}
             >
               Salvar
             </Button>
+            <Button
+              mode="contained-tonal"
+              onPress={onDismiss}
+              style={styles.actionButton}
+            >
+              Cancelar
+            </Button>
           </View>
+
+          {/* DELETE LINK */}
+          <Pressable onPress={onDelete} style={styles.deleteLink}>
+            <Text style={[styles.deleteText, { color: theme.colors.error }]}>Remover da lista</Text>
+          </Pressable>
         </Surface>
       </Modal>
+      
+      <SearchablePickerDialog
+        visible={categoryModalVisible}
+        items={categories}
+        selectedId={selectedCategoryId}
+        onSelect={(id) => { onCategorySelect(id); setCategoryModalVisible(false); }}
+        onDismiss={() => setCategoryModalVisible(false)}
+        title="Categoria"
+        placeholder="Buscar categoria..."
+        onCreateNew={() => {}}
+      />
     </Portal>
   );
 }
@@ -140,69 +248,143 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   surface: {
-    padding: 24,
+    padding: 20,
     borderRadius: 12,
     width: "100%",
     maxWidth: 400,
     elevation: 4,
   },
-  title: {
-    fontSize: 18,
-    fontWeight: "600",
-    marginBottom: 20,
-    textAlign: "center",
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
-  section: {
-    marginBottom: 16,
+  productName: {
+    fontSize: 18,
+    fontWeight: "700",
+    textAlign: "left",
+    flex: 1,
+  },
+  categoryChipText: {
+    fontSize: 11,
+  },
+  contextRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 10,
+    marginBottom: 4,
+  },
+  contextLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  contextRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  contextText: {
+    fontSize: 12,
+  },
+  warningText: {
+    fontSize: 11,
+    color: "orange",
+  },
+  divider: {
+    marginVertical: 12,
+    height: 1,
+  },
+  controlsRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 24,
+  },
+  controlHalf: {
+    flex: 1,
   },
   label: {
-    fontSize: 14,
-    color: "#666",
+    fontSize: 10,
+    letterSpacing: 0.6,
     marginBottom: 8,
   },
   quantityRow: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 4,
+  },
+  quantityButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
     justifyContent: "center",
+    alignItems: "center",
   },
   quantityInput: {
-    width: 80,
+    height: 32,
+    borderWidth: 1,
+    borderRadius: 6,
     textAlign: "center",
+    fontSize: 16,
+    flex: 1,
+    minWidth: 0,
+    paddingBottom: 4,
   },
   priceInput: {
-    width: "100%",
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 8,
+    fontSize: 15,
+    flex: 1,
+  },
+  priceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  priceSymbol: {
+    fontSize: 15,
+  },
+  lowestPriceInfo: {
+    fontSize: 10,
+    color: "orange",
+    fontStyle: "italic",
+    marginTop: 3,
   },
   totalPreview: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: "#f5f5f5",
-    padding: 12,
     borderRadius: 8,
-    marginBottom: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    marginTop: 14,
   },
   totalLabel: {
-    fontSize: 14,
-    color: "#666",
+    fontSize: 12,
   },
   totalValue: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#2196F3",
+    fontSize: 16,
+    fontWeight: "700",
   },
-  lowestPriceWarning: {
-    fontSize: 12,
-    color: "orange",
-    fontStyle: 'italic',
-    textAlign: 'center',
-    marginBottom: 8,
+  cartButton: {
+    marginTop: 8,
   },
-  buttonRow: {
+  actionRow: {
     flexDirection: "row",
-    justifyContent: "flex-end",
     gap: 8,
+    marginTop: 8,
   },
-  button: {
-    marginLeft: 8,
+  actionButton: {
+    flex: 1,
+  },
+  deleteLink: {
+    alignSelf: "center",
+    marginTop: 10,
+  },
+  deleteText: {
+    fontSize: 12,
   },
 });

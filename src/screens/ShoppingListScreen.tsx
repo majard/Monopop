@@ -3,7 +3,7 @@ import { View, StyleSheet, Text, FlatList, Pressable } from 'react-native';
 import { Button, Surface, useTheme } from 'react-native-paper';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { concludeShoppingForListWithInvoice, getLastStoreName, getShoppingListItemsByListId, getInventoryItems, getStores, updateShoppingListItem, deleteShoppingListItem, getSetting, setSetting, getLastUnitPriceForProductAtStore, getLastUnitPriceForProduct, getProductConsumptionStats } from '../database/database';
+import { concludeShoppingForListWithInvoice, getLastStoreName, getShoppingListItemsByListId, getInventoryItems, getStores, updateShoppingListItem, deleteShoppingListItem, getSetting, setSetting, getLastUnitPriceForProductAtStore, getLastUnitPriceForProduct, getProductConsumptionStats, getCategories, updateProductCategory } from '../database/database';
 import { RootStackParamList } from '../types/navigation';
 import { ShoppingListItem } from '../database/models';
 import { useListContext } from '../context/ListContext';
@@ -40,6 +40,7 @@ export default function ShoppingListScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [editingItem, setEditingItem] = useState<ShoppingListItemWithDetails | null>(null);
+  const [categories, setCategories] = useState<{ id: number; name: string }[]>([]);
   const [isCartCollapsed, setIsCartCollapsed] = useState(false);
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [stores, setStores] = useState<StoreOption[]>([]);
@@ -63,11 +64,12 @@ export default function ShoppingListScreen() {
 
   const loadData = useCallback(async () => {
     try {
-      const [inventory, shopping, storesList, lastStore] = await Promise.all([
+      const [inventory, shopping, storesList, lastStore, categoriesList] = await Promise.all([
         getInventoryItems(listId),
         getShoppingListItemsByListId(listId),
         getStores(),
         getLastStoreName(),
+        getCategories(),
       ]);
 
       const enhancedShoppingItems = shopping.map(item => {
@@ -92,6 +94,7 @@ export default function ShoppingListScreen() {
       );
       setShoppingListItems(withStats);
       setStores(storesList);
+      setCategories(categoriesList);
 
       const [defaultStoreMode, defaultStoreId] = await Promise.all([
         getSetting('defaultStoreMode'),
@@ -189,6 +192,18 @@ export default function ShoppingListScreen() {
       console.error('Erro ao atualizar item:', error);
     }
   }, [editingItem]);
+
+  const handleCategorySelect = useCallback(async (categoryId: number) => {
+    if (!editingItem) return;
+    try {
+      await updateProductCategory(editingItem.productId, categoryId);
+      await loadData();
+      const selectedCategory = categories.find(c => c.id === categoryId);
+      setEditingItem(prev => prev ? { ...prev, categoryName: selectedCategory?.name ?? null } : null);
+    } catch (error) {
+      console.error('Erro ao atualizar categoria:', error);
+    }
+  }, [editingItem, loadData, categories]);
 
   const sortShoppingItems = useCallback((items: ShoppingListItemWithDetails[]) => {
     const mapped = items.map(item => ({
@@ -364,7 +379,16 @@ export default function ShoppingListScreen() {
         visible={editingItem !== null}
         item={editingItem}
         onSave={handleSaveEdit}
+        onToggleChecked={async () => {
+          const updated = { ...editingItem!, checked: !editingItem!.checked };
+          setEditingItem(updated);
+          await handleToggleChecked(editingItem!);
+        }}
+        onDelete={() => { handleDeleteItem(editingItem!); setEditingItem(null); }}
         onDismiss={() => setEditingItem(null)}
+        onCategoryChange={() => {}}
+        categories={categories}
+        onCategorySelect={handleCategorySelect}
       />
 
       {checkedItems.length > 0 && (
