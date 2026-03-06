@@ -488,32 +488,103 @@ const parseImportProducts = (
   lines: string[]
 ): { originalName: string; quantity: number }[] => {
   return lines
-    .filter((line) => line.trim()) // Remove empty lines
+    .filter((line) => line.trim()) // Skip empty lines
+    .filter((line) => {
+      const trimmedLine = line.trim();
+      
+      // Skip lines starting with [, ✖, ✨, or *
+      if (/^[,\✖\✨\*]/.test(trimmedLine)) {
+        return false;
+      }
+      
+      // Skip lines that contain date patterns
+      if (/\d{1,2}\/\d{1,2}(\/\d{2,4})?/.test(trimmedLine)) {
+        return false;
+      }
+      
+      // Skip lines that have a number AND are longer than 60 characters
+      if (/\d/.test(trimmedLine) && trimmedLine.length > 60) {
+        return false;
+      }
+      
+      // Skip lines that have no number AND are longer than 36 characters
+      if (!/\d/.test(trimmedLine) && trimmedLine.length > 36) {
+        return false;
+      }
+      
+      return true;
+    })
     .map((line) => {
-      // First, check if there are multiple numbers in the line
-      const numbers = line.match(/\d+/g);
-      if (!numbers || numbers.length === 0) return null; // No numbers = not a product
-      if (numbers.length > 1) return null; // Multiple numbers = likely a date or something else
+      let processedLine = line.trim();
+      
+      // Remove price-like patterns
+      processedLine = processedLine
+        // Remove numbers followed by units (with optional space)
+        .replace(/\b\d+\s*(gramas?|grama|kgs?|kg|ml|litros?|litro|gr|g|l)\b/gi, '')
+        // Remove numbers with decimal separator (dot or comma)
+        .replace(/\b\d+[.,]\d{1,2}\b/g, '')
+        // Remove numbers preceded by "R$" or "-" (price context)
+        .replace(/R\$\s*\d+(\.\d+)?([.,]\d{1,2})?/g, '')
+        .replace(/-\s*\d+(\.\d+)?([.,]\d{1,2})?/g, '')
+        // Remove patterns like "- 4,00" or "- 15.00"
+        .replace(/-\s*\d+[.,]\d{1,2}/g, '');
 
-      const quantity = parseInt(numbers[0], 10);
-      if (isNaN(quantity) || quantity <= 0) return null;
+      let quantity = 0;
+      let productName = processedLine;
 
-      // Remove the quantity and any special characters to get the product name
-      const nameWithoutQuantity = line.replace(numbers[0], "");
-      // Clean the name: remove special characters, emojis, but keep spaces between words
-      const cleanedName = nameWithoutQuantity
-        .replace(/[-\/:_,;]/g, " ") // Replace separators with spaces
-        .replace(
-          /[\u{1F600}-\u{1F64F}|\u{1F300}-\u{1F5FF}|\u{1F680}-\u{1F6FF}|\u{1F700}-\u{1F77F}|\u{1F780}-\u{1F7FF}|\u{1F800}-\u{1F8FF}|\u{1F900}-\u{1F9FF}|\u{1FA00}-\u{1FAFF}|\u{2600}-\u{26FF}|\u{2700}-\u{27BF}]/gu,
-          ""
-        ) // Remove emojis
-        .replace(/\s+/g, " ") // Replace multiple spaces with single space
-        .trim(); // Remove leading/trailing spaces
+      // Extract quantity using priority
+      // a. First integer inside parentheses
+      const parenthesesMatch = processedLine.match(/\((\d+)\)/);
+      if (parenthesesMatch) {
+        quantity = parseInt(parenthesesMatch[1], 10);
+        productName = processedLine.replace(/\(\d+\)/, '');
+      } else {
+        // b. Check if colon is present - quantity is number AFTER colon
+        const colonMatch = processedLine.match(/:\s*(\d+)/);
+        if (colonMatch) {
+          quantity = parseInt(colonMatch[1], 10);
+          productName = processedLine.replace(/:\s*\d+/, '');
+        } else {
+          // c. Find the LAST integer on the line (clearly separated)
+          const allNumbers = processedLine.match(/(?<!\d)(\d+)(?!\d)/g);
+          if (allNumbers && allNumbers.length > 0) {
+            // Check if the last number is clearly separated (preceded by space, colon, or dash)
+            const lastNumber = allNumbers[allNumbers.length - 1];
+            const lastNumberIndex = processedLine.lastIndexOf(lastNumber);
+            const precedingChar = processedLine[lastNumberIndex - 1];
+            
+            // Only treat as quantity if clearly separated or at end of line
+            if (lastNumberIndex === processedLine.length - lastNumber.length || 
+                precedingChar === ' ' || 
+                precedingChar === ':' || 
+                precedingChar === '-' ||
+                precedingChar === undefined) {
+              
+              // Make sure it's not attached to units like "150g", "500ml", "1l"
+              const followingChars = processedLine.substring(lastNumberIndex + lastNumber.length).toLowerCase();
+              if (!followingChars.match(/^(g|ml|l|kg|gr)/)) {
+                quantity = parseInt(lastNumber, 10);
+                productName = processedLine.substring(0, lastNumberIndex) + processedLine.substring(lastNumberIndex + lastNumber.length);
+              }
+            }
+          }
+        }
+      }
 
-      if (!cleanedName) return null;
+      // Extract product name: remove quantity number, emojis, separators, extra spaces
+      productName = productName
+        .replace(/\b(reais|real|centavos?)\b/gi, '') // Remove price-related words
+        .replace(/\d+/g, '') // Remove any remaining numbers
+        .replace(/[-\/:_,;]/g, ' ') // Remove separators
+        .replace(/[\u{1F600}-\u{1F64F}|\u{1F300}-\u{1F5FF}|\u{1F680}-\u{1F6FF}|\u{1F700}-\u{1F77F}|\u{1F780}-\u{1F7FF}|\u{1F800}-\u{1F8FF}|\u{1F900}-\u{1F9FF}|\u{1FA00}-\u{1FAFF}|\u{2600}-\u{26FF}|\u{2700}-\u{27BF}]/gu, '') // Remove emojis
+        .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+        .trim();
+
+      // If name is empty after cleaning → skip line
+      if (!productName) return null;
 
       return {
-        originalName: cleanedName,
+        originalName: productName,
         quantity,
       };
     })
