@@ -1383,3 +1383,33 @@ export const getPriceHistory = async (productId: number): Promise<{ date: string
     ORDER BY inv_i.createdAt DESC LIMIT 20
   `, [productId]);
 };
+
+export const getLowestPriceForProducts = async (
+  productIds: number[]
+): Promise<Map<number, { price: number; storeName: string }>> => {
+  if (productIds.length === 0) return new Map();
+  const db = getDb();
+  const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+  const placeholders = productIds.map(() => '?').join(',');
+
+  const rows = await db.getAllAsync<{ productId: number; unitPrice: number; storeName: string }>(
+    `SELECT ii.productId, ii.unitPrice, s.name as storeName
+     FROM invoice_items ii
+     JOIN invoices inv ON ii.invoiceId = inv.id
+     LEFT JOIN stores s ON inv.storeId = s.id
+     WHERE ii.productId IN (${placeholders})
+       AND ii.unitPrice IS NOT NULL
+       AND ii.unitPrice > 0
+       AND inv.createdAt >= ?
+     ORDER BY ii.productId, ii.unitPrice ASC;`,
+    [...productIds, ninetyDaysAgo]
+  );
+
+  const result = new Map<number, { price: number; storeName: string }>();
+  for (const row of rows) {
+    if (!result.has(row.productId)) {
+      result.set(row.productId, { price: row.unitPrice, storeName: row.storeName });
+    }
+  }
+  return result;
+};

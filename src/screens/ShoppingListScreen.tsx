@@ -3,7 +3,7 @@ import { View, StyleSheet, Text, FlatList, Pressable } from 'react-native';
 import { Button, Surface, useTheme } from 'react-native-paper';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { concludeShoppingForListWithInvoice, getLastStoreName, getShoppingListItemsByListId, getInventoryItems, getStores, updateShoppingListItem, deleteShoppingListItem, getSetting, setSetting, getLastUnitPriceForProductAtStore, getLastUnitPriceForProduct, getProductConsumptionStats, getCategories, updateProductCategory } from '../database/database';
+import { concludeShoppingForListWithInvoice, getLastStoreName, getShoppingListItemsByListId, getInventoryItems, getStores, updateShoppingListItem, deleteShoppingListItem, getSetting, setSetting, getLastUnitPriceForProductAtStore, getLastUnitPriceForProduct, getLowestPriceForProducts, getCategories, updateProductCategory } from '../database/database';
 import { RootStackParamList } from '../types/navigation';
 import { ShoppingListItem } from '../database/models';
 import { useListContext } from '../context/ListContext';
@@ -84,13 +84,13 @@ export default function ShoppingListScreen() {
         };
       });
 
-      const withStats = await Promise.all(
-        enhancedShoppingItems.map(async (item) => {
-          if (!item.productId) return { ...item, lowestPrice90d: null };
-          const stats = await getProductConsumptionStats(item.inventoryItemId, item.productId);
-          return { ...item, lowestPrice90d: stats.lowestPrice90d };
-        })
-      );
+      const productIds = enhancedShoppingItems.map(item => item.productId).filter(id => id > 0);
+      const lowestPriceMap = await getLowestPriceForProducts(productIds);
+
+      const withStats = enhancedShoppingItems.map(item => ({
+        ...item,
+        lowestPrice90d: lowestPriceMap.get(item.productId) ?? null,
+      }));
       setShoppingListItems(withStats);
       setStores(storesList);
       setCategories(categoriesList);
@@ -223,6 +223,9 @@ export default function ShoppingListScreen() {
   const checkedItems = filteredShoppingItems.filter(item => item.checked);
   const uncheckedItems = filteredShoppingItems.filter(item => !item.checked);
 
+  const sortedUnchecked = useMemo(() => sortShoppingItems(uncheckedItems), [uncheckedItems, sortOrder, sortShoppingItems]);
+  const sortedChecked = useMemo(() => sortShoppingItems(checkedItems), [checkedItems, sortOrder, sortShoppingItems]);
+
   const openConfirmConclude = useCallback(() => {
     if (checkedItems.length === 0) return;
     setConfirmVisible(true);
@@ -254,6 +257,73 @@ export default function ShoppingListScreen() {
   const formatCurrency = (value: number) => `R$ ${value.toFixed(2).replace('.', ',')}`;
 
   const bottomBarHeight = checkedItems.length > 0 ? 64 : 0;
+
+  const listHeaderComponent = useCallback(() => (
+    <View style={{ paddingHorizontal: 16 }}>
+      {sortedUnchecked.length > 0 && (
+        <>
+          <Text style={[localStyles.subsectionTitle, { 
+            color: theme.colors.onSurfaceVariant,
+            paddingVertical: 8,
+            paddingHorizontal: 4,
+          }]}>
+            Pendentes ({sortedUnchecked.length})
+          </Text>
+          <ShoppingList
+            items={sortedUnchecked}
+            sortOrder={sortOrder}
+            onToggleChecked={handleToggleChecked}
+            onDelete={handleDeleteItem}
+            onEdit={(item) => setEditingItem(item)}
+          />
+        </>
+      )}
+
+      {sortedChecked.length > 0 || true ? (
+        <>
+          <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingVertical: 8,
+            paddingHorizontal: 4,
+          }}>
+            <Text style={[localStyles.subsectionTitle, { 
+              color: theme.colors.onSurfaceVariant 
+            }]}>
+              No carrinho ({sortedChecked.length})
+            </Text>
+            <Button mode="text" onPress={() => setIsCartCollapsed(!isCartCollapsed)} compact>
+              {isCartCollapsed ? 'Mostrar' : 'Ocultar'}
+            </Button>
+          </View>
+          {!isCartCollapsed && (
+            <ShoppingList
+              items={sortedChecked}
+              sortOrder={sortOrder}
+              onToggleChecked={handleToggleChecked}
+              onDelete={handleDeleteItem}
+              onEdit={(item) => setEditingItem(item)}
+            />
+          )}
+        </>
+      ) : null}
+
+      {filteredShoppingItems.length === 0 && (
+        <Surface style={localStyles.emptyState}>
+          <Text style={{ 
+            textAlign: 'center', 
+            color: theme.colors.onSurfaceVariant, 
+            fontSize: 16, 
+            lineHeight: 24 
+          }}>
+            Sua lista de compras está vazia.{'\n'}
+            Toque no botão abaixo para adicionar produtos!
+          </Text>
+        </Surface>
+      )}
+    </View>
+  ), [uncheckedItems, checkedItems, sortOrder, sortShoppingItems, isCartCollapsed, theme, handleToggleChecked, handleDeleteItem, setEditingItem, sortedUnchecked, sortedChecked]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -295,72 +365,7 @@ export default function ShoppingListScreen() {
         renderItem={null}
         keyExtractor={() => ''}
         scrollEnabled={true}
-        ListHeaderComponent={() => (
-          <View style={{ paddingHorizontal: 16 }}>
-            {uncheckedItems.length > 0 && (
-              <>
-                <Text style={[localStyles.subsectionTitle, { 
-                  color: theme.colors.onSurfaceVariant,
-                  paddingVertical: 8,
-                  paddingHorizontal: 4,
-                }]}>
-                  Pendentes ({uncheckedItems.length})
-                </Text>
-                <ShoppingList
-                  items={sortShoppingItems(uncheckedItems)}
-                  sortOrder={sortOrder}
-                  onToggleChecked={handleToggleChecked}
-                  onDelete={handleDeleteItem}
-                  onEdit={(item) => setEditingItem(item)}
-                />
-              </>
-            )}
-
-            {checkedItems.length > 0 || true ? (
-              <>
-                <View style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  paddingVertical: 8,
-                  paddingHorizontal: 4,
-                }}>
-                  <Text style={[localStyles.subsectionTitle, { 
-                    color: theme.colors.onSurfaceVariant 
-                  }]}>
-                    No carrinho ({checkedItems.length})
-                  </Text>
-                  <Button mode="text" onPress={() => setIsCartCollapsed(!isCartCollapsed)} compact>
-                    {isCartCollapsed ? 'Mostrar' : 'Ocultar'}
-                  </Button>
-                </View>
-                {!isCartCollapsed && (
-                  <ShoppingList
-                    items={sortShoppingItems(checkedItems)}
-                    sortOrder={sortOrder}
-                    onToggleChecked={handleToggleChecked}
-                    onDelete={handleDeleteItem}
-                    onEdit={(item) => setEditingItem(item)}
-                  />
-                )}
-              </>
-            ) : null}
-
-            {filteredShoppingItems.length === 0 && (
-              <Surface style={localStyles.emptyState}>
-                <Text style={{ 
-                  textAlign: 'center', 
-                  color: theme.colors.onSurfaceVariant, 
-                  fontSize: 16, 
-                  lineHeight: 24 
-                }}>
-                  Sua lista de compras está vazia.{'\n'}
-                  Toque no botão abaixo para adicionar produtos!
-                </Text>
-              </Surface>
-            )}
-          </View>
-        )}
+        ListHeaderComponent={listHeaderComponent}
         contentContainerStyle={{ paddingBottom: bottomBarHeight + 96 }}
       />
 
