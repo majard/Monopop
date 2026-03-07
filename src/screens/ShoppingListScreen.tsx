@@ -54,7 +54,6 @@ export default function ShoppingListScreen() {
   const styles = createHomeScreenStyles(theme);
 
   const isFirstLoad = useRef(true);
-  const manualPrices = useRef<Map<number, number>>(new Map());
 
   useFocusEffect(
     useCallback(() => {
@@ -80,7 +79,7 @@ export default function ShoppingListScreen() {
           productName: inventoryItem?.productName || 'Unknown Product',
           productId: inventoryItem?.productId || 0,
           currentInventoryQuantity: inventoryItem?.quantity || 0,
-          price: manualPrices.current.has(item.id) ? manualPrices.current.get(item.id)! : item.price,
+          price: item.price,
           categoryName: item.categoryName ?? null,
         };
       });
@@ -134,7 +133,6 @@ export default function ShoppingListScreen() {
     try {
       const updatedItems = await Promise.all(
         items.map(async (item) => {
-          if (manualPrices.current.has(item.id)) return item;
           const storePrice = await getLastUnitPriceForProductAtStore(item.productId, storeId);
           if (storePrice !== null) {
             return { ...item, price: storePrice };
@@ -160,11 +158,11 @@ export default function ShoppingListScreen() {
   const handleToggleChecked = useCallback(async (item: ShoppingListItemWithDetails) => {
     try {
       await updateShoppingListItem(item.id, { checked: !item.checked });
-      await loadData();
+      setShoppingListItems(prev => prev.map(i => i.id === item.id ? { ...i, checked: !item.checked } : i));
     } catch (error) {
       console.error('Erro ao atualizar item:', error);
     }
-  }, [loadData]);
+  }, []);
 
   const handleDeleteItem = useCallback(async (item: ShoppingListItemWithDetails) => {
     try {
@@ -178,9 +176,6 @@ export default function ShoppingListScreen() {
   const handleSaveEdit = useCallback(async (quantity: number, price: number | undefined) => {
     if (!editingItem) return;
     try {
-      if (price !== undefined && price !== null) {
-        manualPrices.current.set(editingItem.id, price);
-      }
       await updateShoppingListItem(editingItem.id, { quantity, price });
       setShoppingListItems(prev =>
         prev.map(item =>
@@ -380,9 +375,10 @@ export default function ShoppingListScreen() {
         item={editingItem}
         onSave={handleSaveEdit}
         onToggleChecked={async () => {
-          const updated = { ...editingItem!, checked: !editingItem!.checked };
+          if (!editingItem) return;
+          const updated = { ...editingItem, checked: !editingItem.checked };
           setEditingItem(updated);
-          await handleToggleChecked(editingItem!);
+          await handleToggleChecked(editingItem);
         }}
         onDelete={() => { handleDeleteItem(editingItem!); setEditingItem(null); }}
         onDismiss={() => setEditingItem(null)}

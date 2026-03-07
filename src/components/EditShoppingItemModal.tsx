@@ -48,17 +48,22 @@ export function EditShoppingItemModal({
   const [quantity, setQuantity] = useState(1);
   const [priceInput, setPriceInput] = useState("");
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
+  const [checked, setChecked] = useState(false);
 
   useEffect(() => {
     if (item) {
       setQuantity(item.quantity);
       setPriceInput(item.price ? item.price.toFixed(2).replace('.', ',') : "");
+      setChecked(item.checked);
     }
   }, [item]);
 
   const handleSave = () => {
     const parsedPrice = priceInput.trim() ? parseFloat(priceInput.replace(",", ".")) : undefined;
     onSave(quantity, parsedPrice);
+    if (checked !== item?.checked) {
+      onToggleChecked();
+    }
   };
 
   const formatCurrency = (value: number) => {
@@ -195,11 +200,11 @@ export function EditShoppingItemModal({
           {/* CART TOGGLE BUTTON */}
           <Button
             mode="outlined"
-            icon={item?.checked ? "cart-minus" : "cart-plus"}
-            onPress={onToggleChecked}
+            icon={checked ? "cart-minus" : "cart-plus"}
+            onPress={() => setChecked(prev => !prev)}
             style={styles.cartButton}
           >
-            {item?.checked ? "Remover do carrinho" : "Mover pro carrinho"}
+            {checked ? "Remover do carrinho" : "Mover pro carrinho"}
           </Button>
 
           {/* ACTION ROW */}
