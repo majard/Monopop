@@ -1,11 +1,12 @@
 import { parse, parseISO, isSameDay } from "date-fns";
-import { useState, useEffect } from "react";
+import { useState, useRef } from "react";
 import { calculateSimilarity } from "../utils/similarityUtils";
-import { Modal, View, Text, ScrollView, Alert } from "react-native";
+import { Modal, View, Text, Alert } from "react-native";
 import {
   Button,
   TextInput as PaperTextInput,
   useTheme,
+  Snackbar,
 } from "react-native-paper";
 import { createHomeScreenStyles } from "../styles/HomeScreenStyles";
 import {
@@ -16,11 +17,78 @@ import {
   addProduct,
   getInventoryItems,
   addInventoryItem,
+  getProducts,
 } from "../database/database";
-import { InventoryItem, InventoryHistory } from "../database/models";
+import { InventoryItem, InventoryHistory, Product } from "../database/models";
 import { ConfirmationModal } from "./ImportConfirmationModal";
 
-const similarityThreshold = 0.5;
+const SIMILARITY_THRESHOLD = 0.5;
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type ImportProduct = { originalName: string; quantity: number };
+
+// Enriched match candidate — carries both the global product and,
+// if it already exists in the current list, the inventory item id.
+type MatchCandidate = {
+  productId: number;
+  productName: string;
+  inventoryItemId: number | null; // null = exists globally but not in this list
+  score: number;
+  source: "list" | "global";
+};
+
+type CurrentImportItem = {
+  importedProduct: ImportProduct;
+  bestMatch: MatchCandidate;
+  similarCandidates: MatchCandidate[];
+  remainingProducts: ImportProduct[];
+  importDate: Date | null;
+};
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const checkDateExists = (array: InventoryHistory[], targetDate: Date) => {
+  if (array.length === 0) return false;
+  const parsedTarget = parseISO(targetDate.toISOString());
+  return array.some((item) => isSameDay(parseISO(item.date), parsedTarget));
+};
+
+const getLastHistoryDate = (productHistory: InventoryHistory[]): Date | null => {
+  if (productHistory.length === 0) return null;
+  const sorted = [...productHistory].sort(
+    (a, b) => parseISO(b.date).getTime() - parseISO(a.date).getTime()
+  );
+  return parseISO(sorted[0].date);
+};
+
+// Apply quantity + history to an existing inventory item.
+const applyImportToInventoryItem = async (
+  inventoryItemId: number,
+  quantity: number,
+  importDate: Date | null
+) => {
+  const productHistory = await getInventoryHistory(inventoryItemId);
+  const lastHistoryDate = getLastHistoryDate(productHistory);
+  const now = new Date();
+  const historyDate = importDate ?? now;
+
+  // Only update current quantity if import date is newer than last entry
+  const shouldUpdate =
+    !lastHistoryDate ||
+    (!isSameDay(lastHistoryDate, historyDate) && historyDate > lastHistoryDate);
+
+  if (shouldUpdate) {
+    await updateInventoryItem(inventoryItemId, quantity);
+  }
+
+  // Always save history entry for the import date (if not duplicate)
+  if (importDate && !checkDateExists(productHistory, importDate)) {
+    await saveInventoryHistorySnapshot(inventoryItemId, quantity, importDate);
+  }
+};
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function ImportModal({
   isImportModalVisible,
@@ -32,20 +100,351 @@ export default function ImportModal({
   const styles = createHomeScreenStyles(theme);
 
   const [importText, setImportText] = useState("");
-  const [confirmationModalVisible, setConfirmationModalVisible] =
-    useState(false);
-  const [currentImportItem, setCurrentImportItem] = useState<{
-    importedProduct: { originalName: string; quantity: number };
-    bestMatch: InventoryItem | null;
-    importDate: Date | null;
-    remainingProducts: { originalName: string; quantity: number }[];
-    similarProducts: InventoryItem[];
+  const [confirmationModalVisible, setConfirmationModalVisible] = useState(false);
+  const [importProgress, setImportProgress] = useState<{
+    current: number;
+    total: number;
+    imported: number;
   } | null>(null);
+  const [snackbarVisible, setSnackbarVisible] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState("");
+  const importedCountRef = useRef(0);
+  const [currentImportItem, setCurrentImportItem] = useState<CurrentImportItem | null>(null);
+
+  // ─── Pool helpers ───────────────────────────────────────────────────────────
+
+  // Build a map of productId → inventoryItemId for the current list.
+  const buildListMap = (listItems: InventoryItem[]): Map<number, number> => {
+    const map = new Map<number, number>();
+    for (const ii of listItems) {
+      map.set(ii.productId, ii.id);
+    }
+    return map;
+  };
+
+  // Find the best match candidates for a product name against the global pool.
+  const findCandidates = (
+    name: string,
+    allProducts: Product[],
+    listMap: Map<number, number>
+  ): MatchCandidate[] => {
+    return allProducts
+      .map((p) => {
+        const score = calculateSimilarity(p.name, name);
+        const inventoryItemId = listMap.get(p.id) ?? null;
+        const source: "list" | "global" = inventoryItemId !== null ? "list" : "global";
+        return { productId: p.id, productName: p.name, inventoryItemId, score, source };
+      })
+      .filter((c) => c.score >= SIMILARITY_THRESHOLD)
+      .sort((a, b) => b.score - a.score);
+  };
+
+  // ─── Core processing ────────────────────────────────────────────────────────
+
+  const processNextProduct = async (
+    remainingProducts: ImportProduct[],
+    allProducts: Product[],
+    listMap: Map<number, number>,
+    importDate: Date | null
+  ) => {
+    if (!remainingProducts || remainingProducts.length === 0) {
+      setConfirmationModalVisible(false);
+      setCurrentImportItem(null);
+      setImportProgress(null);
+
+      const message = `${importedCountRef.current} produto${importedCountRef.current !== 1 ? "s" : ""} importado${importedCountRef.current !== 1 ? "s" : ""} com sucesso`;
+      setSnackbarMessage(message);
+      setSnackbarVisible(true);
+
+      await loadItems();
+      return;
+    }
+
+    const [currentProduct, ...rest] = remainingProducts;
+
+    setImportProgress((prev) =>
+      prev ? { ...prev, current: prev.total - rest.length } : null
+    );
+
+    // 1. Exact match in global products (case-insensitive)
+    const exactGlobalMatch = allProducts.find(
+      (p) => p.name.toLowerCase() === currentProduct.originalName.toLowerCase()
+    );
+
+    if (exactGlobalMatch) {
+      const existingIIId = listMap.get(exactGlobalMatch.id) ?? null;
+
+      if (existingIIId !== null) {
+        // Already in this list → update
+        await applyImportToInventoryItem(existingIIId, currentProduct.quantity, importDate);
+      } else {
+        // Exists globally but not in this list → add inventory item
+        const newIIId = await addInventoryItem(listId, exactGlobalMatch.id, currentProduct.quantity);
+        if (importDate) {
+          await saveInventoryHistorySnapshot(newIIId, currentProduct.quantity, importDate);
+        }
+        listMap.set(exactGlobalMatch.id, newIIId);
+      }
+
+      importedCountRef.current += 1;
+      setImportProgress((prev) => prev ? { ...prev, imported: importedCountRef.current } : null);
+
+      await processNextProduct(rest, allProducts, listMap, importDate);
+      return;
+    }
+
+    // 2. No exact match → look for similar candidates
+    const candidates = findCandidates(currentProduct.originalName, allProducts, listMap);
+
+    if (candidates.length > 0) {
+      setCurrentImportItem({
+        importedProduct: currentProduct,
+        bestMatch: candidates[0],
+        similarCandidates: candidates,
+        remainingProducts: rest,
+        importDate,
+      });
+      setConfirmationModalVisible(true);
+      // Processing pauses here — resumes via modal callbacks
+      return;
+    }
+
+    // 3. No match at all → create new product + inventory item
+    const { newProduct, newIIId } = await createAndAddProduct(
+      currentProduct,
+      importDate
+    );
+    allProducts.push(newProduct);
+    listMap.set(newProduct.id, newIIId);
+
+    importedCountRef.current += 1;
+    setImportProgress((prev) => prev ? { ...prev, imported: importedCountRef.current } : null);
+
+    await processNextProduct(rest, allProducts, listMap, importDate);
+  };
+
+  // Creates a new global product and adds it to the current list.
+  const createAndAddProduct = async (
+    product: ImportProduct,
+    importDate: Date | null
+  ): Promise<{ newProduct: Product; newIIId: number }> => {
+    const productId = await addProduct(product.originalName);
+    const newIIId = await addInventoryItem(listId, productId, product.quantity);
+
+    if (importDate) {
+      await saveInventoryHistorySnapshot(newIIId, product.quantity, importDate);
+    }
+
+    const newProduct: Product = {
+      id: productId,
+      name: product.originalName,
+      categoryId: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    return { newProduct, newIIId };
+  };
+
+  // Applies a confirmed candidate match (from modal) to the list.
+  const applyCandidate = async (
+    candidate: MatchCandidate,
+    importedProduct: ImportProduct,
+    importDate: Date | null
+  ) => {
+    if (candidate.inventoryItemId !== null) {
+      // Already in list → update
+      await applyImportToInventoryItem(candidate.inventoryItemId, importedProduct.quantity, importDate);
+    } else {
+      // Global product not yet in list → add inventory item
+      const newIIId = await addInventoryItem(listId, candidate.productId, importedProduct.quantity);
+      if (importDate) {
+        await saveInventoryHistorySnapshot(newIIId, importedProduct.quantity, importDate);
+      }
+    }
+  };
+
+  // ─── Import entry point ─────────────────────────────────────────────────────
+
+  const importStockList = async (text: string) => {
+    try {
+      const lines = text.split("\n");
+      const importDate = parseImportDate(lines);
+      const importedProducts = parseImportProducts(lines);
+
+      if (importedProducts.length === 0) {
+        Alert.alert("Aviso", "Nenhum produto encontrado na lista.");
+        return;
+      }
+
+      // Load both pools once
+      const [allProducts, listItems] = await Promise.all([
+        getProducts(),
+        getInventoryItems(listId),
+      ]);
+      const listMap = buildListMap(listItems);
+
+      importedCountRef.current = 0;
+      setImportProgress({ current: 0, total: importedProducts.length, imported: 0 });
+
+      await processNextProduct(importedProducts, allProducts, listMap, importDate);
+    } catch (error) {
+      console.error("Error importing stock list:", error);
+      Alert.alert("Erro", "Ocorreu um erro ao importar a lista.");
+      setImportProgress(null);
+    }
+  };
+
+  // ─── Modal callbacks ────────────────────────────────────────────────────────
+
+  // User accepted the bestMatch for the current product, process all remaining silently.
+  const handleAcceptAllSuggestions = async () => {
+    if (!currentImportItem) return;
+
+    try {
+      const { bestMatch, importedProduct, importDate, remainingProducts } = currentImportItem;
+
+      await applyCandidate(bestMatch, importedProduct, importDate);
+      importedCountRef.current += 1;
+
+      // Load fresh pools for the silent processing pass
+      const [allProducts, listItems] = await Promise.all([
+        getProducts(),
+        getInventoryItems(listId),
+      ]);
+      const listMap = buildListMap(listItems);
+
+      // Process remaining silently (no modal)
+      for (const product of remainingProducts) {
+        const exactGlobalMatch = allProducts.find(
+          (p) => p.name.toLowerCase() === product.originalName.toLowerCase()
+        );
+
+        if (exactGlobalMatch) {
+          const existingIIId = listMap.get(exactGlobalMatch.id) ?? null;
+          if (existingIIId !== null) {
+            await applyImportToInventoryItem(existingIIId, product.quantity, importDate);
+          } else {
+            const newIIId = await addInventoryItem(listId, exactGlobalMatch.id, product.quantity);
+            if (importDate) {
+              await saveInventoryHistorySnapshot(newIIId, product.quantity, importDate);
+            }
+            listMap.set(exactGlobalMatch.id, newIIId);
+          }
+          importedCountRef.current += 1;
+        } else {
+          const candidates = findCandidates(product.originalName, allProducts, listMap);
+          if (candidates.length > 0) {
+            // Silent best-match acceptance
+            await applyCandidate(candidates[0], product, importDate);
+            importedCountRef.current += 1;
+          } else {
+            const { newProduct, newIIId } = await createAndAddProduct(product, importDate);
+            allProducts.push(newProduct);
+            listMap.set(newProduct.id, newIIId);
+            importedCountRef.current += 1;
+          }
+        }
+      }
+
+      setConfirmationModalVisible(false);
+      setCurrentImportItem(null);
+      setImportProgress(null);
+
+      const message = `${importedCountRef.current} produto${importedCountRef.current !== 1 ? "s" : ""} importado${importedCountRef.current !== 1 ? "s" : ""} com sucesso`;
+      setSnackbarMessage(message);
+      setSnackbarVisible(true);
+
+      await loadItems();
+    } catch (error) {
+      console.error("Error in handleAcceptAllSuggestions:", error);
+    }
+  };
+
+  // User accepted bestMatch for current product only, continue normally.
+  const handleAddToExisting = async () => {
+    if (!currentImportItem) return;
+
+    try {
+      const { bestMatch, importedProduct, importDate, remainingProducts } = currentImportItem;
+
+      await applyCandidate(bestMatch, importedProduct, importDate);
+      importedCountRef.current += 1;
+      setImportProgress((prev) => prev ? { ...prev, imported: importedCountRef.current } : null);
+
+      const [allProducts, listItems] = await Promise.all([
+        getProducts(),
+        getInventoryItems(listId),
+      ]);
+      const listMap = buildListMap(listItems);
+
+      setConfirmationModalVisible(false);
+      await processNextProduct(remainingProducts, allProducts, listMap, importDate);
+    } catch (error) {
+      console.error("Error in handleAddToExisting:", error);
+    }
+  };
+
+  // User wants to create a new product instead of using any suggestion.
+  const handleCreateNew = async () => {
+    if (!currentImportItem) return;
+
+    try {
+      const { importedProduct, importDate, remainingProducts } = currentImportItem;
+
+      const [allProducts, listItems] = await Promise.all([
+        getProducts(),
+        getInventoryItems(listId),
+      ]);
+      const listMap = buildListMap(listItems);
+
+      const { newProduct, newIIId } = await createAndAddProduct(importedProduct, importDate);
+      allProducts.push(newProduct);
+      listMap.set(newProduct.id, newIIId);
+
+      importedCountRef.current += 1;
+      setImportProgress((prev) => prev ? { ...prev, imported: importedCountRef.current } : null);
+
+      setConfirmationModalVisible(false);
+      await processNextProduct(remainingProducts, allProducts, listMap, importDate);
+    } catch (error) {
+      console.error("Error in handleCreateNew:", error);
+    }
+  };
+
+  // User skips this product entirely.
+  const handleSkipImport = async () => {
+    if (!currentImportItem) return;
+
+    try {
+      const { importDate, remainingProducts } = currentImportItem;
+
+      const [allProducts, listItems] = await Promise.all([
+        getProducts(),
+        getInventoryItems(listId),
+      ]);
+      const listMap = buildListMap(listItems);
+
+      setConfirmationModalVisible(false);
+      await processNextProduct(remainingProducts, allProducts, listMap, importDate);
+    } catch (error) {
+      console.error("Error in handleSkipImport:", error);
+    }
+  };
+
+  const handleCancelAllImports = () => {
+    setConfirmationModalVisible(false);
+    setCurrentImportItem(null);
+    setImportProgress(null);
+  };
+
+  // ─── Import entry modal handlers ────────────────────────────────────────────
 
   const handleImportModalImport = () => {
-    importStockList(importText);
+    const text = importText;
     setIsImportModalVisible(false);
     setImportText("");
+    importStockList(text);
   };
 
   const handleImportModalCancel = () => {
@@ -53,325 +452,7 @@ export default function ImportModal({
     setImportText("");
   };
 
-  const checkDateExists = (array: InventoryHistory[], targetDate: Date) => {
-    // Parse the target date
-    const parsedTargetDate = parseISO(targetDate.toISOString());
-    if (array.length === 0) return false;
-
-    // Check if any object in the array has the same date
-    return array.some((item) => {
-      const itemDate = parseISO(item.date); // Parse the date from the item
-      return isSameDay(itemDate, parsedTargetDate); // Compare the two dates
-    });
-  };
-
-  const getLastHistoryDate = async (productHistory: InventoryHistory[]) => {
-    if (productHistory.length === 0) return null;
-    const sortedHistory = productHistory.sort(
-      (a, b) => parseISO(b.date).getTime() - parseISO(a.date).getTime()
-    );
-    return parseISO(sortedHistory[0].date);
-  };
-
-  const processNextProduct = async (
-    remainingProducts: { originalName: string; quantity: number }[],
-    importDate?: Date
-  ) => {
-    if (!remainingProducts || remainingProducts.length === 0) {
-      setConfirmationModalVisible(false);
-      setCurrentImportItem(null);
-      await loadItems();
-      return;
-    }
-
-    const [currentProduct, ...rest] = remainingProducts;
-    const existingProducts = await getInventoryItems(listId);
-    console.log('\n\nexistingProducts in processNextProduct', existingProducts);
-    // First, check for exact name matches (case-insensitive)   
-    const exactMatch = existingProducts.find(
-      (p) => p.productName.toLowerCase() === currentProduct.originalName.toLowerCase()
-    );
-
-    if (exactMatch) {
-      console.log('\n\nexactMatch', exactMatch);
-      // Update quantity and history of exact match
-      const productHistory = await getInventoryHistory(exactMatch.id);
-      const lastHistoryDate = await getLastHistoryDate(productHistory);
-      if (lastHistoryDate < importDate) {
-        await updateInventoryItem(exactMatch.id, currentProduct.quantity);
-      }
-      if (importDate && !checkDateExists(productHistory, importDate)) {
-        await saveInventoryHistorySnapshot(
-          exactMatch.id,
-          currentProduct.quantity,
-          importDate
-        );
-      }
-      await processNextProduct(rest, importDate);
-      return;
-    }
-
-    // If no exact match, look for similar products
-    const similarProducts = existingProducts
-      .filter(
-        (p) =>
-          calculateSimilarity(p.productName, currentProduct.originalName) >=
-          similarityThreshold
-      )
-      .sort(
-        (product1, product2) =>
-          calculateSimilarity(product2.productName, currentProduct.originalName) -
-          calculateSimilarity(product1.productName, currentProduct.originalName)
-      );
-
-    if (similarProducts.length > 0) {
-      setCurrentImportItem({
-        importedProduct: currentProduct,
-        bestMatch: similarProducts[0],
-        similarProducts,
-        remainingProducts: rest,
-        importDate,
-      });
-      setConfirmationModalVisible(true);
-    } else {
-      // No similar products found, create new product
-      await createNewProduct(currentProduct, importDate);
-      await processNextProduct(rest, importDate);
-    }
-  };
-
-  const createNewProduct = async (
-    product: { originalName: string; quantity: number },
-    importDate?: Date
-  ) => {
-    try {
-      // Check for exact name match again (case-insensitive)
-      const existingProducts = await getInventoryItems(listId);
-      const exactMatch = existingProducts.find(
-        (p) => p.productName.toLowerCase() === product.originalName.toLowerCase()
-      );
-      console.log('\n\nexactMatch in createNewProduct', exactMatch);
-
-      if (exactMatch) {
-        // Update quantity of exact match
-        await updateInventoryItem(exactMatch.id, product.quantity);
-        return exactMatch.id;
-      }
-
-      // No exact match found, create new product
-      const productId = await addProduct(product.originalName);
-      const inventoryItemId = await addInventoryItem(
-        listId,
-        productId,
-        product.quantity,
-      );  
-      const productHistory = await getInventoryHistory(inventoryItemId);
-
-      if (importDate && !checkDateExists(productHistory, importDate)) {
-        await saveInventoryHistorySnapshot(
-          inventoryItemId,
-          product.quantity,
-          importDate
-        );
-      }
-
-      console.log('\n\n created new product', productId);
-
-      return productId;
-    } catch (error) {
-      console.error("Error creating new product:", error);
-      throw error;
-    }
-  };
-
-  const importStockList = async (text: string) => {
-    try {
-      const lines = text.split("\n");
-      const importDate = parseImportDate(lines);
-      const importedProducts = parseImportProducts(lines);
-      const existingProducts = await getInventoryItems(listId);
-      console.log('\n\nimportedProducts', importedProducts);
-
-      await processNextProduct(importedProducts, importDate);
-    } catch (error) {
-      console.error("Error importing stock list:", error);
-      Alert.alert("Erro", "Ocorreu um erro ao importar a lista.");
-    }
-  };
-
-  const handleAcceptAllSuggestions = async () => {
-    try {
-      if (!currentImportItem?.bestMatch || !currentImportItem?.similarProducts)
-        return;
-
-      // Accept the current bestMatch for the current imported product
-      const { bestMatch, importedProduct, importDate, remainingProducts } = currentImportItem;
-      const now = new Date();
-      const historyDate = importDate ? importDate : now;
-      const productHistory = await getInventoryHistory(bestMatch.id);
-      const lastHistoryDate = await getLastHistoryDate(productHistory);
-
-      // If there is an import date and it doesn't exist in the history, save the history
-      if (importDate && !checkDateExists(productHistory, importDate)) {
-        await addSingleInventoryHistoryEntry(
-          bestMatch.id,
-          importedProduct.quantity,
-          importDate
-        );
-      }
-
-      // If we have a history entry from the same day or the import is older, skip it
-      if (
-        isSameDay(lastHistoryDate, historyDate) ||
-        historyDate < lastHistoryDate
-      ) {
-        console.log(
-          `Skipping update: ${
-            historyDate < lastHistoryDate ? "older import" : "same day entry"
-          }`
-        );
-      } else {
-        // Only update if the date is newer than the last history entry
-        await updateInventoryItem(bestMatch.id, importedProduct.quantity);
-      }
-
-      // Process all remaining products automatically without showing confirmation modal
-      const existingProducts = await getInventoryItems(listId);
-      
-      for (const product of remainingProducts) {
-        // Check for exact name match first
-        const exactMatch = existingProducts.find(
-          (p) => p.productName.toLowerCase() === product.originalName.toLowerCase()
-        );
-
-        if (exactMatch) {
-          // Update quantity and history of exact match
-          const exactMatchHistory = await getInventoryHistory(exactMatch.id);
-          const exactMatchLastDate = await getLastHistoryDate(exactMatchHistory);
-          if (exactMatchLastDate < importDate) {
-            await updateInventoryItem(exactMatch.id, product.quantity);
-          }
-          if (importDate && !checkDateExists(exactMatchHistory, importDate)) {
-            await saveInventoryHistorySnapshot(
-              exactMatch.id,
-              product.quantity,
-              importDate
-            );
-          }
-        } else {
-          // Look for similar products
-          const similarProducts = existingProducts
-            .filter(
-              (p) =>
-                calculateSimilarity(p.productName, product.originalName) >=
-                similarityThreshold
-            )
-            .sort(
-              (product1, product2) =>
-                calculateSimilarity(product2.productName, product.originalName) -
-                calculateSimilarity(product1.productName, product.originalName)
-            );
-
-          if (similarProducts.length > 0) {
-            // Use the best match silently
-            const bestSimilarMatch = similarProducts[0];
-            await updateInventoryItem(bestSimilarMatch.id, product.quantity);
-            
-            if (importDate) {
-              const similarHistory = await getInventoryHistory(bestSimilarMatch.id);
-              if (!checkDateExists(similarHistory, importDate)) {
-                await saveInventoryHistorySnapshot(
-                  bestSimilarMatch.id,
-                  product.quantity,
-                  importDate
-                );
-              }
-            }
-          } else {
-            // No match exists, create a new product
-            await createNewProduct(product, importDate);
-          }
-        }
-      }
-
-      setConfirmationModalVisible(false);
-      setCurrentImportItem(null);
-      await loadItems();
-    } catch (error) {
-      console.error("Error accepting all suggestions:", error);
-    }
-  };
-
-  const handleAddToExisting = async () => {
-    if (!currentImportItem?.bestMatch) return;
-
-    try {
-      const { bestMatch, importedProduct, importDate, remainingProducts } =
-        currentImportItem;
-      const now = new Date();
-      const historyDate = importDate ? importDate : now;
-      const productHistory = await getInventoryHistory(bestMatch.id);
-      const lastHistoryDate = await getLastHistoryDate(productHistory);
-
-      // If there is an import date and it doesn't exist in the history, save the history
-      if (importDate && !checkDateExists(productHistory, importDate)) {
-        await addSingleInventoryHistoryEntry(
-          bestMatch.id,
-          importedProduct.quantity,
-          importDate
-        );
-      }
-
-      // If we have a history entry from the same day or the import is older, skip it
-      if (
-        isSameDay(lastHistoryDate, historyDate) ||
-        historyDate < lastHistoryDate
-      ) {
-        console.log(
-          `Skipping update: ${
-            historyDate < lastHistoryDate ? "older import" : "same day entry"
-          }`
-        );
-        setConfirmationModalVisible(false);
-        await processNextProduct(remainingProducts, importDate);
-        return;
-      }
-
-      // Only update if the date is newer than the last history entry
-      await updateInventoryItem(bestMatch.id, importedProduct.quantity);
-
-      setConfirmationModalVisible(false);
-      await processNextProduct(remainingProducts, importDate);
-    } catch (error) {
-      console.error("Error updating product quantity:", error);
-    }
-  };
-
-  const handleCreateNew = async () => {
-    if (!currentImportItem) return;
-
-    const { importedProduct, importDate, remainingProducts } =
-      currentImportItem;
-    await createNewProduct(importedProduct, importDate);
-
-    setConfirmationModalVisible(false);
-    await processNextProduct(remainingProducts, importDate);
-  };
-
-  const handleSkipImport = async () => {
-    if (!currentImportItem) return;
-
-    setConfirmationModalVisible(false);
-    await processNextProduct(
-      currentImportItem.remainingProducts,
-      currentImportItem.importDate
-    );
-  };
-
-  const handleCancelAllImports = () => {
-    setConfirmationModalVisible(false);
-    setCurrentImportItem(null);
-  };
+  // ─── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <View>
@@ -384,10 +465,7 @@ export default function ImportModal({
           <View style={styles.modalContainer}>
             <Text style={styles.modalTitle}>Importar Lista</Text>
             <PaperTextInput
-              style={[
-                styles.textInput,
-                { height: 150, textAlignVertical: "top" },
-              ]}
+              style={[styles.textInput, { height: 150, textAlignVertical: "top" }]}
               multiline
               value={importText}
               onChangeText={setImportText}
@@ -396,16 +474,10 @@ export default function ImportModal({
               dense
             />
             <View style={styles.buttonRow}>
-              <Button
-                onPress={handleImportModalCancel}
-                style={styles.stackedButton}
-              >
+              <Button onPress={handleImportModalCancel} style={styles.stackedButton}>
                 Cancelar
               </Button>
-              <Button
-                onPress={handleImportModalImport}
-                style={styles.stackedButton}
-              >
+              <Button onPress={handleImportModalImport} style={styles.stackedButton}>
                 Importar
               </Button>
             </View>
@@ -416,6 +488,7 @@ export default function ImportModal({
       <ConfirmationModal
         visible={confirmationModalVisible}
         currentImportItem={currentImportItem}
+        progress={importProgress}
         onAcceptAllSuggestions={handleAcceptAllSuggestions}
         onAddToExisting={handleAddToExisting}
         onCreateNew={handleCreateNew}
@@ -423,9 +496,19 @@ export default function ImportModal({
         onCancelAllImports={handleCancelAllImports}
         onUpdateCurrentItem={setCurrentImportItem}
       />
+
+      <Snackbar
+        visible={snackbarVisible}
+        onDismiss={() => setSnackbarVisible(false)}
+        duration={3000}
+      >
+        {snackbarMessage}
+      </Snackbar>
     </View>
   );
 }
+
+// ─── Parsers ──────────────────────────────────────────────────────────────────
 
 const parseImportDate = (lines: string[]): Date | null => {
   const dateFormats = ["dd/MM/yyyy", "dd/MM/yy", "dd/MM", "d/M"];
@@ -444,7 +527,6 @@ const parseImportDate = (lines: string[]): Date | null => {
       const match = line.match(dateRegexes[i]);
       if (match) {
         try {
-          // For single digit dates, pad with zeros for parsing
           const paddedLine =
             i === 3
               ? `${match[1].padStart(2, "0")}/${match[2].padStart(2, "0")}`
@@ -455,11 +537,8 @@ const parseImportDate = (lines: string[]): Date | null => {
 
           if (parsedDate && !isNaN(parsedDate.getTime())) {
             if (i === 2 || i === 3) {
-              // For dd/MM or d/M format
               const day = parseInt(match[1], 10);
-              const month = parseInt(match[2], 10) - 1; // Month is 0-indexed
-
-              // Determine the correct year
+              const month = parseInt(match[2], 10) - 1;
               let assumedYear = currentYear;
               const parsedMonth = month + 1;
               if (
@@ -468,10 +547,8 @@ const parseImportDate = (lines: string[]): Date | null => {
               ) {
                 assumedYear--;
               }
-              // Set time to 20:00
               return new Date(assumedYear, month, day, 20, 0, 0);
             }
-            // Set time to 20:00 for all other date formats
             parsedDate.setHours(20, 0, 0, 0);
             return parsedDate;
           }
@@ -486,107 +563,81 @@ const parseImportDate = (lines: string[]): Date | null => {
 
 const parseImportProducts = (
   lines: string[]
-): { originalName: string; quantity: number }[] => {
+): ImportProduct[] => {
   return lines
-    .filter((line) => line.trim()) // Skip empty lines
+    .filter((line) => line.trim())
     .filter((line) => {
-      const trimmedLine = line.trim();
-      
-      // Skip lines starting with [, ✖, ✨, or *
-      if (/^[,\✖\✨\*]/.test(trimmedLine)) {
-        return false;
-      }
-      
-      // Skip lines that contain date patterns
-      if (/\d{1,2}\/\d{1,2}(\/\d{2,4})?/.test(trimmedLine)) {
-        return false;
-      }
-      
-      // Skip lines that have a number AND are longer than 60 characters
-      if (/\d/.test(trimmedLine) && trimmedLine.length > 60) {
-        return false;
-      }
-      
-      // Skip lines that have no number AND are longer than 36 characters
-      if (!/\d/.test(trimmedLine) && trimmedLine.length > 36) {
-        return false;
-      }
-      
+      const trimmed = line.trim();
+      if (/^[\[✖✨*]/.test(trimmed)) return false;
+      if (/\d{1,2}\/\d{1,2}(\/\d{2,4})?/.test(trimmed)) return false;
+      if (/\d/.test(trimmed) && trimmed.length > 60) return false;
+      if (!/\d/.test(trimmed) && trimmed.length > 36) return false;
       return true;
     })
     .map((line) => {
       let processedLine = line.trim();
-      
+
       // Remove price-like patterns
       processedLine = processedLine
-        // Remove numbers followed by units (with optional space)
-        .replace(/\b\d+\s*(gramas?|grama|kgs?|kg|ml|litros?|litro|gr|g|l)\b/gi, '')
-        // Remove numbers with decimal separator (dot or comma)
-        .replace(/\b\d+[.,]\d{1,2}\b/g, '')
-        // Remove numbers preceded by "R$" or "-" (price context)
-        .replace(/R\$\s*\d+(\.\d+)?([.,]\d{1,2})?/g, '')
-        .replace(/-\s*\d+(\.\d+)?([.,]\d{1,2})?/g, '')
-        // Remove patterns like "- 4,00" or "- 15.00"
-        .replace(/-\s*\d+[.,]\d{1,2}/g, '');
+        .replace(/\b\d+\s*(gramas?|grama|kgs?|kg|ml|litros?|litro|gr|g|l)\b/gi, "")
+        .replace(/\b\d+[.,]\d{1,2}\b/g, "")
+        .replace(/R\$\s*\d+(\.\d+)?([.,]\d{1,2})?/g, "")
+        .replace(/-\s*\d+(\.\d+)?([.,]\d{1,2})?/g, "")
+        .replace(/-\s*\d+[.,]\d{1,2}/g, "");
 
       let quantity = 0;
       let productName = processedLine;
 
-      // Extract quantity using priority
-      // a. First integer inside parentheses
       const parenthesesMatch = processedLine.match(/\((\d+)\)/);
       if (parenthesesMatch) {
         quantity = parseInt(parenthesesMatch[1], 10);
-        productName = processedLine.replace(/\(\d+\)/, '');
+        productName = processedLine.replace(/\(\d+\)/, "");
       } else {
-        // b. Check if colon is present - quantity is number AFTER colon
         const colonMatch = processedLine.match(/:\s*(\d+)/);
         if (colonMatch) {
           quantity = parseInt(colonMatch[1], 10);
-          productName = processedLine.replace(/:\s*\d+/, '');
+          productName = processedLine.replace(/:\s*\d+/, "");
         } else {
-          // c. Find the LAST integer on the line (clearly separated)
           const allNumbers = processedLine.match(/(?<!\d)(\d+)(?!\d)/g);
           if (allNumbers && allNumbers.length > 0) {
-            // Check if the last number is clearly separated (preceded by space, colon, or dash)
             const lastNumber = allNumbers[allNumbers.length - 1];
             const lastNumberIndex = processedLine.lastIndexOf(lastNumber);
             const precedingChar = processedLine[lastNumberIndex - 1];
-            
-            // Only treat as quantity if clearly separated or at end of line
-            if (lastNumberIndex === processedLine.length - lastNumber.length || 
-                precedingChar === ' ' || 
-                precedingChar === ':' || 
-                precedingChar === '-' ||
-                precedingChar === undefined) {
-              
-              // Make sure it's not attached to units like "150g", "500ml", "1l"
-              const followingChars = processedLine.substring(lastNumberIndex + lastNumber.length).toLowerCase();
+            if (
+              lastNumberIndex === processedLine.length - lastNumber.length ||
+              precedingChar === " " ||
+              precedingChar === ":" ||
+              precedingChar === "-" ||
+              precedingChar === undefined
+            ) {
+              const followingChars = processedLine
+                .substring(lastNumberIndex + lastNumber.length)
+                .toLowerCase();
               if (!followingChars.match(/^(g|ml|l|kg|gr)/)) {
                 quantity = parseInt(lastNumber, 10);
-                productName = processedLine.substring(0, lastNumberIndex) + processedLine.substring(lastNumberIndex + lastNumber.length);
+                productName =
+                  processedLine.substring(0, lastNumberIndex) +
+                  processedLine.substring(lastNumberIndex + lastNumber.length);
               }
             }
           }
         }
       }
 
-      // Extract product name: remove quantity number, emojis, separators, extra spaces
       productName = productName
-        .replace(/\b(reais|real|centavos?)\b/gi, '') // Remove price-related words
-        .replace(/\d+/g, '') // Remove any remaining numbers
-        .replace(/[-\/:_,;]/g, ' ') // Remove separators
-        .replace(/[\u{1F600}-\u{1F64F}|\u{1F300}-\u{1F5FF}|\u{1F680}-\u{1F6FF}|\u{1F700}-\u{1F77F}|\u{1F780}-\u{1F7FF}|\u{1F800}-\u{1F8FF}|\u{1F900}-\u{1F9FF}|\u{1FA00}-\u{1FAFF}|\u{2600}-\u{26FF}|\u{2700}-\u{27BF}]/gu, '') // Remove emojis
-        .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+        .replace(/\b(reais|real|centavos?)\b/gi, "")
+        .replace(/\d+/g, "")
+        .replace(/[-\/:_,;]/g, " ")
+        .replace(
+          /[\u{1F600}-\u{1F64F}|\u{1F300}-\u{1F5FF}|\u{1F680}-\u{1F6FF}|\u{1F700}-\u{1F77F}|\u{1F780}-\u{1F7FF}|\u{1F800}-\u{1F8FF}|\u{1F900}-\u{1F9FF}|\u{1FA00}-\u{1FAFF}|\u{2600}-\u{26FF}|\u{2700}-\u{27BF}]/gu,
+          ""
+        )
+        .replace(/\s+/g, " ")
         .trim();
 
-      // If name is empty after cleaning → skip line
       if (!productName) return null;
 
-      return {
-        originalName: productName,
-        quantity,
-      };
+      return { originalName: productName, quantity };
     })
-    .filter((item) => item !== null);
+    .filter((item): item is ImportProduct => item !== null);
 };
