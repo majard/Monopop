@@ -22,7 +22,7 @@ import {
 import { InventoryItem, InventoryHistory, Product } from "../database/models";
 import { ConfirmationModal } from "./ImportConfirmationModal";
 
-const SIMILARITY_THRESHOLD = 0.5;
+const SIMILARITY_THRESHOLD = 0.55;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
