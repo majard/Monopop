@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { useTheme } from 'react-native-paper';
+import { useTheme, Surface } from 'react-native-paper';
 import { Animated } from 'react-native';
 
 export default function ShoppingListSkeleton() {
@@ -28,83 +28,102 @@ export default function ShoppingListSkeleton() {
   }, [opacityAnim]);
 
   const renderSkeletonRow = (index: number) => (
-    <Animated.View 
-      key={index}
-      style={[
-        localStyles.skeletonRow,
-        { opacity: opacityAnim }
-      ]}
-    >
-      <View style={localStyles.skeletonLeft}>
-        <View 
-          style={[
-            localStyles.skeletonProductName,
-            { backgroundColor: theme.colors.surfaceVariant }
-          ]} 
-        />
-        <View 
-          style={[
-            localStyles.skeletonQuantity,
-            { backgroundColor: theme.colors.surfaceVariant }
-          ]} 
-        />
+    <Surface key={index} style={[skeletonStyles.card, { backgroundColor: theme.colors.surface }]}>
+      <View style={skeletonStyles.row}>
+        {/* Checkbox placeholder */}
+        <View style={[skeletonStyles.checkbox, { backgroundColor: theme.colors.surfaceVariant }]} />
+        
+        {/* Name placeholder */}
+        <View style={[skeletonStyles.name, { backgroundColor: theme.colors.surfaceVariant }]} />
+        
+        {/* Right column with two stacked bars */}
+        <View style={skeletonStyles.rightCol}>
+          <View style={[skeletonStyles.priceBar, { backgroundColor: theme.colors.surfaceVariant }]} />
+          <View style={[skeletonStyles.stockBar, { backgroundColor: theme.colors.surfaceVariant }]} />
+        </View>
+        
+        {/* Delete icon placeholder */}
+        <View style={[skeletonStyles.deleteIcon, { backgroundColor: theme.colors.surfaceVariant }]} />
       </View>
-      <View style={localStyles.skeletonRight}>
-        <View 
-          style={[
-            localStyles.skeletonCheckbox,
-            { backgroundColor: theme.colors.surfaceVariant }
-          ]} 
-        />
-      </View>
-    </Animated.View>
+    </Surface>
+  );
+
+  const renderSectionHeader = () => (
+    <View style={[skeletonStyles.sectionHeader, { backgroundColor: theme.colors.surfaceVariant }]} />
   );
 
   return (
-    <View style={localStyles.container}>
-      {Array.from({ length: 6 }, (_, index) => renderSkeletonRow(index))}
-    </View>
+    <Animated.View style={{ opacity: opacityAnim }}>
+      {/* First section header */}
+      <View style={skeletonStyles.sectionHeaderContainer}>
+        {renderSectionHeader()}
+      </View>
+      
+      {/* First 3 rows */}
+      {Array.from({ length: 3 }, (_, index) => renderSkeletonRow(index))}
+      
+      {/* Second section header */}
+      <View style={skeletonStyles.sectionHeaderContainer}>
+        {renderSectionHeader()}
+      </View>
+      
+      {/* Last 3 rows */}
+      {Array.from({ length: 3 }, (_, index) => renderSkeletonRow(index + 3))}
+    </Animated.View>
   );
 }
 
-const localStyles = StyleSheet.create({
-  container: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  skeletonRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
+const skeletonStyles = StyleSheet.create({
+  sectionHeaderContainer: {
+    marginHorizontal: 20,
+    marginTop: 4,
     marginBottom: 8,
   },
-  skeletonLeft: {
-    flex: 1,
-    flexDirection: 'column',
-    gap: 4,
-  },
-  skeletonProductName: {
-    height: 20,
-    width: '60%',
+  sectionHeader: {
+    height: 14,
+    width: '35%',
     borderRadius: 4,
   },
-  skeletonQuantity: {
-    height: 16,
-    width: '30%',
-    borderRadius: 4,
+  card: {
+    marginBottom: 6,
+    borderRadius: 8,
+    elevation: 1,
   },
-  skeletonRight: {
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 8,
     gap: 8,
   },
-  skeletonCheckbox: {
-    width: 24,
-    height: 24,
+  checkbox: {
+    width: 20,
+    height: 20,
     borderRadius: 4,
+  },
+  name: {
+    flex: 1,
+    height: 15,
+    width: '55%',
+    borderRadius: 4,
+  },
+  rightCol: {
+    alignItems: 'flex-end',
+  },
+  priceBar: {
+    height: 13,
+    width: 70,
+    borderRadius: 4,
+    marginBottom: 2,
+  },
+  stockBar: {
+    height: 11,
+    width: 45,
+    borderRadius: 4,
+  },
+  deleteIcon: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
   },
 });
