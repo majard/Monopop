@@ -6,8 +6,8 @@ import { useRoute, useNavigation, useFocusEffect } from '@react-navigation/nativ
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
-  getInventoryItems,
   getShoppingListItemsByListId,
+  getInventoryItems,
   addShoppingListItem,
   updateShoppingListItem,
   deleteShoppingListItem,
@@ -68,16 +68,21 @@ export default function AddProductToShoppingListScreen() {
 
   const loadData = useCallback(async () => {
     try {
-      const [inventory, shopping] = await Promise.all([
-        getInventoryItems(listId),
+      const [shopping, inventory] = await Promise.all([
         getShoppingListItemsByListId(listId),
+        getInventoryItems(listId),
       ]);
+      
       setInventoryItems(inventory);
-      const map = new Map<number, { id: number; quantity: number }>();
-      shopping.forEach((item) => {
-        map.set(item.inventoryItemId, { id: item.id, quantity: item.quantity });
+      
+      const shoppingMap = new Map<number, { id: number; quantity: number }>();
+      shopping.forEach(item => {
+        shoppingMap.set(item.inventoryItemId, {
+          id: item.id,
+          quantity: item.quantity,
+        });
       });
-      setShoppingListByInventoryId(map);
+      setShoppingListByInventoryId(shoppingMap);
       return inventory; // return fresh data
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
@@ -181,6 +186,7 @@ export default function AddProductToShoppingListScreen() {
     setSearchQuery('');
     try {
       await addShoppingListItem(listId, name, 1);
+      // Reload inventory since a new inventory item might have been created
       const freshInventory = await loadData();
       const newItem = freshInventory.find(
         item => preprocessName(item.productName) === preprocessName(name)
@@ -210,6 +216,7 @@ export default function AddProductToShoppingListScreen() {
         await updateShoppingListItem(existing.id, { quantity: existing.quantity + 1 });
       } else {
         await addShoppingListItem(listId, item.productName, 1);
+        // Reload inventory since a new inventory item might have been created
       }
       await loadData();
     } catch (error) {

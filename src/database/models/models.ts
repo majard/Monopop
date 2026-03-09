@@ -52,6 +52,9 @@ export interface ShoppingListItem {
   createdAt: string;
   updatedAt: string;
   categoryName?: string | null;
+  productName?: string; // Added from JOIN
+  productId?: number; // Added from JOIN
+  currentInventoryQuantity?: number; // Added from JOIN
 }
 
 export interface Store {

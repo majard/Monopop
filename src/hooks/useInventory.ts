@@ -1,13 +1,14 @@
-import { useState, useEffect, useCallback } from "react";
-import { getInventoryItems, updateInventoryItemOrder, saveInventoryHistorySnapshot } from "../database/database";
+import { useCallback } from "react";
+import { updateInventoryItemOrder, saveInventoryHistorySnapshot } from "../database/database";
 import { sortInventoryItems, SortOrder } from "../utils/sortUtils";
 import { preprocessName, calculateSimilarity } from "../utils/similarityUtils";
 import { InventoryItem } from "../database/models";
+import { useListData } from "../context/ListDataContext";
 
 const searchSimilarityThreshold = 0.4;
 
 export default function useInventory(listId: number, sortOrder: SortOrder, searchQuery: string) {
-  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+  const { inventoryItems, loadInventoryItems: loadInventoryItemsFromContext, findByProductId: findByProductIdFromContext } = useListData();
 
   // --- Filtering Logic (memoized for performance) ---
   const filteredInventoryItems = useCallback(() => {
@@ -34,31 +35,24 @@ export default function useInventory(listId: number, sortOrder: SortOrder, searc
   }, [inventoryItems, searchQuery, sortOrder]);
 
   // --- Load Products Logic ---
+  // Note: listId parameter is ignored as inventory is now owned by context
   const loadInventoryItems = useCallback(async () => {
-    try {
-      const loaded = await getInventoryItems(listId);
-      setInventoryItems(loaded);
-    } catch (err) {
-      console.error("Erro ao carregar estoque:", err);
-    }
-  }, [listId]);
-
-  useEffect(() => {
-    loadInventoryItems();
-  }, [loadInventoryItems]);
+    await loadInventoryItemsFromContext();
+  }, [loadInventoryItemsFromContext]);
 
   // --- Product Order Handling Logic ---
   const handleProductOrderChange = useCallback(async (newOrder: InventoryItem[]) => {
     const reindexed = newOrder.map((item, index) => ({ ...item, sortOrder: index }));
-    setInventoryItems(reindexed);
     try {
       const updates = reindexed.map(item => ({ id: item.id, sortOrder: item.sortOrder }));
       await updateInventoryItemOrder(updates);
+      // Reload inventory from context to get updated state
+      await loadInventoryItemsFromContext();
     } catch (error) {
       console.error("Erro ao reordenar produtos:", error);
       loadInventoryItems();
     }
-  }, [loadInventoryItems]);
+  }, [loadInventoryItemsFromContext, loadInventoryItems]);
 
   // Optionally, you could expose a way for useProduct to directly update the `products` state here
   // For instance, `updateProductState = (id, newQuantity) => { setProducts(prev => prev.map(...)) }`
@@ -66,18 +60,18 @@ export default function useInventory(listId: number, sortOrder: SortOrder, searc
   // For deletion, `loadProducts` is definitely the way to go for now, as `useProduct` won't know about `filteredProducts`
 
   // --- Find by ID Logic ---
-  // TODO: N+1 query, otimizar com JOIN
+  // Use the context's findByProductId function
   const findByProductId = useCallback((productId: number) => {
-    return inventoryItems.find(item => item.productId === productId);
-  }, [inventoryItems]);
+    return findByProductIdFromContext(productId);
+  }, [findByProductIdFromContext]);
 
   return {
-    inventoryItems, // Keep products for DraggableFlatList extraData
+    inventoryItems, // From context
     filteredInventoryItems: filteredInventoryItems(), // Call the memoized function
-    setInventoryItems, // Potentially useful if external state manipulation is needed (e.g., import)
-    loadInventoryItems, // Expose for manual refresh
+    setInventoryItems: () => {}, // No-op - inventory is managed by context
+    loadInventoryItems, // Expose for manual refresh (calls context)
     handleProductOrderChange,
     saveInventoryHistorySnapshot,
-    findByProductId, // New function to find inventory item by product ID
+    findByProductId, // From context
   };
 }

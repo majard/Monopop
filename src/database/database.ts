@@ -13,6 +13,11 @@ export const initializeDatabase = async (
 
   initPromise = (async () => {
     db = await SQLite.openDatabaseAsync(databaseName);
+
+    await db.execAsync('PRAGMA journal_mode = WAL;');
+    await db.execAsync('PRAGMA synchronous = NORMAL;');
+    await db.execAsync('PRAGMA temp_store = memory;');
+    await db.execAsync('PRAGMA cache_size = -8000;');
     await db.execAsync('PRAGMA foreign_keys = ON;');
 
 
@@ -142,6 +147,69 @@ export const getLastUnitPriceForProductAtStore = async (productId: number, store
   } catch (error) {
     console.error('Error getting last unit price for product at store:', error);
     return null;
+  }
+};
+
+export const getLastUnitPricesForProductsAtStore = async (productIds: number[], storeId: number): Promise<Map<number, number>> => {
+  if (productIds.length === 0) return new Map();
+
+  const db = getDb();
+  try {
+    const placeholders = productIds.map(() => '?').join(',');
+    const rows = await db.getAllAsync<{ productId: number; unitPrice: number }>(
+      `SELECT ii.productId, ii.unitPrice 
+       FROM invoice_items ii
+       INNER JOIN invoices i ON ii.invoiceId = i.id
+       WHERE ii.productId IN (${placeholders}) AND i.storeId = ? AND ii.unitPrice IS NOT NULL
+       ORDER BY ii.productId, i.createdAt DESC`,
+      [...productIds, storeId]
+    );
+
+    const priceMap = new Map<number, number>();
+    const seenProducts = new Set<number>();
+
+    for (const row of rows) {
+      if (!seenProducts.has(row.productId)) {
+        priceMap.set(row.productId, row.unitPrice);
+        seenProducts.add(row.productId);
+      }
+    }
+
+    return priceMap;
+  } catch (error) {
+    console.error('Error getting last unit prices for products at store:', error);
+    throw error;
+  }
+};
+
+export const getLastUnitPricesForProducts = async (productIds: number[]): Promise<Map<number, number>> => {
+  if (productIds.length === 0) return new Map();
+
+  const db = getDb();
+  try {
+    const placeholders = productIds.map(() => '?').join(',');
+    const rows = await db.getAllAsync<{ productId: number; unitPrice: number }>(
+      `SELECT productId, unitPrice
+       FROM invoice_items
+       WHERE productId IN (${placeholders}) AND unitPrice IS NOT NULL
+       ORDER BY productId, createdAt DESC`,
+      productIds
+    );
+
+    const priceMap = new Map<number, number>();
+    const seenProducts = new Set<number>();
+
+    for (const row of rows) {
+      if (!seenProducts.has(row.productId)) {
+        priceMap.set(row.productId, row.unitPrice);
+        seenProducts.add(row.productId);
+      }
+    }
+
+    return priceMap;
+  } catch (error) {
+    console.error('Error getting last unit prices for products:', error);
+    throw error;
   }
 };
 
@@ -378,7 +446,7 @@ export const addInventoryItem = async (
         "INSERT INTO inventory_items (listId, productId, quantity, sortOrder, notes, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?);",
         [listId, productId, quantity, sortOrder, notes, now, now]
       );
-      
+
       if (result.lastInsertRowId) {
         return result.lastInsertRowId;
       } else {
@@ -743,6 +811,7 @@ export const getShoppingListItemsByListId = async (listId: number): Promise<Shop
           sli.updatedAt,
           p.name AS productName,       -- Add product name for convenience
           ii.productId AS productId,    -- Add productId for convenience
+          ii.quantity AS currentInventoryQuantity, -- Add current inventory quantity
           c.name AS categoryName        -- Add category name for convenience
        FROM shopping_list_items sli
        JOIN inventory_items ii ON sli.inventoryItemId = ii.id

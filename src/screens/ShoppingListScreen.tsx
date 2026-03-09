@@ -1,12 +1,13 @@
 import React, { useRef, useState, useCallback, useMemo } from 'react';
-import { View, StyleSheet, Text, FlatList, Pressable } from 'react-native';
+import { View, StyleSheet, Text, FlatList, Pressable, Alert } from 'react-native';
 import { Button, Surface, useTheme } from 'react-native-paper';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { concludeShoppingForListWithInvoice, getLastStoreName, getShoppingListItemsByListId, getInventoryItems, getStores, updateShoppingListItem, deleteShoppingListItem, getSetting, setSetting, getLastUnitPriceForProductAtStore, getLastUnitPriceForProduct, getLowestPriceForProducts, getCategories, updateProductCategory } from '../database/database';
+import { concludeShoppingForListWithInvoice, getShoppingListItemsByListId, updateShoppingListItem, deleteShoppingListItem, setSetting, getLastUnitPriceForProductAtStore, getLastUnitPriceForProduct, getLowestPriceForProducts, updateProductCategory, getLastUnitPricesForProductsAtStore, getLastUnitPricesForProducts } from '../database/database';
 import { RootStackParamList } from '../types/navigation';
 import { ShoppingListItem } from '../database/models';
 import { useListContext } from '../context/ListContext';
+import { useListData } from '../context/ListDataContext';
 import { useList } from '../hooks/useList';
 import { EditShoppingItemModal } from '../components/EditShoppingItemModal';
 import { ConfirmInvoiceModal, StoreOption } from '../components/ConfirmInvoiceModal';
@@ -17,9 +18,15 @@ import { ItemPickerDialog } from '../components/ItemPickerDialog';
 import { createHomeScreenStyles } from '../styles/HomeScreenStyles';
 import { SortMenu } from '../components/SortMenu';
 import { sortItems, SortOrder } from '../utils/sortUtils';
-import ShoppingList from '../components/ShoppingList';
+import { ShoppingListItemCard } from '../components/ShoppingListItemCard';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import SearchBar from '../components/SearchBar';
+import ShoppingListSkeleton from '../components/ShoppingListSkeleton';
+
+type ListRow =
+  | { type: 'section-header'; title: string; sectionType: 'pending' | 'cart' }
+  | { type: 'category-header'; category: string; sectionType: 'pending' | 'cart' }
+  | { type: 'item'; item: ShoppingListItemWithDetails; sectionType: 'pending' | 'cart' };
 
 type ShoppingListScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'ShoppingList'>;
 
@@ -36,18 +43,19 @@ interface ShoppingListItemWithDetails extends Omit<ShoppingListItem, 'checked'> 
 export default function ShoppingListScreen() {
   const { listId } = useListContext();
   const { listName, handleListNameSave, handleListDelete } = useList(listId);
+  const { categories, stores, defaultStoreMode, defaultStoreId, lastStoreName, refreshStoreSettings } = useListData();
   const [shoppingListItems, setShoppingListItems] = useState<ShoppingListItemWithDetails[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [editingItem, setEditingItem] = useState<ShoppingListItemWithDetails | null>(null);
-  const [categories, setCategories] = useState<{ id: number; name: string }[]>([]);
   const [isCartCollapsed, setIsCartCollapsed] = useState(false);
   const [confirmVisible, setConfirmVisible] = useState(false);
-  const [stores, setStores] = useState<StoreOption[]>([]);
   const [defaultStoreName, setDefaultStoreName] = useState('');
   const [selectedStoreId, setSelectedStoreId] = useState<number | null>(null);
   const [lastStoreId, setLastStoreId] = useState<number | null>(null);
   const [storePickerVisible, setStorePickerVisible] = useState(false);
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   const [sortOrder, setSortOrder] = useState<SortOrder>('alphabetical');
   const navigation = useNavigation<ShoppingListScreenNavigationProp>();
   const theme = useTheme();
@@ -62,56 +70,51 @@ export default function ShoppingListScreen() {
   );
 
   const loadData = useCallback(async () => {
+
     try {
-      const [inventory, shopping, storesList, lastStore, categoriesList] = await Promise.all([
-        getInventoryItems(listId),
+      const [shopping] = await Promise.all([
         getShoppingListItemsByListId(listId),
-        getStores(),
-        getLastStoreName(),
-        getCategories(),
       ]);
 
-      const enhancedShoppingItems = shopping.map(item => {
-        const inventoryItem = inventory.find(inv => inv.id === item.inventoryItemId);
-        return {
-          ...item,
-          checked: Boolean(item.checked),
-          productName: inventoryItem?.productName || 'Unknown Product',
-          productId: inventoryItem?.productId || 0,
-          currentInventoryQuantity: inventoryItem?.quantity || 0,
-          price: item.price,
-          categoryName: item.categoryName ?? null,
-        };
-      });
-
-      const productIds = enhancedShoppingItems.map(item => item.productId).filter(id => id > 0);
-      const lowestPriceMap = await getLowestPriceForProducts(productIds);
-
-      const withStats = enhancedShoppingItems.map(item => ({
+      const enhancedShoppingItems = shopping.map(item => ({
         ...item,
-        lowestPrice90d: lowestPriceMap.get(item.productId) ?? null,
+        checked: Boolean(item.checked),
+        productName: item.productName || 'Unknown Product',
+        productId: item.productId || 0,
+        currentInventoryQuantity: item.currentInventoryQuantity || 0,
+        price: item.price,
+        categoryName: item.categoryName ?? null,
+        lowestPrice90d: null, // filled below
       }));
-      setShoppingListItems(withStats);
-      setStores(storesList);
-      setCategories(categoriesList);
 
-      const [defaultStoreMode, defaultStoreId] = await Promise.all([
-        getSetting('defaultStoreMode'),
-        getSetting('defaultStoreId'),
-      ]);
+      // Render list immediately with no lowest price data
+      setShoppingListItems(enhancedShoppingItems.map(item => ({ ...item, lowestPrice90d: null })));
+
+      // Load lowest prices in background without blocking
+      const productIds = enhancedShoppingItems.map(item => item.productId).filter(id => id > 0);
+      if (productIds.length > 0) {
+        getLowestPriceForProducts(productIds).then(lowestPriceMap => {
+          setShoppingListItems(prev => prev.map(item => ({
+            ...item,
+            lowestPrice90d: lowestPriceMap.get(item.productId) ?? null,
+          })));
+        }).catch(error => {
+          console.error('Error loading lowest prices:', error);
+        });
+      }
 
       let storeNameToSet = '';
       let storeIdToSet: number | null = null;
 
       if (isFirstLoad.current) {
-        const lastStoreObj = storesList.find(s => s.name === lastStore);
+        const lastStoreObj = stores.find(s => s.name === lastStoreName);
         setLastStoreId(lastStoreObj?.id ?? null);
 
         if (defaultStoreMode === 'last') {
-          storeNameToSet = lastStore ?? '';
+          storeNameToSet = lastStoreName ?? '';
           storeIdToSet = lastStoreObj?.id ?? null;
         } else if (defaultStoreMode === 'fixed' && defaultStoreId) {
-          const defaultStore = storesList.find(s => s.id === parseInt(defaultStoreId));
+          const defaultStore = stores.find(s => s.id === parseInt(defaultStoreId));
           storeNameToSet = defaultStore?.name ?? '';
           storeIdToSet = defaultStore?.id ?? null;
         }
@@ -121,30 +124,50 @@ export default function ShoppingListScreen() {
         isFirstLoad.current = false;
 
         if (storeIdToSet !== null) {
-          updatePricesForStore(storeIdToSet, withStats);
+          await updatePricesForStore(storeIdToSet, enhancedShoppingItems);
         }
       }
     } catch (error) {
+
       console.error('Erro ao carregar dados:', error);
+    } finally {
+      setInitialLoading(false);
     }
-  }, [listId]);
+  }, [listId, stores, defaultStoreMode, defaultStoreId, lastStoreName]);
 
   const updatePricesForStore = useCallback(async (storeId: number, items: ShoppingListItemWithDetails[]) => {
     try {
-      const updatedItems = await Promise.all(
-        items.map(async (item) => {
-          const storePrice = await getLastUnitPriceForProductAtStore(item.productId, storeId);
-          if (storePrice !== null) {
-            return { ...item, price: storePrice };
-          } else {
-            const lastPrice = await getLastUnitPriceForProduct(item.productId);
-            return { ...item, price: lastPrice ?? item.price };
-          }
-        })
-      );
+      // Extract product IDs for bulk lookup
+      const productIds = items.map(item => item.productId).filter(id => id > 0);
+
+      if (productIds.length === 0) {
+        return;
+      }
+
+      // Get store-specific prices and fallback prices in parallel
+      const [storePriceMap, fallbackPriceMap] = await Promise.all([
+        getLastUnitPricesForProductsAtStore(productIds, storeId),
+        getLastUnitPricesForProducts(productIds)
+      ]);
+
+      // Map over items using O(1) lookup from the Maps
+      const updatedItems = items.map(item => {
+        if (item.productId === 0) {
+          return item; // Skip items without valid productId
+        }
+
+        // Try store-specific price first, then fallback
+        const storePrice = storePriceMap.get(item.productId);
+        const fallbackPrice = fallbackPriceMap.get(item.productId);
+        const newPrice = storePrice ?? fallbackPrice ?? item.price;
+
+        return { ...item, price: newPrice };
+      });
+
       setShoppingListItems(updatedItems);
     } catch (error) {
       console.error('Error updating prices for store:', error);
+    } finally {
     }
   }, []);
 
@@ -200,6 +223,15 @@ export default function ShoppingListScreen() {
     }
   }, [editingItem, loadData, categories]);
 
+  const toggleCategory = useCallback((key: string) => {
+    setCollapsedCategories(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+
   const sortShoppingItems = useCallback((items: ShoppingListItemWithDetails[]) => {
     const mapped = items.map(item => ({
       ...item,
@@ -223,8 +255,122 @@ export default function ShoppingListScreen() {
   const checkedItems = filteredShoppingItems.filter(item => item.checked);
   const uncheckedItems = filteredShoppingItems.filter(item => !item.checked);
 
-  const sortedUnchecked = useMemo(() => sortShoppingItems(uncheckedItems), [uncheckedItems, sortOrder, sortShoppingItems]);
-  const sortedChecked = useMemo(() => sortShoppingItems(checkedItems), [checkedItems, sortOrder, sortShoppingItems]);
+  const rows = useMemo((): ListRow[] => {
+    const result: ListRow[] = [];
+
+    const buildSection = (
+      items: ShoppingListItemWithDetails[],
+      sectionType: 'pending' | 'cart',
+      title: string,
+      collapsed: boolean
+    ) => {
+      result.push({ type: 'section-header', title, sectionType });
+      if (collapsed) return;
+
+      if (sortOrder === 'category') {
+        const grouped = new Map<string, ShoppingListItemWithDetails[]>();
+        for (const item of items) {
+          const key = item.categoryName ?? 'Sem categoria';
+          if (!grouped.has(key)) grouped.set(key, []);
+          grouped.get(key)!.push(item);
+        }
+        for (const [category, catItems] of grouped) {
+          const collapseKey = `${sectionType}:${category}`;
+          result.push({ type: 'category-header', category, sectionType });
+          if (!collapsedCategories.has(collapseKey)) {
+            for (const item of catItems) {
+              result.push({ type: 'item', item, sectionType });
+            }
+          }
+        }
+      } else {
+        for (const item of items) {
+          result.push({ type: 'item', item, sectionType });
+        }
+      }
+    };
+
+    buildSection(uncheckedItems, 'pending', `Pendentes (${uncheckedItems.length})`, false);
+    buildSection(checkedItems, 'cart', `No carrinho (${checkedItems.length})`, isCartCollapsed);
+
+    return result;
+  }, [uncheckedItems, checkedItems, sortOrder, collapsedCategories, isCartCollapsed]);
+
+  const renderItem = useCallback(({ item }: { item: ShoppingListItemWithDetails }) => (
+    <ShoppingListItemCard
+      item={item}
+      onToggleChecked={() => handleToggleChecked(item)}
+      onDelete={() => handleDeleteItem(item)}
+      onEdit={() => setEditingItem(item)}
+    />
+  ), [handleToggleChecked, handleDeleteItem]);
+
+  const renderRow = useCallback(({ item: row }: { item: ListRow }) => {
+    if (row.type === 'section-header') {
+      if (row.sectionType === 'cart') {
+        return (
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, paddingHorizontal: 20 }}>
+            <Text style={[localStyles.subsectionTitle, { color: theme.colors.onSurfaceVariant }]}>
+              {row.title}
+            </Text>
+            <Button mode="text" onPress={() => setIsCartCollapsed(!isCartCollapsed)} compact>
+              {isCartCollapsed ? 'Mostrar' : 'Ocultar'}
+            </Button>
+          </View>
+        );
+      }
+      return (
+        <Text style={[localStyles.subsectionTitle, { color: theme.colors.onSurfaceVariant, paddingVertical: 8, paddingHorizontal: 20 }]}>
+          {row.title}
+        </Text>
+      );
+    }
+
+    if (row.type === 'category-header') {
+      const collapseKey = `${row.sectionType}:${row.category}`;
+      const isCollapsed = collapsedCategories.has(collapseKey);
+      return (
+        <Pressable
+          onPress={() => toggleCategory(collapseKey)}
+          style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10, backgroundColor: theme.colors.surfaceVariant, borderRadius: 8, marginBottom: 4, marginTop: 8 }}
+        >
+          <Text style={{ color: theme.colors.onSurfaceVariant, textTransform: 'uppercase', fontSize: 12, fontWeight: '700', letterSpacing: 0.8 }}>
+            {row.category}
+          </Text>
+          <MaterialCommunityIcons
+            name={isCollapsed ? 'chevron-down' : 'chevron-up'}
+            size={20}
+            color={theme.colors.onSurfaceVariant}
+          />
+        </Pressable>
+      );
+    }
+
+    return (
+      <ShoppingListItemCard
+        item={row.item}
+        onToggleChecked={() => handleToggleChecked(row.item)}
+        onDelete={() => handleDeleteItem(row.item)}
+        onEdit={() => setEditingItem(row.item)}
+      />
+    );
+  }, [theme, isCartCollapsed, collapsedCategories, toggleCategory, handleToggleChecked, handleDeleteItem]);
+
+  const listEmptyComponent = useCallback(() => (
+    <View style={{ paddingHorizontal: 16 }}>
+      <Surface style={localStyles.emptyState}>
+        <Text style={{
+          textAlign: 'center',
+          color: theme.colors.onSurfaceVariant,
+          fontSize: 16,
+          lineHeight: 24
+        }}>
+          Sua lista de compras está vazia.{'\n'}
+          Toque no botão abaixo para adicionar produtos!
+        </Text>
+      </Surface>
+    </View>
+  ), [theme]);
 
   const openConfirmConclude = useCallback(() => {
     if (checkedItems.length === 0) return;
@@ -241,13 +387,14 @@ export default function ShoppingListScreen() {
         await setSetting('defaultStoreId', store.id.toString());
       }
       setConfirmVisible(false);
+      await refreshStoreSettings();
       await loadData();
     } catch (error) {
       console.error('Erro ao concluir compras:', error);
     } finally {
       setLoading(false);
     }
-  }, [checkedItems.length, listId, stores, loadData]);
+  }, [checkedItems.length, listId, stores, loadData, refreshStoreSettings]);
 
   const totalCheckedPrice = checkedItems.reduce((total, item) => {
     if (item.price) return total + item.quantity * item.price;
@@ -257,73 +404,6 @@ export default function ShoppingListScreen() {
   const formatCurrency = (value: number) => `R$ ${value.toFixed(2).replace('.', ',')}`;
 
   const bottomBarHeight = checkedItems.length > 0 ? 64 : 0;
-
-  const listHeaderComponent = useCallback(() => (
-    <View style={{ paddingHorizontal: 16 }}>
-      {sortedUnchecked.length > 0 && (
-        <>
-          <Text style={[localStyles.subsectionTitle, { 
-            color: theme.colors.onSurfaceVariant,
-            paddingVertical: 8,
-            paddingHorizontal: 4,
-          }]}>
-            Pendentes ({sortedUnchecked.length})
-          </Text>
-          <ShoppingList
-            items={sortedUnchecked}
-            sortOrder={sortOrder}
-            onToggleChecked={handleToggleChecked}
-            onDelete={handleDeleteItem}
-            onEdit={(item) => setEditingItem(item)}
-          />
-        </>
-      )}
-
-      {sortedChecked.length > 0 || true ? (
-        <>
-          <View style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            paddingVertical: 8,
-            paddingHorizontal: 4,
-          }}>
-            <Text style={[localStyles.subsectionTitle, { 
-              color: theme.colors.onSurfaceVariant 
-            }]}>
-              No carrinho ({sortedChecked.length})
-            </Text>
-            <Button mode="text" onPress={() => setIsCartCollapsed(!isCartCollapsed)} compact>
-              {isCartCollapsed ? 'Mostrar' : 'Ocultar'}
-            </Button>
-          </View>
-          {!isCartCollapsed && (
-            <ShoppingList
-              items={sortedChecked}
-              sortOrder={sortOrder}
-              onToggleChecked={handleToggleChecked}
-              onDelete={handleDeleteItem}
-              onEdit={(item) => setEditingItem(item)}
-            />
-          )}
-        </>
-      ) : null}
-
-      {filteredShoppingItems.length === 0 && (
-        <Surface style={localStyles.emptyState}>
-          <Text style={{ 
-            textAlign: 'center', 
-            color: theme.colors.onSurfaceVariant, 
-            fontSize: 16, 
-            lineHeight: 24 
-          }}>
-            Sua lista de compras está vazia.{'\n'}
-            Toque no botão abaixo para adicionar produtos!
-          </Text>
-        </Surface>
-      )}
-    </View>
-  ), [uncheckedItems, checkedItems, sortOrder, sortShoppingItems, isCartCollapsed, theme, handleToggleChecked, handleDeleteItem, setEditingItem, sortedUnchecked, sortedChecked]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -360,14 +440,19 @@ export default function ShoppingListScreen() {
         />
       </View>
 
-      <FlatList
-        data={[]}
-        renderItem={null}
-        keyExtractor={() => ''}
-        scrollEnabled={true}
-        ListHeaderComponent={listHeaderComponent}
-        contentContainerStyle={{ paddingBottom: bottomBarHeight + 96 }}
-      />
+      {initialLoading ? (
+        <ShoppingListSkeleton />
+      ) : (
+        <FlatList
+          data={rows}
+          keyExtractor={(row, index) =>
+            row.type === 'item' ? row.item.id.toString() : `${row.type}-${index}` 
+          }
+          renderItem={renderRow}
+          ListEmptyComponent={listEmptyComponent}
+          contentContainerStyle={{ paddingBottom: bottomBarHeight + 96 }}
+        />
+      )}
 
       <AddItemButton
         onPress={() => navigation.navigate('AddProductToShoppingList', { listId })}
@@ -387,7 +472,7 @@ export default function ShoppingListScreen() {
         }}
         onDelete={() => { handleDeleteItem(editingItem!); setEditingItem(null); }}
         onDismiss={() => setEditingItem(null)}
-        onCategoryChange={() => {}}
+        onCategoryChange={() => { }}
         categories={categories}
         onCategorySelect={handleCategorySelect}
       />

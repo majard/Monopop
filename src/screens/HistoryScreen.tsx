@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ScrollView } from 'react-native';
 import {
   Card,
@@ -14,12 +14,13 @@ import { parseISO, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { RootStackParamList } from '../types/navigation';
 import { useListContext } from '../context/ListContext';
+import { useListData } from '../context/ListDataContext';
 import { useList } from '../hooks/useList';
-import useInventory from '../hooks/useInventory';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ContextualHeader from '../components/ContextualHeader';
 import { Invoice, InvoiceItem, InventoryItem } from '../database/models';
 import { getDb } from '../database/database';
+import { preprocessName, calculateSimilarity } from '../utils/similarityUtils';
 
 type HistoryScreenNavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -63,8 +64,33 @@ export default function HistoryScreen() {
   const navigation = useNavigation<HistoryScreenNavigationProp>();
   const theme = useTheme();
   
-  // Use inventory hook for fuzzy search and finding items
-  const { findByProductId, inventoryItems, filteredInventoryItems } = useInventory(listId, 'alphabetical', searchQuery);
+  // Use context data for fuzzy search and finding items
+  const { findByProductId, inventoryItems } = useListData();
+  
+  // Local fuzzy search logic (same as useInventory)
+  const filteredInventoryItems = useMemo(() => {
+    const searchSimilarityThreshold = 0.4;
+    const filtered = inventoryItems.filter((inventoryItem: InventoryItem) => {
+      const processedInventoryItemName = preprocessName(inventoryItem.productName);
+      const processedSearchQuery = preprocessName(searchQuery);
+
+      if (!processedSearchQuery) {
+        return true;
+      }
+
+      const nameLength = processedInventoryItemName.length;
+      const queryLength = processedSearchQuery.length;
+      const lengthThreshold = Math.ceil(nameLength * 0.5);
+
+      if (queryLength < lengthThreshold) {
+        return processedInventoryItemName.includes(processedSearchQuery);
+      }
+
+      const similarity = calculateSimilarity(processedInventoryItemName, processedSearchQuery);
+      return similarity >= searchSimilarityThreshold;
+    });
+    return filtered;
+  }, [inventoryItems, searchQuery]);
 
   const loadHistory = async () => {
     try {
