@@ -24,7 +24,7 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.mahjard.listai",
-      "versionCode": 5
+      "versionCode": 20
     },
     "extra": {
       "eas": {
