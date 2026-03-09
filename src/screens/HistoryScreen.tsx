@@ -2,7 +2,6 @@ import React, { useState, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ScrollView } from 'react-native';
 import {
   Card,
-  Searchbar,
   useTheme,
   Chip,
   IconButton,
@@ -18,6 +17,7 @@ import { useListData } from '../context/ListDataContext';
 import { useList } from '../hooks/useList';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ContextualHeader from '../components/ContextualHeader';
+import SearchBar from '../components/SearchBar';
 import { Invoice, InvoiceItem, InventoryItem } from '../database/models';
 import { getDb } from '../database/database';
 import { preprocessName, calculateSimilarity } from '../utils/similarityUtils';
@@ -449,11 +449,10 @@ export default function HistoryScreen() {
           </Chip>
         </ScrollView>
         
-        <Searchbar
+        <SearchBar
+          searchQuery={searchQuery}
+          setSearchQuery={handleSearch}
           placeholder="Buscar por produto, loja..."
-          onChangeText={handleSearch}
-          value={searchQuery}
-          style={styles.searchBar}
         />
       </View>
 
@@ -525,10 +524,6 @@ const styles = StyleSheet.create({
   },
   chip: {
     marginRight: 8,
-  },
-  searchBar: {
-    elevation: 0,
-    backgroundColor: '#f0f0f0',
   },
   listContent: {
     padding: 16,

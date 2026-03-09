@@ -63,9 +63,11 @@ export const createHomeScreenStyles = (theme: MD3Theme) => StyleSheet.create<Sty
     borderBottomColor: '#e0e0e0',
   },
   searchContainer: {
+    // TODO: remove after confirming no other usages
     marginBottom: 8,
   },
   searchInput: {
+    // TODO: remove after confirming no other usages
     backgroundColor: 'white',
     borderRadius: 5,
     paddingHorizontal: 10,
