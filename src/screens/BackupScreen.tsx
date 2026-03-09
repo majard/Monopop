@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Share, Alert } from 'react-native';
-import { Appbar, Card, Text, useTheme, Button, TextInput, Divider, Portal, Dialog, ActivityIndicator } from 'react-native-paper';
+import { View, StyleSheet, ScrollView, Alert } from 'react-native';
+import { Appbar, Card, Text, useTheme, Button, Divider, Portal, Dialog, ActivityIndicator } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getDb } from '../database/database';
+import { File, Paths } from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
+import * as DocumentPicker from 'expo-document-picker';
 
 type BackupScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Backup'>;
 
@@ -14,7 +17,6 @@ const DB_VERSION = '1.0';
 export default function BackupScreen() {
   const navigation = useNavigation<BackupScreenNavigationProp>();
   const theme = useTheme();
-  const [importText, setImportText] = useState('');
   const [confirmEnabled, setConfirmEnabled] = useState(false);
   const [confirmTimer, setConfirmTimer] = useState(3);
   const [resetEnabled, setResetEnabled] = useState(false);
@@ -22,6 +24,7 @@ export default function BackupScreen() {
   const [loading, setLoading] = useState(false);
   const [resetDialogVisible, setResetDialogVisible] = useState(false);
   const [importDialogVisible, setImportDialogVisible] = useState(false);
+  const [importData, setImportData] = useState<any>(null);
 
   // Countdown timer for import confirmation
   useEffect(() => {
@@ -78,10 +81,17 @@ export default function BackupScreen() {
       };
 
       const jsonString = JSON.stringify(exportData, null, 2);
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const fileName = `monopop-backup-${timestamp}.json`;
+      
+      const file = new File(Paths.cache, fileName);
+      await file.write(jsonString);
+      const fileUri = file.uri;
 
-      await Share.share({
-        message: jsonString,
-        title: 'Backup Listai',
+      // Share the file
+      await Sharing.shareAsync(fileUri, {
+        mimeType: 'application/json',
+        dialogTitle: 'Compartilhar Backup Listai',
       });
     } catch (error) {
       console.error('Error exporting data:', error);
@@ -92,19 +102,21 @@ export default function BackupScreen() {
   };
 
   const handleImport = async () => {
+    if (!importData) {
+      Alert.alert('Erro', 'Nenhum arquivo de backup selecionado');
+      return;
+    }
+
     const db = await getDb();
 
     try {
       setLoading(true);
       setImportDialogVisible(false);
 
-      const importData = JSON.parse(importText);
-
       if (!importData.version || !importData.tables) {
         Alert.alert('Erro', 'Formato de backup inválido');
         return;
       }
-
 
       // Disable foreign key constraints during import
       await db.runAsync('PRAGMA foreign_keys = OFF');
@@ -199,7 +211,7 @@ export default function BackupScreen() {
       });
 
       Alert.alert('Sucesso', 'Dados importados com sucesso!');
-      setImportText('');
+      setImportData(null);
       setConfirmEnabled(false);
       setConfirmTimer(3);
     } catch (error) {
@@ -210,6 +222,26 @@ export default function BackupScreen() {
       await db.runAsync('PRAGMA foreign_keys = ON');
 
       setLoading(false);
+    }
+  };
+
+  const handleSelectFile = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'application/json',
+        copyToCacheDirectory: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const fileUri = result.assets[0].uri;
+        const file = new File(fileUri);
+        const fileContent = await file.text();
+        const parsedData = JSON.parse(fileContent);
+        setImportData(parsedData);
+      }
+    } catch (error) {
+      console.error('Error selecting file:', error);
+      Alert.alert('Erro', 'Falha ao ler o arquivo selecionado');
     }
   };
 
@@ -241,6 +273,9 @@ export default function BackupScreen() {
       console.error('Error resetting data:', error);
       Alert.alert('Erro', 'Falha ao resetar dados');
     } finally {
+      // Re-enable foreign key constraints
+      const db = getDb();
+      await db.runAsync('PRAGMA foreign_keys = ON');
       setLoading(false);
     }
   };
@@ -281,15 +316,19 @@ export default function BackupScreen() {
             <Text style={styles.warning}>
               ⚠️ ATENÇÃO: Isso substituirá TODOS os dados existentes!
             </Text>
-            <TextInput
-              label="Cole o JSON de backup aqui"
-              value={importText}
-              onChangeText={setImportText}
+            <Button
               mode="outlined"
-              multiline
-              numberOfLines={6}
-              style={styles.textInput}
-            />
+              onPress={handleSelectFile}
+              icon="folder-open"
+              style={styles.selectFileButton}
+            >
+              Selecionar arquivo de backup
+            </Button>
+            {importData && (
+              <Text style={styles.selectedFileText}>
+                Arquivo selecionado: {importData.version ? `Backup v${importData.version}` : 'Arquivo JSON'}
+              </Text>
+            )}
             <Button
               mode="contained"
               onPress={() => {
@@ -299,7 +338,7 @@ export default function BackupScreen() {
               }}
               icon="cloud-download"
               style={styles.button}
-              disabled={!importText.trim()}
+              disabled={!importData}
             >
               Importar
             </Button>
@@ -408,8 +447,14 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 16,
   },
-  textInput: {
+  selectFileButton: {
     marginBottom: 16,
+  },
+  selectedFileText: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 16,
+    fontStyle: 'italic',
   },
   button: {
     marginTop: 8,
