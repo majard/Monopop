@@ -1,5 +1,5 @@
 import { parse, parseISO, isSameDay } from "date-fns";
-import { useState, useRef } from "react";
+import React, { useState, useRef } from "react";
 import { calculateSimilarity } from "../utils/similarityUtils";
 import { Modal, View, Text, Alert } from "react-native";
 import {
@@ -13,14 +13,13 @@ import {
   updateInventoryItem,
   saveInventoryHistorySnapshot,
   getInventoryHistory,
-  addSingleInventoryHistoryEntry,
   addProduct,
   getInventoryItems,
   addInventoryItem,
   getProducts,
 } from "../database/database";
 import { InventoryItem, InventoryHistory, Product } from "../database/models";
-import { ConfirmationModal } from "./ImportConfirmationModal";
+import { ConfirmationModal, ImportSummaryModal, ImportResult } from "./ImportConfirmationModal";
 
 const SIMILARITY_THRESHOLD = 0.55;
 
@@ -109,6 +108,9 @@ export default function ImportModal({
   const [snackbarVisible, setSnackbarVisible] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("");
   const importedCountRef = useRef(0);
+  const [importResults, setImportResults] = useState<ImportResult[]>([]);
+  const importResultsRef = useRef<ImportResult[]>([]);
+  const [summaryModalVisible, setSummaryModalVisible] = useState(false);
   const [currentImportItem, setCurrentImportItem] = useState<CurrentImportItem | null>(null);
 
   // ─── Pool helpers ───────────────────────────────────────────────────────────
@@ -152,9 +154,15 @@ export default function ImportModal({
       setCurrentImportItem(null);
       setImportProgress(null);
 
-      const message = `${importedCountRef.current} produto${importedCountRef.current !== 1 ? "s" : ""} importado${importedCountRef.current !== 1 ? "s" : ""} com sucesso`;
-      setSnackbarMessage(message);
-      setSnackbarVisible(true);
+      setImportResults(importResultsRef.current);
+      setSummaryModalVisible(true);
+      
+      // keep the snackbar as fallback only if results are empty
+      if (importResultsRef.current.length === 0) {
+        const message = `${importedCountRef.current} produto${importedCountRef.current !== 1 ? "s" : ""} importado${importedCountRef.current !== 1 ? "s" : ""} com sucesso`;
+        setSnackbarMessage(message);
+        setSnackbarVisible(true);
+      }
 
       await loadItems();
       return;
@@ -188,6 +196,15 @@ export default function ImportModal({
 
       importedCountRef.current += 1;
       setImportProgress((prev) => prev ? { ...prev, imported: importedCountRef.current } : null);
+      
+      importResultsRef.current.push({
+        originalName: currentProduct.originalName,
+        quantity: currentProduct.quantity,
+        outcome: 'exact',
+        matchedName: exactGlobalMatch.name,
+        quantityExtracted: currentProduct.quantity > 0,
+        importDate,
+      });
 
       await processNextProduct(rest, allProducts, listMap, importDate);
       return;
@@ -219,7 +236,16 @@ export default function ImportModal({
 
     importedCountRef.current += 1;
     setImportProgress((prev) => prev ? { ...prev, imported: importedCountRef.current } : null);
+    
+    importResultsRef.current.push({
+      originalName: currentProduct.originalName,
+      quantity: currentProduct.quantity,
+      outcome: 'created',
+      quantityExtracted: currentProduct.quantity > 0,
+      importDate,
+    });
 
+    setCurrentImportItem(null);
     await processNextProduct(rest, allProducts, listMap, importDate);
   };
 
@@ -285,6 +311,7 @@ export default function ImportModal({
       const listMap = buildListMap(listItems);
 
       importedCountRef.current = 0;
+      importResultsRef.current = [];
       setImportProgress({ current: 0, total: importedProducts.length, imported: 0 });
 
       await processNextProduct(importedProducts, allProducts, listMap, importDate);
@@ -306,6 +333,15 @@ export default function ImportModal({
 
       await applyCandidate(bestMatch, importedProduct, importDate);
       importedCountRef.current += 1;
+      
+      importResultsRef.current.push({
+        originalName: importedProduct.originalName,
+        quantity: importedProduct.quantity,
+        outcome: 'similar',
+        matchedName: bestMatch.productName,
+        quantityExtracted: importedProduct.quantity > 0,
+        importDate,
+      });
 
       // Load fresh pools for the silent processing pass
       const [allProducts, listItems] = await Promise.all([
@@ -332,17 +368,42 @@ export default function ImportModal({
             listMap.set(exactGlobalMatch.id, newIIId);
           }
           importedCountRef.current += 1;
+          importResultsRef.current.push({
+            originalName: product.originalName,
+            quantity: product.quantity,
+            outcome: 'exact',
+            matchedName: exactGlobalMatch.name,
+            quantityExtracted: product.quantity > 0,
+            importDate,
+          });
         } else {
           const candidates = findCandidates(product.originalName, allProducts, listMap);
           if (candidates.length > 0) {
             // Silent best-match acceptance
             await applyCandidate(candidates[0], product, importDate);
             importedCountRef.current += 1;
+            
+            importResultsRef.current.push({
+              originalName: product.originalName,
+              quantity: product.quantity,
+              outcome: 'similar',
+              matchedName: candidates[0].productName,
+              quantityExtracted: product.quantity > 0,
+              importDate,
+            });
           } else {
             const { newProduct, newIIId } = await createAndAddProduct(product, importDate);
             allProducts.push(newProduct);
             listMap.set(newProduct.id, newIIId);
             importedCountRef.current += 1;
+            
+            importResultsRef.current.push({
+              originalName: product.originalName,
+              quantity: product.quantity,
+              outcome: 'created',
+              quantityExtracted: product.quantity > 0,
+              importDate,
+            });
           }
         }
       }
@@ -351,9 +412,15 @@ export default function ImportModal({
       setCurrentImportItem(null);
       setImportProgress(null);
 
-      const message = `${importedCountRef.current} produto${importedCountRef.current !== 1 ? "s" : ""} importado${importedCountRef.current !== 1 ? "s" : ""} com sucesso`;
-      setSnackbarMessage(message);
-      setSnackbarVisible(true);
+      setImportResults(importResultsRef.current);
+      setSummaryModalVisible(true);
+      
+      // keep the snackbar as fallback only if results are empty
+      if (importResultsRef.current.length === 0) {
+        const message = `${importedCountRef.current} produto${importedCountRef.current !== 1 ? "s" : ""} importado${importedCountRef.current !== 1 ? "s" : ""} com sucesso`;
+        setSnackbarMessage(message);
+        setSnackbarVisible(true);
+      }
 
       await loadItems();
     } catch (error) {
@@ -371,6 +438,15 @@ export default function ImportModal({
       await applyCandidate(bestMatch, importedProduct, importDate);
       importedCountRef.current += 1;
       setImportProgress((prev) => prev ? { ...prev, imported: importedCountRef.current } : null);
+      
+      importResultsRef.current.push({
+        originalName: importedProduct.originalName,
+        quantity: importedProduct.quantity,
+        outcome: 'similar',
+        matchedName: bestMatch.productName,
+        quantityExtracted: importedProduct.quantity > 0,
+        importDate,
+      });
 
       const [allProducts, listItems] = await Promise.all([
         getProducts(),
@@ -379,6 +455,7 @@ export default function ImportModal({
       const listMap = buildListMap(listItems);
 
       setConfirmationModalVisible(false);
+      setCurrentImportItem(null);
       await processNextProduct(remainingProducts, allProducts, listMap, importDate);
     } catch (error) {
       console.error("Error in handleAddToExisting:", error);
@@ -405,7 +482,16 @@ export default function ImportModal({
       importedCountRef.current += 1;
       setImportProgress((prev) => prev ? { ...prev, imported: importedCountRef.current } : null);
 
+      importResultsRef.current.push({
+        originalName: importedProduct.originalName,
+        quantity: importedProduct.quantity,
+        outcome: 'created',
+        quantityExtracted: importedProduct.quantity > 0,
+        importDate,
+      });
+
       setConfirmationModalVisible(false);
+      setCurrentImportItem(null);
       await processNextProduct(remainingProducts, allProducts, listMap, importDate);
     } catch (error) {
       console.error("Error in handleCreateNew:", error);
@@ -424,6 +510,14 @@ export default function ImportModal({
         getInventoryItems(listId),
       ]);
       const listMap = buildListMap(listItems);
+      
+      importResultsRef.current.push({
+        originalName: currentImportItem.importedProduct.originalName,
+        quantity: currentImportItem.importedProduct.quantity,
+        outcome: 'skipped',
+        quantityExtracted: true,
+        importDate,
+      });
 
       setConfirmationModalVisible(false);
       await processNextProduct(remainingProducts, allProducts, listMap, importDate);
@@ -450,6 +544,11 @@ export default function ImportModal({
   const handleImportModalCancel = () => {
     setIsImportModalVisible(false);
     setImportText("");
+  };
+
+  const handleSummaryModalDismiss = () => {
+    setSummaryModalVisible(false);
+    setImportResults([]);
   };
 
   // ─── Render ─────────────────────────────────────────────────────────────────
@@ -504,6 +603,12 @@ export default function ImportModal({
       >
         {snackbarMessage}
       </Snackbar>
+
+      <ImportSummaryModal
+        visible={summaryModalVisible}
+        results={importResults}
+        onDismiss={handleSummaryModalDismiss}
+      />
     </View>
   );
 }
