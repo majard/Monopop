@@ -49,6 +49,7 @@ interface PeriodSummary {
   label: string;
   trend: number | null;
   prevTotal: number;
+  prevLabel: string;
 }
 
 export default function HistoryScreen() {
@@ -61,7 +62,10 @@ export default function HistoryScreen() {
   const [events, setEvents] = useState<HistoryEvent[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedEventId, setExpandedEventId] = useState<number | null>(null);
-  const [dateRange, setDateRange] = useState<DateRange>({ start: null, end: null });
+  const [dateRange, setDateRange] = useState<DateRange>({
+    start: subMonths(new Date(), 1),
+    end: new Date(),
+  });
   const [datePickerVisible, setDatePickerVisible] = useState(false);
 
   const formatCurrency = (value: number) => `R$ ${value.toFixed(2).replace('.', ',')}`;
@@ -138,6 +142,10 @@ export default function HistoryScreen() {
       prevEnd = endOfMonth(subMonths(now, 1));
     }
 
+    const prevLabel = prevStart && prevEnd
+      ? `${format(prevStart, 'dd/MM')}–${format(prevEnd, 'dd/MM')}` 
+      : '—';
+
     const prevPurchases = events.filter(e => {
       if (e.type !== 'purchase') return false;
       const d = parseISO(e.date);
@@ -154,6 +162,7 @@ export default function HistoryScreen() {
       label,
       trend,
       prevTotal,
+      prevLabel,
     };
   }, [filteredEvents, dateRange, events]);
 
@@ -441,8 +450,7 @@ export default function HistoryScreen() {
             <Text style={[localStyles.trendText, {
               color: summary.trend > 0 ? theme.colors.error : theme.colors.primary
             }]}>
-              {summary.trend > 0 ? '+' : ''}{summary.trend.toFixed(1)}% vs período anterior
-              {' '}({formatCurrency(summary.prevTotal)})
+              {summary.trend > 0 ? '+' : ''}{summary.trend.toFixed(1)}% vs {summary.prevLabel} ({formatCurrency(summary.prevTotal)})
             </Text>
           </View>
         )}

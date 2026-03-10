@@ -1,13 +1,13 @@
 // src/components/DateRangePickerModal.tsx — create new file
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, StyleSheet, Pressable, Modal } from 'react-native';
 import { Text, Button, Surface, useTheme, IconButton } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   startOfMonth, endOfMonth, eachDayOfInterval, format, addMonths,
   subMonths, isSameDay, isWithinInterval, isAfter, isBefore,
-  startOfWeek, endOfWeek, isSameMonth,
+  startOfWeek, endOfWeek, isSameMonth, startOfDay,
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -67,6 +67,17 @@ export function DateRangePickerModal({ visible, value, onConfirm, onDismiss }: D
     setStep('start');
     onConfirm({ start: null, end: null });
   };
+
+  const activeShortcut = useMemo(() => {
+    if (!selecting.start || !selecting.end) return null;
+    const s = startOfDay(selecting.start).getTime();
+    const e = startOfDay(selecting.end).getTime();
+    if (s === startOfDay(startOfWeek(new Date())).getTime() && e === startOfDay(endOfWeek(new Date())).getTime()) return 'Esta semana';
+    if (s === startOfDay(startOfMonth(new Date())).getTime() && e === startOfDay(endOfMonth(new Date())).getTime()) return 'Este mês';
+    if (s === startOfDay(subMonths(new Date(), 1)).getTime() && e === startOfDay(new Date()).getTime()) return 'Últimos 30d';
+    if (s === startOfDay(subMonths(new Date(), 3)).getTime() && e === startOfDay(new Date()).getTime()) return 'Últimos 90d';
+    return null;
+  }, [selecting]);
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onDismiss}>
@@ -155,9 +166,13 @@ export function DateRangePickerModal({ visible, value, onConfirm, onDismiss }: D
                 <Pressable
                   key={label}
                   onPress={() => { fn(); setStep('start'); }}
-                  style={[localStyles.shortcut, { borderColor: theme.colors.outline }]}
+                  style={[
+                    localStyles.shortcut,
+                    { borderColor: activeShortcut === label ? theme.colors.primary : theme.colors.outline },
+                    activeShortcut === label && { backgroundColor: theme.colors.primaryContainer },
+                  ]}
                 >
-                  <Text style={[localStyles.shortcutText, { color: theme.colors.onSurfaceVariant }]}>{label}</Text>
+                  <Text style={[localStyles.shortcutText, { color: activeShortcut === label ? theme.colors.primary : theme.colors.onSurfaceVariant }]}>{label}</Text>
                 </Pressable>
               ))}
             </View>
