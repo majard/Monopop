@@ -1,8 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import {
   Surface,
-  Checkbox,
   IconButton,
   useTheme,
 } from "react-native-paper";
@@ -35,13 +34,17 @@ export function ShoppingListItemCard({
   const theme = useTheme();
   const [localChecked, setLocalChecked] = useState(item.checked);
 
+  useEffect(() => {
+    setLocalChecked(item.checked);
+  }, [item.checked]);
+
   const progress = useSharedValue(0);
 
   const animatedStyle = useAnimatedStyle(() => ({
     backgroundColor: interpolateColor(
       progress.value,
-      [0, 1, 2],
-      ['transparent', theme.colors.primaryContainer, 'transparent']
+      [0, 1, 2, 3],
+      ['transparent', theme.colors.primaryContainer, theme.colors.primaryContainer, 'transparent']
     ),
     borderRadius: 8,
   }));
@@ -50,12 +53,15 @@ export function ShoppingListItemCard({
     if (!localChecked) {
       setLocalChecked(true);  // checkbox updates immediately
       progress.value = withSequence(
-        withTiming(1, { duration: 150 }),
-        withTiming(2, { duration: 150 }, () => runOnJS(onToggleChecked)())
+        withTiming(1, { duration:  100 }),
+        withTiming(3, { duration: 100 }, () => runOnJS(onToggleChecked)())
       );
     } else {
       setLocalChecked(false);
-      onToggleChecked();
+      progress.value = withSequence(
+        withTiming(1, { duration: 60 }),
+        withTiming(3, { duration: 60 }, () => runOnJS(onToggleChecked)())
+      );
     }
   };
 
@@ -68,15 +74,22 @@ export function ShoppingListItemCard({
   return (
       <Pressable onPress={onEdit}>
         <Surface style={cardStyles.card}>
-          <Animated.View style={animatedStyle}>
-            <View style={cardStyles.row}>
-              {/* Checkbox with large hitSlop */}
-              <Pressable
-                onPress={handleToggle}
-                hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
-              >
-                <Checkbox status={localChecked ? 'checked' : 'unchecked'} />
-              </Pressable>
+          <Animated.View 
+            style={[StyleSheet.absoluteFillObject, animatedStyle]} 
+            pointerEvents="none" 
+          />
+          <View style={cardStyles.row}>
+            {/* Checkbox with large hitSlop */}
+            <Pressable
+              onPress={handleToggle}
+              hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+            >
+              <MaterialCommunityIcons
+                name={localChecked ? 'checkbox-marked' : 'checkbox-blank-outline'}
+                size={24}
+                color={localChecked ? theme.colors.primary : theme.colors.onSurfaceVariant}
+              />
+            </Pressable>
 
           {/* Name — left, takes remaining space */}
           <Text
@@ -123,10 +136,9 @@ export function ShoppingListItemCard({
             iconColor={theme.colors.onSurfaceVariant}
             style={{ margin: 0 }}
           />
-            </View>
-          </Animated.View>
-        </Surface>
-      </Pressable>
+        </View>
+      </Surface>
+    </Pressable>
   );
 }
 
