@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { View, StyleSheet, Pressable, TextInput as RNTextInput } from "react-native";
 import {
   Modal,
@@ -11,6 +11,53 @@ import {
 } from "react-native-paper";
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { SearchablePickerDialog } from './SearchablePickerDialog';
+
+const PriceInput = React.memo(({ onChangeCents, borderColor, textColor, placeholderColor, initialCents }: {
+  onChangeCents: (cents: number) => void;
+  borderColor: string;
+  textColor: string;
+  placeholderColor: string;
+  initialCents: number;
+}) => {
+  const [cents, setCents] = useState(initialCents);
+  const centsRef = useRef(initialCents);
+
+  const formatted = useMemo(() => {
+    const int = Math.floor(cents / 100);
+    const dec = cents % 100;
+    return `${int},${dec.toString().padStart(2, '0')}`;
+  }, [cents]);
+
+  const handleKeyPress = useCallback((e: any) => {
+    const key = e.nativeEvent.key;
+    setCents(prev => {
+      let next = prev;
+      if (key >= '0' && key <= '9') {
+        next = prev * 10 + (key.charCodeAt(0) - 48);
+        if (next > 999999999) return prev;
+      } else if (key === 'Backspace') {
+        next = Math.floor(prev / 10);
+      }
+      centsRef.current = next;
+      return next;
+    });
+  }, []);
+
+  return (
+    <RNTextInput
+      value={formatted}
+      keyboardType="number-pad"
+      onKeyPress={handleKeyPress}
+      onFocus={() => { setCents(0); centsRef.current = 0; }}
+      onBlur={() => onChangeCents(centsRef.current)}
+      selection={{ start: formatted.length, end: formatted.length }}
+      contextMenuHidden
+      selectTextOnFocus={false}
+      caretHidden
+      style={[styles.priceInput, { borderColor, color: textColor }]}
+    />
+  );
+});
 
 interface EditShoppingItemModalProps {
   visible: boolean;
@@ -45,33 +92,41 @@ export function EditShoppingItemModal({
   onCategorySelect,
 }: EditShoppingItemModalProps) {
   const theme = useTheme();
+  const priceCentsRef = useRef(0);
   const [quantity, setQuantity] = useState(1);
-  const [priceInput, setPriceInput] = useState("");
+  const [priceCents, setPriceCents] = useState(0);
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
   const [checked, setChecked] = useState(false);
+
+  const handlePriceChange = useCallback((cents: number) => {
+    priceCentsRef.current = cents;
+    setPriceCents(cents);
+  }, []);
 
   useEffect(() => {
     if (item) {
       setQuantity(item.quantity);
-      setPriceInput(item.price ? item.price.toFixed(2).replace('.', ',') : "");
+      const newPriceCents = item.price ? Math.round(item.price * 100) : 0;
+      setPriceCents(newPriceCents);
+      priceCentsRef.current = newPriceCents;
       setChecked(item.checked);
     }
   }, [item]);
 
   const handleSave = () => {
-    const parsedPrice = priceInput.trim() ? parseFloat(priceInput.replace(",", ".")) : undefined;
-    onSave(quantity, parsedPrice);
-    if (checked !== item?.checked) {
-      onToggleChecked();
-    }
+    const price = priceCentsRef.current > 0 ? priceCentsRef.current / 100 : undefined;
+    onSave(quantity, price);
   };
 
   const formatCurrency = (value: number) => {
     return `R$ ${value.toFixed(2).replace(".", ",")}`;
   };
 
-  const parsedPrice = priceInput.trim() ? parseFloat(priceInput.replace(",", ".")) : null;
-  const totalPreview = parsedPrice && parsedPrice > 0 ? formatCurrency(quantity * parsedPrice) : null;
+  const formatPriceDisplay = (cents: number) => {
+    return (cents / 100).toFixed(2).replace('.', ',');
+  };
+
+  const totalPreview = priceCents > 0 ? formatCurrency(quantity * (priceCents / 100)) : null;
   
   // Find category ID from categories list based on categoryName
   const selectedCategoryId = item?.categoryName ? categories.find(cat => cat.name === item.categoryName)?.id : undefined;
@@ -144,13 +199,20 @@ export function EditShoppingItemModal({
                   />
                 </Pressable>
                 <RNTextInput
-                  style={styles.quantityInput}
+                  style={[styles.quantityInput, { color: theme.colors.onSurface }]}
                   value={quantity.toString()}
                   onChangeText={(value) => {
                     const num = parseInt(value, 10);
                     setQuantity(isNaN(num) ? 1 : Math.max(1, num));
                   }}
                   keyboardType="numeric"
+                  selectTextOnFocus
+                  returnKeyType="done"
+                  onBlur={() => {
+                    if (isNaN(quantity) || quantity < 1) {
+                      setQuantity(1);
+                    }
+                  }}
                 />
                 <Pressable
                   style={[styles.quantityButton, { borderColor: theme.colors.outline }]}
@@ -170,12 +232,12 @@ export function EditShoppingItemModal({
               <Text style={[styles.label, { color: theme.colors.onSurfaceVariant }]}>PREÇO UNIT.</Text>
               <View style={styles.priceRow}>
                 <Text style={[styles.priceSymbol, { color: theme.colors.onSurface }]}>R$</Text>
-                <RNTextInput
-                  style={[styles.priceInput, { borderColor: theme.colors.outline }]}
-                  value={priceInput}
-                  onChangeText={setPriceInput}
-                  keyboardType="decimal-pad"
-                  placeholder="0,00"
+                <PriceInput
+                  onChangeCents={handlePriceChange}
+                  borderColor={theme.colors.outline}
+                  textColor={theme.colors.onSurface}
+                  placeholderColor={theme.colors.onSurfaceVariant}
+                  initialCents={priceCents}
                 />
               </View>
               {item?.lowestPrice90d && item.price && item.price > item.lowestPrice90d.price && (
@@ -201,7 +263,10 @@ export function EditShoppingItemModal({
           <Button
             mode="outlined"
             icon={checked ? "cart-minus" : "cart-plus"}
-            onPress={() => setChecked(prev => !prev)}
+            onPress={() => {
+              setChecked(prev => !prev);
+              onToggleChecked();
+            }}
             style={styles.cartButton}
           >
             {checked ? "Remover do carrinho" : "Mover pro carrinho"}
