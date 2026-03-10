@@ -4,7 +4,7 @@ An Android inventory and shopping list manager. Offline-first, no backend, no ac
 
 Built for real daily use: the primary user manages inventory at work and shops aisle-by-aisle at the supermarket. Not a demo project — real data in production, real feedback loop, real consequences when things break.
 
-[⬇️ Download APK](https://github.com/mahjard/monopop/releases/latest)
+[⬇️ Download APK](https://github.com/majard/listai/releases)
 
 ---
 
@@ -95,6 +95,13 @@ Main data arrives in a single JOIN query. Historical prices (`getLowestPriceForP
 
 **Versioned migration system** — `PRAGMA user_version` tracks the current schema. Each migration runs once. Allows safe schema evolution on devices with existing data. V1 → V8 in production.
 
+**Price input as shift register** — monetary values are stored as integers (cents) 
+throughout the app to avoid floating point errors. The price input works as a shift 
+register: each digit typed shifts left, so typing "1", "2", "3" produces "R$ 1,23" 
+without the user managing separators. Backspace shifts right. Standard pattern for 
+monetary input on mobile but requires careful handling of the initial state and 
+copy-paste edge cases.
+
 *_Numbers from a previous session — not verified against current baseline._
 
 ---
@@ -133,7 +140,7 @@ Main data arrives in a single JOIN query. Historical prices (`getLowestPriceForP
 
 ## Development context
 
-Built with an AI coding agent (Cursor/Windsurf) following a structured workflow: prompt → code → confirmation → explicit diff review → commit → next issue. The explicit review before committing is part of the process — not blind trust in the agent.
+Developed using an AI-assisted workflow (Cursor/Windsurf): prompt → code → confirmation → explicit diff review → commit → next issue. Every change is reviewed before committing — the AI assists the process, it doesn't replace it.
 
 **Package name and rename** — the app was called ListaÍ. During development, a competitor had already registered `com.listai.app` on the Play Store. The rename to Monopop was a product decision with a direct technical consequence: package name `com.mahjard.listai` is kept for now to avoid invalidating existing installs, but will be migrated before formal publishing.
 
@@ -174,4 +181,4 @@ APK at `android/app/build/outputs/apk/release/`. Requires JDK 17+ and Android SD
 
 ---
 
-Built by [Mah Jardim](https://github.com/mahjard)
+Built by [Mah Jardim](https://github.com/majard)

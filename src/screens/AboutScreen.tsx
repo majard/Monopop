@@ -40,9 +40,13 @@ export default function AboutScreen() {
           <Card.Content>
             <Text variant="titleMedium" style={styles.sectionTitle}>O que é</Text>
             <Text variant="bodyMedium" style={{ color: theme.colors.onSurface }}>
-              Monopop é um gerenciador de estoque e lista de compras offline, pensado para
-              uso profissional no dia a dia. Funciona sem internet, com todos os dados
-              armazenados localmente no dispositivo.
+              Monopop integra estoque e lista de compras em um único fluxo. O estoque
+              informa o que você precisa comprar; as compras realizadas atualizam o
+              estoque automaticamente. Com o uso, o app aprende os preços de cada
+              produto em cada loja — sem nenhum esforço extra da sua parte. Com o
+              tempo, você passa a saber onde cada produto sai mais barato, quanto está
+              gastando por período e qual é o seu ritmo de consumo.{'\n\n'}
+              Funciona 100% offline. Nenhum dado sai do seu dispositivo.
             </Text>
           </Card.Content>
         </Card>
@@ -51,12 +55,16 @@ export default function AboutScreen() {
           <Card.Content>
             <Text variant="titleMedium" style={styles.sectionTitle}>Recursos</Text>
             {[
-              'Múltiplas listas de produtos',
-              'Controle de estoque com histórico de quantidades',
-              'Lista de compras com rastreamento de preços',
-              'Importação de lista via texto',
-              'Histórico de compras com invoices por loja',
-              'Análise de gastos e tendências',
+              'Múltiplas listas com estoques independentes',
+              'Lista de compras com preço sugerido por loja',
+              'Menor preço dos últimos 90 dias por produto',
+              'Consumo médio semanal calculado automaticamente',
+              'Importação de lista via texto colado',
+              'Histórico de compras com nota por loja',
+              'Análise de gastos e tendência vs período anterior',
+              'Histórico de quantidade em estoque ao longo do tempo',
+              'Categorias colapsáveis por corredor',
+              'Reordenação por arrastar',
               'Categorias personalizáveis',
               'Backup e restauração',
               '100% offline',
@@ -78,6 +86,16 @@ export default function AboutScreen() {
 
         <Card style={styles.card}>
           <Card.Content>
+            <Text variant="titleMedium" style={styles.sectionTitle}>Privacidade</Text>
+            <Text variant="bodyMedium" style={{ color: theme.colors.onSurface }}>
+              Nenhum dado é coletado ou transmitido. Tudo fica armazenado
+              localmente no seu dispositivo.
+            </Text>
+          </Card.Content>
+        </Card>
+
+        <Card style={styles.card}>
+          <Card.Content>
             <Text variant="titleMedium" style={styles.sectionTitle}>Desenvolvedor</Text>
             <Text variant="bodyMedium" style={{ color: theme.colors.onSurface }}>
               Mah Jardim
@@ -86,17 +104,38 @@ export default function AboutScreen() {
         </Card>
 
         <Card
-          style={[styles.card, styles.githubCard]}
-          onPress={() => Linking.openURL('https://github.com/mahjard/monopop')}
+          style={styles.card}
+          onPress={() => Linking.openURL('https://github.com/majard/Listai/issues')}
         >
-          <Card.Content style={styles.githubContent}>
+          <Card.Content style={styles.linkContent}>
+            <MaterialCommunityIcons
+              name="message-outline"
+              size={24}
+              color={theme.colors.onSurface}
+            />
+            <Text variant="bodyMedium" style={[styles.linkText, { color: theme.colors.onSurface }]}>
+              Enviar feedback
+            </Text>
+            <MaterialCommunityIcons
+              name="open-in-new"
+              size={16}
+              color={theme.colors.onSurfaceVariant}
+            />
+          </Card.Content>
+        </Card>
+
+        <Card
+          style={styles.card}
+          onPress={() => Linking.openURL('https://github.com/majard/Listai')}
+        >
+          <Card.Content style={styles.linkContent}>
             <MaterialCommunityIcons
               name="github"
               size={24}
               color={theme.colors.onSurface}
             />
-            <Text variant="bodyMedium" style={[styles.githubText, { color: theme.colors.onSurface }]}>
-              Código-fonte no GitHub
+            <Text variant="bodyMedium" style={[styles.linkText, { color: theme.colors.onSurface }]}>
+              Ver no GitHub
             </Text>
             <MaterialCommunityIcons
               name="open-in-new"
@@ -150,15 +189,12 @@ const styles = StyleSheet.create({
   listIcon: {
     marginTop: 2,
   },
-  githubCard: {
-    marginBottom: 8,
-  },
-  githubContent: {
+  linkContent: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
   },
-  githubText: {
+  linkText: {
     flex: 1,
   },
   divider: { marginVertical: 24 },
