@@ -52,8 +52,8 @@ const PriceInput = React.memo(({ onChangeCents, borderColor, textColor, placehol
       value={formatted}
       keyboardType="number-pad"
       onKeyPress={handleKeyPress}
-      onFocus={() => { setCents(0); centsRef.current = 0; onChangeCents(0); }}
       selection={{ start: formatted.length, end: formatted.length }}
+      onFocus={() => { setCents(0); centsRef.current = 0; onChangeCents(0); }}
       contextMenuHidden
       selectTextOnFocus={false}
       caretHidden
@@ -98,9 +98,10 @@ export function EditShoppingItemModal({
 }: EditShoppingItemModalProps) {
   const theme = useTheme();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const priceCentsRef = useRef(0);
+  const initialPrice = item?.price ? Math.round(item.price * 100) : 0;
+  const priceCentsRef = useRef(initialPrice);
   const [quantity, setQuantity] = useState(1);
-  const [priceCents, setPriceCents] = useState(0);
+  const [priceCents, setPriceCents] = useState(initialPrice);
   const [categoryModalVisible, setCategoryModalVisible] = useState(false);
   const [checked, setChecked] = useState(false);
 
@@ -143,7 +144,7 @@ export function EditShoppingItemModal({
     <Portal>
       <Modal
         visible={visible}
-        onDismiss={onDismiss}
+        onDismiss={handleSave}
         contentContainerStyle={styles.modalContainer}
       >
         <Surface style={styles.surface}>
