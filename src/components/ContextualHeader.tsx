@@ -24,10 +24,11 @@ export default function ContextualHeader({
   const [input, setInput] = useState(listName);
 
   const handleBack = () => {
-    if (navigation.canGoBack()) {
-      navigation.goBack();
-    } else {
+    const tabScreens = ['Inventory', 'ShoppingList', 'History'];
+    if (tabScreens.includes(route.name)) {
       navigation.navigate('Lists');
+    } else {
+      navigation.goBack();
     }
   };
 
@@ -145,7 +146,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     opacity: 0.85,
     letterSpacing: 0.5,
-    
+
   },
   separator: {
     color: 'rgba(255,255,255,0.5)',

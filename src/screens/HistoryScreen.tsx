@@ -17,6 +17,7 @@ import { Invoice, InventoryItem } from '../database/models';
 import { getDb } from '../database/database';
 import { preprocessName, calculateSimilarity } from '../utils/similarityUtils';
 import { DateRangePickerModal, DateRange } from '../components/DateRangePickerModal';
+import HistoryScreenSkeleton from '../components/HistoryScreenSkeleton';
 
 type HistoryScreenNavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -67,6 +68,7 @@ export default function HistoryScreen() {
     end: new Date(),
   });
   const [datePickerVisible, setDatePickerVisible] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const formatCurrency = (value: number) => `R$ ${value.toFixed(2).replace('.', ',')}`;
   const formatDate = (dateString: string) =>
@@ -248,6 +250,8 @@ export default function HistoryScreen() {
       ));
     } catch (error) {
       console.error('Error loading history:', error);
+    } finally {
+      setLoading(false);
     }
   }, [listId]);
 
@@ -497,7 +501,9 @@ export default function HistoryScreen() {
         </View>
       </View>
 
-      {filteredEvents.length === 0 ? (
+      {loading ? (
+        <HistoryScreenSkeleton />
+      ) : filteredEvents.length === 0 ? (
         <View style={localStyles.emptyState}>
           <MaterialCommunityIcons name="history" size={48} color={theme.colors.onSurfaceVariant} />
           <Text style={[localStyles.emptyTitle, { color: theme.colors.onSurfaceVariant }]}>
