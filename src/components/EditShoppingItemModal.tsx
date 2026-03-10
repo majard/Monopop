@@ -52,7 +52,7 @@ const PriceInput = React.memo(({ onChangeCents, borderColor, textColor, placehol
       value={formatted}
       keyboardType="number-pad"
       onKeyPress={handleKeyPress}
-      onFocus={() => { setCents(0); centsRef.current = 0; }}
+      onFocus={() => { setCents(0); centsRef.current = 0; onChangeCents(0); }}
       selection={{ start: formatted.length, end: formatted.length }}
       contextMenuHidden
       selectTextOnFocus={false}
@@ -108,7 +108,6 @@ export function EditShoppingItemModal({
     priceCentsRef.current = cents;
     setPriceCents(cents);
   }, []);
-
   useEffect(() => {
     if (item) {
       setQuantity(item.quantity);
@@ -167,7 +166,7 @@ export function EditShoppingItemModal({
                   name="chevron-right"
                   size={20}
                   color={theme.colors.onSurfaceVariant}
-                  style={{ marginTop: 2}}
+                  style={{ marginTop: 2 }}
                 />
               )}
             </Pressable>

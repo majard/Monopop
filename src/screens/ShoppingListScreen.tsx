@@ -182,14 +182,14 @@ export default function ShoppingListScreen() {
   }, [stores, shoppingListItems, updatePricesForStore]);
 
   const handleToggleChecked = useCallback(async (item: ShoppingListItemWithDetails) => {
-    setShoppingListItems(prev => prev.map(i => 
+    setShoppingListItems(prev => prev.map(i =>
       i.id === item.id ? { ...i, checked: !item.checked } : i
     ));
     try {
       await updateShoppingListItem(item.id, { checked: !item.checked });
     } catch (error) {
       // revert on failure
-      setShoppingListItems(prev => prev.map(i => 
+      setShoppingListItems(prev => prev.map(i =>
         i.id === item.id ? { ...i, checked: item.checked } : i
       ));
       console.error('Erro ao atualizar item:', error);
@@ -461,6 +461,54 @@ export default function ShoppingListScreen() {
             color={theme.colors.onSurfaceVariant}
           />
         </Pressable>
+      </View>
+
+      {initialLoading ? (
+        <ShoppingListSkeleton />
+      ) : (
+        <FlatList
+          data={rows}
+          keyExtractor={(row, index) =>
+            row.type === 'item' ? row.item.id.toString() : `${row.type}-${index}`
+          }
+          renderItem={renderRow}
+          ListEmptyComponent={listEmptyComponent}
+          contentContainerStyle={{ paddingBottom: bottomBarHeight + 96 }}
+          initialNumToRender={20}
+          maxToRenderPerBatch={20}
+          windowSize={10}
+        />
+      )}
+
+      <AddItemButton
+        onPress={() => navigation.navigate('AddProductToShoppingList', { listId })}
+        label="Adicionar à Lista de Compras"
+        style={checkedItems.length > 0 ? { bottom: bottomBarHeight } : undefined}
+      />
+
+      <EditShoppingItemModal
+        visible={editingItem !== null}
+        item={editingItem}
+        inventoryItem={editingItem ? findByProductId(editingItem.productId) : undefined}
+        onSave={handleSaveEdit}
+        onToggleChecked={async () => {
+          if (!editingItem) return;
+          const updated = { ...editingItem, checked: !editingItem.checked };
+          setEditingItem(updated);
+          await handleToggleChecked(editingItem);
+        }}
+        onDelete={() => { handleDeleteItem(editingItem!); setEditingItem(null); }}
+        onDismiss={() => setEditingItem(null)}
+        onCategoryChange={() => { }}
+        categories={categories}
+        onCategorySelect={handleCategorySelect}
+        key={editingItem?.id ?? 'none'}
+      />
+
+      <Modal
+        visible={actionsVisible}
+        transparent
+        animationType="fade"
         onRequestClose={() => setActionsVisible(false)}
       >
         <Pressable
@@ -477,7 +525,7 @@ export default function ShoppingListScreen() {
               paddingTop: 12,
               elevation: 8,
             }}
-            onPress={() => {}}
+            onPress={() => { }}
           >
             <View style={{
               width: 40, height: 4, borderRadius: 2,
