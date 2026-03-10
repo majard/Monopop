@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode, useMemo } from 'react';
 import { getInventoryItems, getCategories, getStores, getSetting, getLastStoreName } from '../database/database';
 import { InventoryItem, Category } from '../database/models';
 import { useListContext } from './ListContext';
@@ -88,7 +88,7 @@ export const ListDataProvider: React.FC<ListDataProviderProps> = ({ children }) 
     loadAllData();
   }, [listId, loadInventoryItems, loadCategories, loadStores, loadStoreSettings]);
 
-  const value: ListDataContextValue = {
+  const value = useMemo(() => ({
     inventoryItems,
     categories,
     stores,
@@ -100,8 +100,19 @@ export const ListDataProvider: React.FC<ListDataProviderProps> = ({ children }) 
     loadStores,
     refreshStoreSettings: loadStoreSettings,
     findByProductId,
-  };
-
+  }), [
+    inventoryItems,
+    categories,
+    stores,
+    defaultStoreMode,
+    defaultStoreId,
+    lastStoreName,
+    loadInventoryItems,
+    loadCategories,
+    loadStores,
+    loadStoreSettings,
+    findByProductId
+  ]);
   return (
     <ListDataContext.Provider value={value}>
       {children}

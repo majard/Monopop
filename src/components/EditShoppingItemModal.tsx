@@ -42,9 +42,10 @@ const PriceInput = React.memo(({ onChangeCents, borderColor, textColor, placehol
         next = Math.floor(prev / 10);
       }
       centsRef.current = next;
+      onChangeCents(next);
       return next;
     });
-  }, []);
+  }, [onChangeCents]);
 
   return (
     <RNTextInput
@@ -52,7 +53,6 @@ const PriceInput = React.memo(({ onChangeCents, borderColor, textColor, placehol
       keyboardType="number-pad"
       onKeyPress={handleKeyPress}
       onFocus={() => { setCents(0); centsRef.current = 0; }}
-      onBlur={() => onChangeCents(centsRef.current)}
       selection={{ start: formatted.length, end: formatted.length }}
       contextMenuHidden
       selectTextOnFocus={false}

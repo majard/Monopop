@@ -461,50 +461,6 @@ export default function ShoppingListScreen() {
             color={theme.colors.onSurfaceVariant}
           />
         </Pressable>
-      </View>
-
-      {initialLoading ? (
-        <ShoppingListSkeleton />
-      ) : (
-        <FlatList
-          data={rows}
-          keyExtractor={(row, index) =>
-            row.type === 'item' ? row.item.id.toString() : `${row.type}-${index}` 
-          }
-          renderItem={renderRow}
-          ListEmptyComponent={listEmptyComponent}
-          contentContainerStyle={{ paddingBottom: bottomBarHeight + 96 }}
-        />
-      )}
-
-      <AddItemButton
-        onPress={() => navigation.navigate('AddProductToShoppingList', { listId })}
-        label="Adicionar à Lista de Compras"
-        style={checkedItems.length > 0 ? { bottom: bottomBarHeight } : undefined}
-      />
-
-      <EditShoppingItemModal
-        visible={editingItem !== null}
-        item={editingItem}
-        inventoryItem={editingItem ? findByProductId(editingItem.productId) : undefined}
-        onSave={handleSaveEdit}
-        onToggleChecked={async () => {
-          if (!editingItem) return;
-          const updated = { ...editingItem, checked: !editingItem.checked };
-          setEditingItem(updated);
-          await handleToggleChecked(editingItem);
-        }}
-        onDelete={() => { handleDeleteItem(editingItem!); setEditingItem(null); }}
-        onDismiss={() => setEditingItem(null)}
-        onCategoryChange={() => { }}
-        categories={categories}
-        onCategorySelect={handleCategorySelect}
-      />
-
-      <Modal
-        visible={actionsVisible}
-        transparent
-        animationType="fade"
         onRequestClose={() => setActionsVisible(false)}
       >
         <Pressable
