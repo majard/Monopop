@@ -51,6 +51,7 @@ export default function AddProductToShoppingListScreen() {
   // originalQuantity: null means item didn't exist before this session
   const sessionChangesRef = useRef<Map<number, { inventoryItemId: number; originalQuantity: number | null }>>(new Map());
   const [sessionChanges, setSessionChanges] = useState<Map<number, { inventoryItemId: number; originalQuantity: number | null }>>(new Map());
+  const [isSessionCollapsed, setIsSessionCollapsed] = useState(true);
   const confirmedRef = useRef(false);
   const flatListRef = useRef<any>(null);
 
@@ -254,18 +255,17 @@ export default function AddProductToShoppingListScreen() {
     if (changedItems.length === 0) return null;
     return (
       <View>
-        <Text variant="labelMedium" style={{
-          paddingHorizontal: 4,
-          paddingBottom: 8,
-          paddingTop: 4,
-          color: theme.colors.primary,
-          fontWeight: '700',
-          textTransform: 'uppercase',
-          fontSize: 11,
-        }}>
-          Modificados agora
-        </Text>
-        {changedItems.map(item => {
+        <Pressable onPress={() => setIsSessionCollapsed(p => !p)} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 4, paddingBottom: 8, paddingTop: 4 }}>
+          <Text style={{ color: theme.colors.primary, fontWeight: '700', textTransform: 'uppercase', fontSize: 11 }}>
+            Modificados agora ({sessionChanges.size})
+          </Text>
+          <MaterialCommunityIcons
+            name={isSessionCollapsed ? 'chevron-down' : 'chevron-up'}
+            size={16}
+            color={theme.colors.primary}
+          />
+        </Pressable>
+        {!isSessionCollapsed && changedItems.map(item => {
           const listInfo = shoppingListByInventoryId.get(item.id);
           const isOnList = !!listInfo;
           return (
@@ -280,11 +280,11 @@ export default function AddProductToShoppingListScreen() {
             />
           );
         })}
-        <View style={{
+        {!isSessionCollapsed && <View style={{
           height: 1,
           backgroundColor: theme.colors.outlineVariant,
           marginVertical: 12,
-        }} />
+        }} />}
       </View>
     );
   }, [sessionChanges, inventoryItems, shoppingListByInventoryId, handlePlus, handleMinus, theme]);
