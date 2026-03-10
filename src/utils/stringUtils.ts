@@ -132,3 +132,12 @@ export const generateStockListText = (inventoryItems: InventoryItem[]): string =
   });
   return text;
 };
+
+export const generateShoppingListText = (items: { productName: string; quantity: number }[]): string => {
+  let text = '';
+  items.forEach(item => {
+    const emoji = getEmojiForProduct(item.productName);
+    text += `- ${item.productName}: ${item.quantity} ${emoji}\n`;
+  });
+  return text.trim();
+};

@@ -23,6 +23,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import SearchBar from '../components/SearchBar';
 import ShoppingListSkeleton from '../components/ShoppingListSkeleton';
 import ImportModal from '../components/ImportModal';
+import { generateShoppingListText } from '../utils/stringUtils';
+import * as Clipboard from 'expo-clipboard';
 
 type ListRow =
   | { type: 'section-header'; title: string; sectionType: 'pending' | 'cart' }
@@ -412,6 +414,12 @@ export default function ShoppingListScreen() {
 
   const formatCurrency = (value: number) => `R$ ${value.toFixed(2).replace('.', ',')}`;
 
+  const copyShoppingList = useCallback(async () => {
+    const text = generateShoppingListText(shoppingListItems);
+    await Clipboard.setStringAsync(text);
+    Alert.alert('Lista copiada!', 'Pronta para importar no estoque.');
+  }, [shoppingListItems]);
+
   const bottomBarHeight = checkedItems.length > 0 ? 64 : 0;
 
   return (
@@ -542,6 +550,7 @@ export default function ShoppingListScreen() {
               Ações
             </Text>
             {[
+              { icon: 'content-copy', label: 'Copiar lista', onPress: copyShoppingList },
               { icon: 'import', label: 'Importar lista', onPress: () => setImportModalVisible(true) },
               {
                 icon: 'cart-remove',
