@@ -10,6 +10,9 @@ import {
   useTheme,
 } from "react-native-paper";
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../types/navigation';
 import { SearchablePickerDialog } from './SearchablePickerDialog';
 
 const PriceInput = React.memo(({ onChangeCents, borderColor, textColor, placeholderColor, initialCents }: {
@@ -71,6 +74,7 @@ interface EditShoppingItemModalProps {
     categoryName?: string | null;
     lowestPrice90d: { price: number; storeName: string } | null;
   } | null;
+  inventoryItem?: any; // pass the full inventoryItem object from parent
   onSave: (quantity: number, price: number | undefined) => void;
   onToggleChecked: () => void;
   onDelete: () => void;
@@ -83,6 +87,7 @@ interface EditShoppingItemModalProps {
 export function EditShoppingItemModal({
   visible,
   item,
+  inventoryItem,
   onSave,
   onToggleChecked,
   onDelete,
@@ -92,6 +97,7 @@ export function EditShoppingItemModal({
   onCategorySelect,
 }: EditShoppingItemModalProps) {
   const theme = useTheme();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const priceCentsRef = useRef(0);
   const [quantity, setQuantity] = useState(1);
   const [priceCents, setPriceCents] = useState(0);
@@ -130,7 +136,7 @@ export function EditShoppingItemModal({
   };
 
   const totalPreview = priceCents > 0 ? formatCurrency(quantity * (priceCents / 100)) : null;
-  
+
   // Find category ID from categories list based on categoryName
   const selectedCategoryId = item?.categoryName ? categories.find(cat => cat.name === item.categoryName)?.id : undefined;
 
@@ -144,7 +150,27 @@ export function EditShoppingItemModal({
         <Surface style={styles.surface}>
           {/* HEADER ROW */}
           <View style={styles.headerRow}>
-            <Text style={styles.productName}>{item?.productName}</Text>
+            <Pressable
+              onPress={() => {
+                if (inventoryItem) {
+                  onDismiss();
+                  navigation.navigate('EditInventoryItem', { inventoryItem });
+                }
+              }}
+              style={{ flex: 1, flexDirection: 'row', alignItems: 'flex-start', gap: 4 }}
+            >
+              <Text style={styles.productName} numberOfLines={1}>
+                {item?.productName}
+              </Text>
+              {inventoryItem && (
+                <MaterialCommunityIcons
+                  name="chevron-right"
+                  size={20}
+                  color={theme.colors.onSurfaceVariant}
+                  style={{ marginTop: 2}}
+                />
+              )}
+            </Pressable>
             <Chip
               icon="tag-outline"
               mode="outlined"
@@ -296,7 +322,7 @@ export function EditShoppingItemModal({
           </Pressable>
         </Surface>
       </Modal>
-      
+
       <SearchablePickerDialog
         visible={categoryModalVisible}
         items={categories}
@@ -305,7 +331,7 @@ export function EditShoppingItemModal({
         onDismiss={() => setCategoryModalVisible(false)}
         title="Categoria"
         placeholder="Buscar categoria..."
-        onCreateNew={() => {}}
+        onCreateNew={() => { }}
       />
     </Portal>
   );
@@ -333,7 +359,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     textAlign: "left",
-    flex: 1,
   },
   categoryChipText: {
     fontSize: 11,

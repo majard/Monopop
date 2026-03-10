@@ -584,14 +584,15 @@ export const saveInventoryHistorySnapshot = async (
       [inventoryItemId]
     );
 
+
     if (!currentInventoryItem) {
       console.warn(`Inventory item with ID ${inventoryItemId} not found. Cannot save history snapshot.`);
       return; // Or throw an error, depending on desired behavior
     }
 
     const existingEntry = await db.getFirstAsync<{ id: number }>(
-      `SELECT id FROM inventory_history WHERE inventoryItemId = ? AND date = ?;`,
-      [inventoryItemId, dateToSave]
+      `SELECT id FROM inventory_history WHERE inventoryItemId = ? AND date LIKE ?;`,
+      [inventoryItemId, `${dateToSave}%`]
     );
 
     if (existingEntry) {
@@ -604,7 +605,7 @@ export const saveInventoryHistorySnapshot = async (
       // Otherwise, insert a new entry
       await db.runAsync(
         `INSERT INTO inventory_history (inventoryItemId, quantity, date, createdAt) VALUES (?, ?, ?, ?);`,
-        [inventoryItemId, currentInventoryItem.quantity, dateToSave, createdAt]
+        [inventoryItemId, quantityToSave !== undefined ? quantityToSave : currentInventoryItem.quantity, dateToSave, createdAt]
       );
     }
   });

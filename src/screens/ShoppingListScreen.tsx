@@ -1,9 +1,9 @@
 import React, { useRef, useState, useCallback, useMemo } from 'react';
-import { View, StyleSheet, Text, FlatList, Pressable, Alert } from 'react-native';
+import { View, StyleSheet, Text, FlatList, Pressable, Alert, Modal } from 'react-native';
 import { Button, Surface, useTheme } from 'react-native-paper';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { concludeShoppingForListWithInvoice, getShoppingListItemsByListId, updateShoppingListItem, deleteShoppingListItem, setSetting, getLastUnitPriceForProductAtStore, getLastUnitPriceForProduct, getLowestPriceForProducts, updateProductCategory, getLastUnitPricesForProductsAtStore, getLastUnitPricesForProducts } from '../database/database';
+import { concludeShoppingForListWithInvoice, getShoppingListItemsByListId, updateShoppingListItem, deleteShoppingListItem, setSetting, getLastUnitPriceForProductAtStore, getLastUnitPriceForProduct, getLowestPriceForProducts, updateProductCategory, getLastUnitPricesForProductsAtStore, getLastUnitPricesForProducts, addProduct, addShoppingListItem } from '../database/database';
 import { RootStackParamList } from '../types/navigation';
 import { ShoppingListItem } from '../database/models';
 import { useListContext } from '../context/ListContext';
@@ -22,6 +22,7 @@ import { ShoppingListItemCard } from '../components/ShoppingListItemCard';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import SearchBar from '../components/SearchBar';
 import ShoppingListSkeleton from '../components/ShoppingListSkeleton';
+import ImportModal from '../components/ImportModal';
 
 type ListRow =
   | { type: 'section-header'; title: string; sectionType: 'pending' | 'cart' }
@@ -43,7 +44,7 @@ interface ShoppingListItemWithDetails extends Omit<ShoppingListItem, 'checked'> 
 export default function ShoppingListScreen() {
   const { listId } = useListContext();
   const { listName, handleListNameSave, handleListDelete } = useList(listId);
-  const { categories, stores, defaultStoreMode, defaultStoreId, lastStoreName, refreshStoreSettings } = useListData();
+  const { categories, stores, defaultStoreMode, defaultStoreId, lastStoreName, refreshStoreSettings, findByProductId } = useListData();
   const [shoppingListItems, setShoppingListItems] = useState<ShoppingListItemWithDetails[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(false);
@@ -57,6 +58,8 @@ export default function ShoppingListScreen() {
   const [storePickerVisible, setStorePickerVisible] = useState(false);
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   const [sortOrder, setSortOrder] = useState<SortOrder>('alphabetical');
+  const [actionsVisible, setActionsVisible] = useState(false);
+  const [importModalVisible, setImportModalVisible] = useState(false);
   const navigation = useNavigation<ShoppingListScreenNavigationProp>();
   const theme = useTheme();
   const styles = createHomeScreenStyles(theme);
@@ -425,7 +428,7 @@ export default function ShoppingListScreen() {
           style={[localStyles.storeButton, { borderColor: theme.colors.outline }]}
         >
           <MaterialCommunityIcons
-            name="store-outline"
+            name="store-edit-outline"
             size={18}
             color={defaultStoreName ? theme.colors.primary : theme.colors.onSurfaceVariant}
           />
@@ -444,6 +447,20 @@ export default function ShoppingListScreen() {
           mode="shoppingList"
           iconOnly
         />
+        <Pressable
+          onPress={() => setActionsVisible(true)}
+          style={({ pressed }) => ({
+            padding: 8,
+            borderRadius: 20,
+            backgroundColor: pressed ? theme.colors.surfaceVariant : 'transparent',
+          })}
+        >
+          <MaterialCommunityIcons
+            name="dots-vertical"
+            size={22}
+            color={theme.colors.onSurfaceVariant}
+          />
+        </Pressable>
       </View>
 
       {initialLoading ? (
@@ -469,6 +486,7 @@ export default function ShoppingListScreen() {
       <EditShoppingItemModal
         visible={editingItem !== null}
         item={editingItem}
+        inventoryItem={editingItem ? findByProductId(editingItem.productId) : undefined}
         onSave={handleSaveEdit}
         onToggleChecked={async () => {
           if (!editingItem) return;
@@ -481,6 +499,101 @@ export default function ShoppingListScreen() {
         onCategoryChange={() => { }}
         categories={categories}
         onCategorySelect={handleCategorySelect}
+      />
+
+      <Modal
+        visible={actionsVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setActionsVisible(false)}
+      >
+        <Pressable
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' }}
+          onPress={() => setActionsVisible(false)}
+        >
+          <Pressable
+            style={{
+              backgroundColor: theme.colors.surface,
+              borderTopLeftRadius: 20,
+              borderTopRightRadius: 20,
+              paddingHorizontal: 16,
+              paddingBottom: 32,
+              paddingTop: 12,
+              elevation: 8,
+            }}
+            onPress={() => {}}
+          >
+            <View style={{
+              width: 40, height: 4, borderRadius: 2,
+              backgroundColor: theme.colors.outlineVariant,
+              alignSelf: 'center', marginBottom: 16,
+            }} />
+            <Text style={{
+              textTransform: 'uppercase',
+              letterSpacing: 1,
+              color: theme.colors.onSurfaceVariant,
+              marginBottom: 8,
+              paddingHorizontal: 4,
+            }}>
+              Ações
+            </Text>
+            {[
+              { icon: 'import', label: 'Importar lista', onPress: () => setImportModalVisible(true) },
+              {
+                icon: 'cart-remove',
+                label: 'Limpar carrinho',
+                onPress: async () => {
+                  const unchecked = shoppingListItems.map(i => ({ ...i, checked: false }));
+                  setShoppingListItems(unchecked);
+                  await Promise.all(
+                    shoppingListItems.filter(i => i.checked).map(i =>
+                      updateShoppingListItem(i.id, { checked: false })
+                    )
+                  );
+                }
+              },
+            ].map(action => (
+              <Pressable
+                key={action.label}
+                onPress={() => { setActionsVisible(false); action.onPress(); }}
+                style={({ pressed }) => ({
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  paddingVertical: 14,
+                  paddingHorizontal: 12,
+                  borderRadius: 10,
+                  marginBottom: 2,
+                  backgroundColor: pressed ? theme.colors.surfaceVariant : 'transparent',
+                })}
+              >
+                <MaterialCommunityIcons
+                  name={action.icon as any}
+                  size={20}
+                  color={theme.colors.onSurface}
+                  style={{ marginRight: 12 }}
+                />
+                <Text style={{ fontSize: 15, color: theme.colors.onSurface }}>
+                  {action.label}
+                </Text>
+              </Pressable>
+            ))}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <ImportModal
+        isImportModalVisible={importModalVisible}
+        setIsImportModalVisible={setImportModalVisible}
+        loadItems={loadData}
+        listId={listId}
+        applyMatch={async ({ productName, product }) => {
+          await addShoppingListItem(listId, productName, product.quantity);
+        }}
+        applyNew={async ({ product }) => {
+          const productId = await addProduct(product.originalName);
+          await addShoppingListItem(listId, product.originalName, product.quantity);
+          return { productId, productName: product.originalName };
+        }}
       />
 
       {checkedItems.length > 0 && (
