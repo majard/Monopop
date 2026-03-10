@@ -179,10 +179,16 @@ export default function ShoppingListScreen() {
   }, [stores, shoppingListItems, updatePricesForStore]);
 
   const handleToggleChecked = useCallback(async (item: ShoppingListItemWithDetails) => {
+    setShoppingListItems(prev => prev.map(i => 
+      i.id === item.id ? { ...i, checked: !item.checked } : i
+    ));
     try {
       await updateShoppingListItem(item.id, { checked: !item.checked });
-      setShoppingListItems(prev => prev.map(i => i.id === item.id ? { ...i, checked: !item.checked } : i));
     } catch (error) {
+      // revert on failure
+      setShoppingListItems(prev => prev.map(i => 
+        i.id === item.id ? { ...i, checked: item.checked } : i
+      ));
       console.error('Erro ao atualizar item:', error);
     }
   }, []);

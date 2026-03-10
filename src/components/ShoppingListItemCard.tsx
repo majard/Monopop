@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import {
   Surface,
@@ -7,6 +7,7 @@ import {
   useTheme,
 } from "react-native-paper";
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import Animated, { useSharedValue, useAnimatedStyle, withSequence, withTiming, runOnJS, interpolateColor } from 'react-native-reanimated';
 
 export interface ShoppingListItemCardItem {
   id: number;
@@ -32,6 +33,31 @@ export function ShoppingListItemCard({
   onEdit,
 }: ShoppingListItemCardProps) {
   const theme = useTheme();
+  const [localChecked, setLocalChecked] = useState(item.checked);
+
+  const progress = useSharedValue(0);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(
+      progress.value,
+      [0, 1, 2],
+      ['transparent', theme.colors.primaryContainer, 'transparent']
+    ),
+    borderRadius: 8,
+  }));
+
+  const handleToggle = () => {
+    if (!localChecked) {
+      setLocalChecked(true);  // checkbox updates immediately
+      progress.value = withSequence(
+        withTiming(1, { duration: 150 }),
+        withTiming(2, { duration: 150 }, () => runOnJS(onToggleChecked)())
+      );
+    } else {
+      setLocalChecked(false);
+      onToggleChecked();
+    }
+  };
 
   const formatCurrency = (value: number) => {
     return `R$ ${value ? value.toFixed(2).replace(".", ",") : "0,00"}`;
@@ -40,23 +66,24 @@ export function ShoppingListItemCard({
   const itemTotal = item.price ? formatCurrency(item.quantity * item.price) : null;
 
   return (
-    <Pressable onPress={onEdit}>
-      <Surface style={cardStyles.card}>
-        <View style={cardStyles.row}>
-          {/* Checkbox with large hitSlop */}
-          <Pressable
-            onPress={onToggleChecked}
-            hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
-          >
-            <Checkbox status={item.checked ? 'checked' : 'unchecked'} />
-          </Pressable>
+      <Pressable onPress={onEdit}>
+        <Surface style={cardStyles.card}>
+          <Animated.View style={animatedStyle}>
+            <View style={cardStyles.row}>
+              {/* Checkbox with large hitSlop */}
+              <Pressable
+                onPress={handleToggle}
+                hitSlop={{ top: 16, bottom: 16, left: 16, right: 16 }}
+              >
+                <Checkbox status={localChecked ? 'checked' : 'unchecked'} />
+              </Pressable>
 
           {/* Name — left, takes remaining space */}
           <Text
             style={[
               cardStyles.name,
               { color: theme.colors.onSurface },
-              item.checked && { textDecorationLine: 'line-through', color: theme.colors.onSurfaceVariant },
+              localChecked && { textDecorationLine: 'line-through', color: theme.colors.onSurfaceVariant },
             ]}
             numberOfLines={1}
           >
@@ -78,7 +105,7 @@ export function ShoppingListItemCard({
                 />
               )}
             </View>
-            {itemTotal && item.checked && (
+            {itemTotal && localChecked && (
               <Text style={[cardStyles.total, { color: theme.colors.primary }]}>
                 {itemTotal}
               </Text>
@@ -96,9 +123,10 @@ export function ShoppingListItemCard({
             iconColor={theme.colors.onSurfaceVariant}
             style={{ margin: 0 }}
           />
-        </View>
-      </Surface>
-    </Pressable>
+            </View>
+          </Animated.View>
+        </Surface>
+      </Pressable>
   );
 }
 
