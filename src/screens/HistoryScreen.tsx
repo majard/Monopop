@@ -1,9 +1,9 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { View, StyleSheet, FlatList, Pressable, ScrollView } from 'react-native';
-import { Text, Card, Surface, Chip, IconButton, useTheme, Divider } from 'react-native-paper';
+import { View, StyleSheet, FlatList, Pressable } from 'react-native';
+import { Text, Surface, Chip, IconButton, Divider, useTheme } from 'react-native-paper';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { parseISO, format } from 'date-fns';
+import { parseISO, format, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -16,6 +16,7 @@ import SearchBar from '../components/SearchBar';
 import { Invoice, InventoryItem } from '../database/models';
 import { getDb } from '../database/database';
 import { preprocessName, calculateSimilarity } from '../utils/similarityUtils';
+import { DateRangePickerModal, DateRange } from '../components/DateRangePickerModal';
 
 type HistoryScreenNavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -41,10 +42,11 @@ interface InventoryChange {
   productId: number;
 }
 
-interface MonthSummary {
+interface PeriodSummary {
   totalSpent: number;
   mostUsedStore: string | null;
   purchaseCount: number;
+  label: string;
 }
 
 export default function HistoryScreen() {
@@ -57,14 +59,13 @@ export default function HistoryScreen() {
   const [events, setEvents] = useState<HistoryEvent[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedEventId, setExpandedEventId] = useState<number | null>(null);
-  const [monthSummary, setMonthSummary] = useState<MonthSummary>({ totalSpent: 0, mostUsedStore: null, purchaseCount: 0 });
-  const [selectedPeriod, setSelectedPeriod] = useState<'all' | 'month' | 'week'>('all');
+  const [dateRange, setDateRange] = useState<DateRange>({ start: null, end: null });
+  const [datePickerVisible, setDatePickerVisible] = useState(false);
 
   const formatCurrency = (value: number) => `R$ ${value.toFixed(2).replace('.', ',')}`;
   const formatDate = (dateString: string) =>
     format(parseISO(dateString), "dd 'de' MMM yyyy", { locale: ptBR });
 
-  // Fuzzy search on inventory items
   const matchedProductIds = useMemo(() => {
     if (!searchQuery.trim()) return null;
     const threshold = 0.4;
@@ -81,19 +82,12 @@ export default function HistoryScreen() {
   const filteredEvents = useMemo(() => {
     let result = [...events];
 
-    // Period filter
-    const now = new Date();
-    if (selectedPeriod === 'month') {
-      result = result.filter(e => {
-        const d = parseISO(e.date);
-        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-      });
-    } else if (selectedPeriod === 'week') {
-      const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      result = result.filter(e => parseISO(e.date) >= oneWeekAgo);
+    if (dateRange.start) {
+      const start = startOfDay(dateRange.start);
+      const end = endOfDay(dateRange.end ?? dateRange.start);
+      result = result.filter(e => isWithinInterval(parseISO(e.date), { start, end }));
     }
 
-    // Search filter
     if (matchedProductIds) {
       result = result.filter(e => {
         if (e.type === 'purchase') {
@@ -105,13 +99,37 @@ export default function HistoryScreen() {
     }
 
     return result;
-  }, [events, selectedPeriod, matchedProductIds, searchQuery]);
+  }, [events, dateRange, matchedProductIds, searchQuery]);
+
+  // Summary reacts to the current filter
+  const summary = useMemo((): PeriodSummary => {
+    const purchases = filteredEvents.filter(e => e.type === 'purchase') as Extract<HistoryEvent, { type: 'purchase' }>[];
+    const storeCount = new Map<string, number>();
+    purchases.forEach(e => storeCount.set(e.store, (storeCount.get(e.store) || 0) + 1));
+
+    let mostUsedStore: string | null = null;
+    let maxCount = 0;
+    storeCount.forEach((count, store) => { if (count > maxCount) { maxCount = count; mostUsedStore = store; } });
+
+    let label = 'Todo o tempo';
+    if (dateRange.start && dateRange.end) {
+      label = `${format(dateRange.start, 'dd/MM')} – ${format(dateRange.end, 'dd/MM')}`;
+    } else if (dateRange.start) {
+      label = `A partir de ${format(dateRange.start, 'dd/MM')}`;
+    }
+
+    return {
+      totalSpent: purchases.reduce((s, e) => s + e.total, 0),
+      mostUsedStore,
+      purchaseCount: purchases.length,
+      label,
+    };
+  }, [filteredEvents, dateRange]);
 
   const loadHistory = useCallback(async () => {
     try {
       const db = getDb();
 
-      // Load purchases
       const invoices = await db.getAllAsync<Invoice & { storeName: string }>(
         `SELECT i.*, s.name as storeName
          FROM invoices i
@@ -134,7 +152,6 @@ export default function HistoryScreen() {
         })
       );
 
-      // Fix N+1: use LAG via self-join to get previous quantity in one query
       const inventoryHistory = await db.getAllAsync<{
         date: string;
         inventoryItemId: number;
@@ -144,12 +161,9 @@ export default function HistoryScreen() {
         productId: number;
       }>(
         `SELECT
-           ih.date,
-           ih.inventoryItemId,
-           ih.quantity,
+           ih.date, ih.inventoryItemId, ih.quantity,
            prev.quantity as prevQuantity,
-           p.name as productName,
-           p.id as productId
+           p.name as productName, p.id as productId
          FROM inventory_history ih
          JOIN inventory_items ii ON ih.inventoryItemId = ii.id
          JOIN products p ON ii.productId = p.id
@@ -164,7 +178,6 @@ export default function HistoryScreen() {
         [listId]
       );
 
-      // Group by date
       const inventoryEventsMap = new Map<string, InventoryChange[]>();
       for (const entry of inventoryHistory) {
         const previousQuantity = entry.prevQuantity ?? 0;
@@ -190,31 +203,9 @@ export default function HistoryScreen() {
           changes,
         }));
 
-      const allEvents = [...purchaseEvents, ...inventoryEvents].sort(
+      setEvents([...purchaseEvents, ...inventoryEvents].sort(
         (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-      );
-
-      setEvents(allEvents);
-
-      // Month summary
-      const now = new Date();
-      const thisMonth = purchaseEvents.filter(e => {
-        const d = parseISO(e.date);
-        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-      });
-
-      const storeCount = new Map<string, number>();
-      thisMonth.forEach(e => storeCount.set(e.store, (storeCount.get(e.store) || 0) + 1));
-
-      let mostUsedStore: string | null = null;
-      let maxCount = 0;
-      storeCount.forEach((count, store) => { if (count > maxCount) { maxCount = count; mostUsedStore = store; } });
-
-      setMonthSummary({
-        totalSpent: thisMonth.reduce((s, e) => s + e.total, 0),
-        mostUsedStore,
-        purchaseCount: thisMonth.length,
-      });
+      ));
     } catch (error) {
       console.error('Error loading history:', error);
     }
@@ -282,9 +273,12 @@ export default function HistoryScreen() {
                       {listItem.quantity}× {listItem.unitPrice ? formatCurrency(listItem.unitPrice) : '—'}
                     </Text>
                   </View>
-                  <Text style={[localStyles.itemTotal, { color: theme.colors.onSurface }]}>
-                    {formatCurrency(listItem.lineTotal)}
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <Text style={[localStyles.itemTotal, { color: theme.colors.onSurface }]}>
+                      {formatCurrency(listItem.lineTotal)}
+                    </Text>
+                    <MaterialCommunityIcons name="chevron-right" size={14} color={theme.colors.outline} />
+                  </View>
                 </Pressable>
               ))}
             </>
@@ -294,7 +288,11 @@ export default function HistoryScreen() {
     }
 
     return (
-      <Surface style={[localStyles.card, { backgroundColor: theme.colors.surface, borderLeftColor: theme.colors.secondary, borderLeftWidth: 3 }]}>
+      <Surface style={[localStyles.card, {
+        backgroundColor: theme.colors.surface,
+        borderLeftColor: theme.colors.secondary,
+        borderLeftWidth: 3,
+      }]}>
         <Pressable onPress={() => toggleExpand(item.id)} style={localStyles.cardHeader}>
           <View style={localStyles.cardHeaderLeft}>
             <MaterialCommunityIcons name="package-variant" size={16} color={theme.colors.secondary} />
@@ -335,15 +333,18 @@ export default function HistoryScreen() {
                     {change.previousQuantity} → {change.currentQuantity}
                   </Text>
                 </View>
-                <View style={[
-                  localStyles.changeBadge,
-                  { backgroundColor: change.change > 0 ? theme.colors.primaryContainer : theme.colors.errorContainer }
-                ]}>
-                  <Text style={[localStyles.changeText, {
-                    color: change.change > 0 ? theme.colors.primary : theme.colors.error
-                  }]}>
-                    {change.change > 0 ? '+' : ''}{change.change}
-                  </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <View style={[
+                    localStyles.changeBadge,
+                    { backgroundColor: change.change > 0 ? theme.colors.primaryContainer : theme.colors.errorContainer }
+                  ]}>
+                    <Text style={[localStyles.changeText, {
+                      color: change.change > 0 ? theme.colors.primary : theme.colors.error
+                    }]}>
+                      {change.change > 0 ? '+' : ''}{change.change}
+                    </Text>
+                  </View>
+                  <MaterialCommunityIcons name="chevron-right" size={14} color={theme.colors.outline} />
                 </View>
               </Pressable>
             ))}
@@ -353,6 +354,8 @@ export default function HistoryScreen() {
     );
   }, [expandedEventId, theme, toggleExpand, handleItemPress]);
 
+  const hasActiveFilter = dateRange.start !== null;
+
   return (
     <SafeAreaView style={[localStyles.container, { backgroundColor: theme.colors.background }]}>
       <ContextualHeader
@@ -361,13 +364,15 @@ export default function HistoryScreen() {
         onListDelete={handleListDelete}
       />
 
-      {/* Month Summary */}
+      {/* Summary — reacts to active filter */}
       <Surface style={[localStyles.summaryCard, { backgroundColor: theme.colors.surface }]}>
-        <Text style={[localStyles.summaryTitle, { color: theme.colors.onSurface }]}>Este mês</Text>
+        <Text style={[localStyles.summaryTitle, { color: theme.colors.onSurfaceVariant }]}>
+          {summary.label}
+        </Text>
         <View style={localStyles.summaryRow}>
           <View style={localStyles.summaryItem}>
             <Text style={[localStyles.summaryValue, { color: theme.colors.primary }]}>
-              {formatCurrency(monthSummary.totalSpent)}
+              {formatCurrency(summary.totalSpent)}
             </Text>
             <Text style={[localStyles.summaryLabel, { color: theme.colors.onSurfaceVariant }]}>
               Total gasto
@@ -375,15 +380,20 @@ export default function HistoryScreen() {
           </View>
           <View style={localStyles.summaryItem}>
             <Text style={[localStyles.summaryValue, { color: theme.colors.primary }]}>
-              {monthSummary.purchaseCount}
+              {summary.purchaseCount}
             </Text>
             <Text style={[localStyles.summaryLabel, { color: theme.colors.onSurfaceVariant }]}>
               Compras
             </Text>
           </View>
           <View style={localStyles.summaryItem}>
-            <Text style={[localStyles.summaryValue, { color: theme.colors.primary }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
-              {monthSummary.mostUsedStore || '—'}
+            <Text
+              style={[localStyles.summaryValue, { color: theme.colors.primary }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.7}
+            >
+              {summary.mostUsedStore || '—'}
             </Text>
             <Text style={[localStyles.summaryLabel, { color: theme.colors.onSurfaceVariant }]}>
               Loja principal
@@ -392,26 +402,44 @@ export default function HistoryScreen() {
         </View>
       </Surface>
 
-      {/* Filters */}
+      {/* Filter bar */}
       <View style={[localStyles.filterRow, { borderBottomColor: theme.colors.outlineVariant }]}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
-          {(['all', 'month', 'week'] as const).map(period => (
-            <Chip
-              key={period}
-              selected={selectedPeriod === period}
-              onPress={() => setSelectedPeriod(period)}
-              style={{ marginRight: 8 }}
-              compact
+        <Pressable
+          onPress={() => setDatePickerVisible(true)}
+          style={[localStyles.dateButton, {
+            borderColor: hasActiveFilter ? theme.colors.primary : theme.colors.outline,
+            backgroundColor: hasActiveFilter ? theme.colors.primaryContainer : 'transparent',
+          }]}
+        >
+          <MaterialCommunityIcons
+            name="calendar-range"
+            size={15}
+            color={hasActiveFilter ? theme.colors.primary : theme.colors.onSurfaceVariant}
+          />
+          <Text style={[localStyles.dateButtonText, {
+            color: hasActiveFilter ? theme.colors.primary : theme.colors.onSurfaceVariant,
+          }]}>
+            {hasActiveFilter
+              ? `${format(dateRange.start!, 'dd/MM')}${dateRange.end ? ` → ${format(dateRange.end, 'dd/MM')}` : ''}`
+              : 'Período'}
+          </Text>
+          {hasActiveFilter && (
+            <Pressable
+              onPress={(e) => { e.stopPropagation(); setDateRange({ start: null, end: null }); }}
+              hitSlop={8}
             >
-              {period === 'all' ? 'Tudo' : period === 'month' ? 'Este mês' : 'Esta semana'}
-            </Chip>
-          ))}
-        </ScrollView>
-        <SearchBar
-          searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
-          placeholder="Buscar por produto ou loja..."
-        />
+              <MaterialCommunityIcons name="close-circle" size={15} color={theme.colors.primary} />
+            </Pressable>
+          )}
+        </Pressable>
+
+        <View style={{ flex: 1 }}>
+          <SearchBar
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            placeholder="Produto ou loja..."
+          />
+        </View>
       </View>
 
       {filteredEvents.length === 0 ? (
@@ -432,6 +460,13 @@ export default function HistoryScreen() {
           contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
         />
       )}
+
+      <DateRangePickerModal
+        visible={datePickerVisible}
+        value={dateRange}
+        onConfirm={(range) => { setDateRange(range); setDatePickerVisible(false); }}
+        onDismiss={() => setDatePickerVisible(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -440,20 +475,40 @@ const localStyles = StyleSheet.create({
   container: { flex: 1 },
   summaryCard: {
     margin: 16,
+    marginBottom: 8,
     padding: 16,
     borderRadius: 12,
     elevation: 2,
   },
-  summaryTitle: { fontSize: 14, fontWeight: '600', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.6 },
+  summaryTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom: 10,
+  },
   summaryRow: { flexDirection: 'row', justifyContent: 'space-between' },
   summaryItem: { alignItems: 'center', flex: 1 },
   summaryValue: { fontSize: 15, fontWeight: 'bold', textAlign: 'center' },
   summaryLabel: { fontSize: 11, marginTop: 4, textAlign: 'center' },
   filterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderBottomWidth: 1,
   },
+  dateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderWidth: 1,
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  dateButtonText: { fontSize: 13 },
   card: {
     marginBottom: 10,
     borderRadius: 10,
