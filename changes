@@ -1,0 +1,110 @@
+diff --git a/src/screens/HistoryScreen.tsx b/src/screens/HistoryScreen.tsx
+index dea23ac..53d6988 100644
+--- a/src/screens/HistoryScreen.tsx
++++ b/src/screens/HistoryScreen.tsx
+@@ -3,7 +3,7 @@ import { View, StyleSheet, FlatList, Pressable } from 'react-native';
+ import { Text, Surface, Chip, IconButton, Divider, useTheme } from 'react-native-paper';
+ import { useNavigation, useFocusEffect } from '@react-navigation/native';
+ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+-import { parseISO, format, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
++import { parseISO, format, isWithinInterval, startOfDay, endOfDay, subMonths, startOfMonth, endOfMonth } from 'date-fns';
+ import { ptBR } from 'date-fns/locale';
+ import { SafeAreaView } from 'react-native-safe-area-context';
+ import { MaterialCommunityIcons } from '@expo/vector-icons';
+@@ -47,6 +47,8 @@ interface PeriodSummary {
+   mostUsedStore: string | null;
+   purchaseCount: number;
+   label: string;
++  trend: number | null;
++  prevTotal: number;
+ }
+ 
+ export default function HistoryScreen() {
+@@ -118,13 +120,42 @@ export default function HistoryScreen() {
+       label = `A partir de ${format(dateRange.start, 'dd/MM')}`;
+     }
+ 
++    const totalSpent = purchases.reduce((s, e) => s + e.total, 0);
++
++    // Determine previous period interval
++    let prevStart: Date | null = null;
++    let prevEnd: Date | null = null;
++
++    if (dateRange.start) {
++      const rangeMs = (endOfDay(dateRange.end ?? dateRange.start)).getTime() 
++                    - startOfDay(dateRange.start).getTime();
++      prevEnd = new Date(startOfDay(dateRange.start).getTime() - 1);
++      prevStart = new Date(prevEnd.getTime() - rangeMs);
++    } else {
++      // Default: current month vs previous month
++      const now = new Date();
++      prevStart = startOfMonth(subMonths(now, 1));
++      prevEnd = endOfMonth(subMonths(now, 1));
++    }
++
++    const prevPurchases = events.filter(e => {
++      if (e.type !== 'purchase') return false;
++      const d = parseISO(e.date);
++      return isWithinInterval(d, { start: prevStart!, end: prevEnd! });
++    }) as Extract<HistoryEvent, { type: 'purchase' }>[];
++
++    const prevTotal = prevPurchases.reduce((s, e) => s + e.total, 0);
++    const trend = prevTotal > 0 ? ((totalSpent - prevTotal) / prevTotal) * 100 : null;
++
+     return {
+-      totalSpent: purchases.reduce((s, e) => s + e.total, 0),
++      totalSpent,
+       mostUsedStore,
+       purchaseCount: purchases.length,
+       label,
++      trend,
++      prevTotal,
+     };
+-  }, [filteredEvents, dateRange]);
++  }, [filteredEvents, dateRange, events]);
+ 
+   const loadHistory = useCallback(async () => {
+     try {
+@@ -400,10 +431,26 @@ export default function HistoryScreen() {
+             </Text>
+           </View>
+         </View>
++        {summary.trend !== null && (
++          <View style={[localStyles.trendRow, { borderTopColor: theme.colors.outlineVariant }]}>
++            <MaterialCommunityIcons
++              name={summary.trend > 0 ? 'trending-up' : summary.trend < 0 ? 'trending-down' : 'trending-neutral'}
++              size={16}
++              color={summary.trend > 0 ? theme.colors.error : theme.colors.primary}
++            />
++            <Text style={[localStyles.trendText, {
++              color: summary.trend > 0 ? theme.colors.error : theme.colors.primary
++            }]}>
++              {summary.trend > 0 ? '+' : ''}{summary.trend.toFixed(1)}% vs período anterior
++              {' '}({formatCurrency(summary.prevTotal)})
++            </Text>
++          </View>
++        )}
+       </Surface>
+ 
+       {/* Filter bar */}
+       <View style={[localStyles.filterRow, { borderBottomColor: theme.colors.outlineVariant }]}>
++
+         <Pressable
+           onPress={() => setDatePickerVisible(true)}
+           style={[localStyles.dateButton, {
+@@ -509,6 +556,15 @@ const localStyles = StyleSheet.create({
+     paddingVertical: 6,
+   },
+   dateButtonText: { fontSize: 13 },
++  trendRow: {
++    flexDirection: 'row',
++    alignItems: 'center',
++    gap: 6,
++    marginTop: 12,
++    paddingTop: 10,
++    borderTopWidth: StyleSheet.hairlineWidth,
++  },
++  trendText: { fontSize: 12, fontWeight: '500' },
+   card: {
+     marginBottom: 10,
+     borderRadius: 10,
