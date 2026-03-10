@@ -287,7 +287,7 @@ export default function AddProductToShoppingListScreen() {
         }} />}
       </View>
     );
-  }, [sessionChanges, inventoryItems, shoppingListByInventoryId, handlePlus, handleMinus, theme]);
+  }, [sessionChanges, inventoryItems, shoppingListByInventoryId, handlePlus, handleMinus, theme, isSessionCollapsed]);
 
   const renderInventoryRow = useCallback(({ item }: { item: InventoryItem }) => {
     const listInfo = shoppingListByInventoryId.get(item.id);
