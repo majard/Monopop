@@ -115,6 +115,9 @@ export function EditShoppingItemModal({
 
   const handleSave = () => {
     const price = priceCentsRef.current > 0 ? priceCentsRef.current / 100 : undefined;
+    if (checked !== item?.checked) {
+      onToggleChecked();
+    }
     onSave(quantity, price);
   };
 
@@ -263,10 +266,7 @@ export function EditShoppingItemModal({
           <Button
             mode="outlined"
             icon={checked ? "cart-minus" : "cart-plus"}
-            onPress={() => {
-              setChecked(prev => !prev);
-              onToggleChecked();
-            }}
+            onPress={() => setChecked(prev => !prev)}
             style={styles.cartButton}
           >
             {checked ? "Remover do carrinho" : "Mover pro carrinho"}
