@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View, StyleSheet } from "react-native";
+import { View, StyleSheet, Pressable } from "react-native";
 import {
   Modal,
   Portal,
@@ -8,8 +8,11 @@ import {
   Surface,
   useTheme,
 } from "react-native-paper";
-import { getSetting } from "../database/database";
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import { SearchablePickerDialog } from "./SearchablePickerDialog";
+import { DateRangePickerModal } from './DateRangePickerModal';
 
 export interface StoreOption {
   id: number;
@@ -20,7 +23,8 @@ interface ConfirmInvoiceModalProps {
   visible: boolean;
   stores: StoreOption[];
   defaultStoreName: string;
-  onConfirm: (storeName: string) => void;
+  total: number;
+  onConfirm: (storeName: string, date: Date) => void;
   onDismiss: () => void;
   loading?: boolean;
 }
@@ -29,44 +33,22 @@ export function ConfirmInvoiceModal({
   visible,
   stores,
   defaultStoreName,
+  total,
   onConfirm,
   onDismiss,
   loading,
 }: ConfirmInvoiceModalProps) {
   const theme = useTheme();
   const [storeName, setStoreName] = useState("");
-  const [defaultStoreMode, setDefaultStoreMode] = useState<'ask' | 'last' | 'fixed'>('ask');
-  const [defaultStoreId, setDefaultStoreId] = useState<number | null>(null);
-
-  useEffect(() => {
-    const loadSettings = async () => {
-      const [storeMode, storeId] = await Promise.all([
-        getSetting('defaultStoreMode'),
-        getSetting('defaultStoreId')
-      ]);
-
-      setDefaultStoreMode((storeMode as 'ask' | 'last' | 'fixed') || 'ask');
-      setDefaultStoreId(storeId ? parseInt(storeId) : null);
-    };
-
-    loadSettings();
-  }, []);
+  const [date, setDate] = useState(new Date());
+  const [datePickerVisible, setDatePickerVisible] = useState(false);
 
   useEffect(() => {
     if (visible) {
-      let initialStoreName = defaultStoreName || "";
-
-      // Use default store mode to determine initial store
-      if (defaultStoreMode !== 'ask' && defaultStoreId) {
-        const defaultStore = stores.find(s => s.id === defaultStoreId);
-        if (defaultStore) {
-          initialStoreName = defaultStore.name;
-        }
-      }
-
-      setStoreName(initialStoreName);
+      setStoreName(defaultStoreName || '');
+      setDate(new Date());
     }
-  }, [visible, defaultStoreName, defaultStoreMode, defaultStoreId, stores]);
+  }, [visible, defaultStoreName]);
 
   const canConfirm = storeName.trim().length > 0;
 
@@ -101,8 +83,28 @@ export function ConfirmInvoiceModal({
             title="Selecionar loja"
             placeholder="Digite o nome da loja"
             embedded={true}
-            onDismiss={() => {}}
+            onDismiss={() => { }}
           />
+
+          {/* Total */}
+          <View style={[styles.totalRow, { backgroundColor: theme.colors.surfaceVariant }]}>
+            <Text style={{ color: theme.colors.onSurfaceVariant, fontSize: 13 }}>Total registrado</Text>
+            <Text style={{ color: theme.colors.primary, fontWeight: '700', fontSize: 18 }}>
+              R$ {total.toFixed(2).replace('.', ',')}
+            </Text>
+          </View>
+
+          {/* Date */}
+          <Text style={styles.label}>Data</Text>
+          <Pressable
+            onPress={() => setDatePickerVisible(true)}
+            style={[styles.dateButton, { borderColor: theme.colors.outline }]}
+          >
+            <MaterialCommunityIcons name="calendar" size={18} color={theme.colors.primary} />
+            <Text style={{ color: theme.colors.onSurface, fontSize: 15 }}>
+              {format(date, "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
+            </Text>
+          </Pressable>
 
           <View style={styles.buttonRow}>
             <Button onPress={onDismiss} style={styles.button}>
@@ -110,7 +112,7 @@ export function ConfirmInvoiceModal({
             </Button>
             <Button
               mode="contained"
-              onPress={() => onConfirm(storeName)}
+              onPress={() => onConfirm(storeName, date)}
               disabled={!canConfirm || !!loading}
               loading={!!loading}
               style={styles.button}
@@ -120,6 +122,15 @@ export function ConfirmInvoiceModal({
           </View>
         </Surface>
       </Modal>
+      <DateRangePickerModal
+        visible={datePickerVisible}
+        value={{ start: date, end: date }}
+        onConfirm={(range) => {
+          if (range.start) setDate(range.start);
+          setDatePickerVisible(false);
+        }}
+        onDismiss={() => setDatePickerVisible(false)}
+      />
     </Portal>
   );
 }
@@ -154,5 +165,24 @@ const styles = StyleSheet.create({
   },
   button: {
     marginLeft: 8,
+  },
+  totalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 16,
+  },
+  dateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 4,
   },
 });

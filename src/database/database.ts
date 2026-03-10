@@ -935,10 +935,11 @@ export const buyShoppingListItem = async (
 /** Conclude shopping for a list AND create an invoice (store required). Single transaction. */
 export const concludeShoppingForListWithInvoice = async (
   listId: number,
-  storeName: string
+  storeName: string,
+  date?: Date
 ): Promise<{ invoiceId: number }> => {
   const db = getDb();
-  const now = new Date().toISOString();
+  const now = (date ?? new Date()).toISOString();
   const dateToSave = now.split('T')[0];
 
   let invoiceId = 0;

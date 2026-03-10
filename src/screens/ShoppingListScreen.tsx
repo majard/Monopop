@@ -386,11 +386,11 @@ export default function ShoppingListScreen() {
     setConfirmVisible(true);
   }, [checkedItems.length]);
 
-  const handleConfirmConclude = useCallback(async (storeName: string) => {
+  const handleConfirmConclude = useCallback(async (storeName: string, date: Date) => {
     if (checkedItems.length === 0) return;
     setLoading(true);
     try {
-      await concludeShoppingForListWithInvoice(listId, storeName);
+      await concludeShoppingForListWithInvoice(listId, storeName, date);
       const store = stores.find(s => s.name === storeName);
       if (store) {
         await setSetting('defaultStoreId', store.id.toString());
@@ -619,6 +619,7 @@ export default function ShoppingListScreen() {
         visible={confirmVisible}
         stores={stores}
         defaultStoreName={defaultStoreName}
+        total={totalCheckedPrice}
         onConfirm={handleConfirmConclude}
         onDismiss={() => setConfirmVisible(false)}
         loading={loading}
