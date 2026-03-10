@@ -1,38 +1,12 @@
 {
   "name": "listai",
   "author": "Mah",
-  "homepage": "https://www.typescriptlang.org/",
   "version": "1.2.0",
   "license": "Apache-2.0",
-  "keywords": [
-    "TypeScript",
-    "Microsoft",
-    "compiler",
-    "language",
-    "javascript"
-  ],
-  "bugs": {
-    "url": "https://github.com/microsoft/TypeScript/issues"
-  },
   "main": "node_modules/expo/AppEntry.js",
-  "typings": "./lib/typescript.d.ts",
-  "bin": {
-    "tsc": "./bin/tsc",
-    "tsserver": "./bin/tsserver"
-  },
   "engines": {
     "node": ">=14.17"
   },
-  "files": [
-    "bin",
-    "lib",
-    "!lib/enu",
-    "LICENSE.txt",
-    "README.md",
-    "SECURITY.md",
-    "ThirdPartyNoticeText.txt",
-    "!**/.gitattributes"
-  ],
   "devDependencies": {
     "@babel/core": "^7.20.0",
     "@babel/preset-typescript": "^7.27.0",
@@ -67,6 +41,7 @@
     "eslint": "^9.17.0",
     "eslint-formatter-autolinkable-stylish": "^1.4.0",
     "eslint-plugin-regexp": "^2.7.0",
+    "expo-dev-client": "~6.0.20",
     "fast-xml-parser": "^4.5.1",
     "glob": "^10.4.5",
     "globals": "^15.13.0",
@@ -96,14 +71,6 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "build": "npm run build:compiler && npm run build:tests",
-    "build:compiler": "hereby local",
-    "build:tests": "hereby tests",
-    "build:tests:notypecheck": "hereby tests --no-typecheck",
-    "clean": "hereby clean",
-    "gulp": "hereby",
-    "lint": "hereby lint",
-    "knip": "hereby knip",
     "format": "dprint fmt",
     "setup-hooks": "node scripts/link-hooks.mjs",
     "start": "expo start",
@@ -125,7 +92,6 @@
     "node": "20.1.0",
     "npm": "8.19.4"
   },
-  "gitHead": "beb69e4cdd61b1a0fd9ae21ae58bd4bd409d7217",
   "private": true,
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
@@ -136,7 +102,6 @@
     "expo": "~54.0.33",
     "expo-clipboard": "~8.0.8",
     "expo-constants": "~18.0.13",
-    "expo-dev-client": "~6.0.20",
     "expo-document-picker": "~14.0.8",
     "expo-file-system": "~19.0.21",
     "expo-linking": "~8.0.11",

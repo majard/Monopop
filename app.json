@@ -3,6 +3,7 @@
     "name": "Listai",
     "slug": "listai",
     "version": "1.5.2",
+    "scheme": "listai",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",

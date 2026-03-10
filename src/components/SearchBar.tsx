@@ -48,4 +48,4 @@ const localStyles = StyleSheet.create({
     fontSize: 15,
     backgroundColor: 'transparent',
   },
-});x
+});
