@@ -1,14 +1,14 @@
 import React from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
-import { Appbar, Card, Text, useTheme, Divider, Avatar } from 'react-native-paper';
+import { View, StyleSheet, ScrollView, Linking } from 'react-native';
+import { Appbar, Card, Text, useTheme, Divider } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
-import { SafeAreaView } from 'react-native-safe-area-context';  
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 const version = Constants.expoConfig?.version ?? '1.5';
-
 
 type AboutScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'About'>;
 
@@ -23,49 +23,95 @@ export default function AboutScreen() {
         <Appbar.Content title="Sobre" />
       </Appbar.Header>
 
-      <ScrollView style={styles.scrollView}>
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
-          <Avatar.Icon
-            size={80}
-            icon="cart"
-            style={{ backgroundColor: theme.colors.primary }}
+          <MaterialCommunityIcons
+            name="cart-outline"
+            size={64}
+            color={theme.colors.primary}
           />
-          <Text style={styles.appName}>Listai</Text>
-          <Text style={styles.version}>{version}</Text>
+          <Text variant="headlineMedium" style={styles.appName}>Monopop</Text>
+          <Text variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant }}>
+            v{version}
+          </Text>
         </View>
 
         <Card style={styles.card}>
           <Card.Content>
-            <Text style={styles.sectionTitle}>Desenvolvedor</Text>
-            <Text style={styles.text}>Mah Jardim</Text>
-          </Card.Content>
-        </Card>
-
-        <Card style={styles.card}>
-          <Card.Content>
-            <Text style={styles.sectionTitle}>Sobre o App</Text>
-            <Text style={styles.text}>
-              Listai é um aplicativo de gerenciamento de estoque e listas de compras.
-              Organize seus produtos, acompanhe seu estoque e gerencie suas compras de forma simples e eficiente.
+            <Text variant="titleMedium" style={styles.sectionTitle}>O que é</Text>
+            <Text variant="bodyMedium" style={{ color: theme.colors.onSurface }}>
+              Monopop é um gerenciador de estoque e lista de compras offline, pensado para
+              uso profissional no dia a dia. Funciona sem internet, com todos os dados
+              armazenados localmente no dispositivo.
             </Text>
           </Card.Content>
         </Card>
 
         <Card style={styles.card}>
           <Card.Content>
-            <Text style={styles.sectionTitle}>Recursos</Text>
-            <Text style={styles.listItem}>• Múltiplas listas de produtos</Text>
-            <Text style={styles.listItem}>• Controle de estoque</Text>
-            <Text style={styles.listItem}>• Lista de compras integrada</Text>
-            <Text style={styles.listItem}>• Histórico de compras</Text>
-            <Text style={styles.listItem}>• Categorias personalizáveis</Text>
-            <Text style={styles.listItem}>• Backup e restauração</Text>
+            <Text variant="titleMedium" style={styles.sectionTitle}>Recursos</Text>
+            {[
+              'Múltiplas listas de produtos',
+              'Controle de estoque com histórico de quantidades',
+              'Lista de compras com rastreamento de preços',
+              'Importação de lista via texto',
+              'Histórico de compras com invoices por loja',
+              'Análise de gastos e tendências',
+              'Categorias personalizáveis',
+              'Backup e restauração',
+              '100% offline',
+            ].map((item) => (
+              <View key={item} style={styles.listItem}>
+                <MaterialCommunityIcons
+                  name="check-circle-outline"
+                  size={16}
+                  color={theme.colors.primary}
+                  style={styles.listIcon}
+                />
+                <Text variant="bodyMedium" style={{ color: theme.colors.onSurface, flex: 1 }}>
+                  {item}
+                </Text>
+              </View>
+            ))}
+          </Card.Content>
+        </Card>
+
+        <Card style={styles.card}>
+          <Card.Content>
+            <Text variant="titleMedium" style={styles.sectionTitle}>Desenvolvedor</Text>
+            <Text variant="bodyMedium" style={{ color: theme.colors.onSurface }}>
+              Mah Jardim
+            </Text>
+          </Card.Content>
+        </Card>
+
+        <Card
+          style={[styles.card, styles.githubCard]}
+          onPress={() => Linking.openURL('https://github.com/mahjard/monopop')}
+        >
+          <Card.Content style={styles.githubContent}>
+            <MaterialCommunityIcons
+              name="github"
+              size={24}
+              color={theme.colors.onSurface}
+            />
+            <Text variant="bodyMedium" style={[styles.githubText, { color: theme.colors.onSurface }]}>
+              Código-fonte no GitHub
+            </Text>
+            <MaterialCommunityIcons
+              name="open-in-new"
+              size={16}
+              color={theme.colors.onSurfaceVariant}
+            />
           </Card.Content>
         </Card>
 
         <Divider style={styles.divider} />
 
-        <Text style={styles.copyright}>
+        <Text
+          variant="bodySmall"
+          style={[styles.copyright, { color: theme.colors.onSurfaceVariant }]}
+        >
           © 2026 Monopop. Todos os direitos reservados.
         </Text>
       </ScrollView>
@@ -74,55 +120,50 @@ export default function AboutScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-    padding: 16,
-  },
+  container: { flex: 1 },
+  scrollView: { flex: 1 },
+  scrollContent: { padding: 16, paddingBottom: 32 },
   header: {
     alignItems: 'center',
     marginBottom: 24,
-    marginTop: 16,
+    marginTop: 8,
+    gap: 8,
   },
   appName: {
-    fontSize: 28,
     fontWeight: 'bold',
-    marginTop: 16,
-  },
-  version: {
-    fontSize: 16,
-    color: '#666',
-    marginTop: 4,
+    marginTop: 8,
   },
   card: {
     marginBottom: 16,
     borderRadius: 12,
-    elevation: 2,
   },
   sectionTitle: {
-    fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 12,
   },
-  text: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: '#333',
-  },
   listItem: {
-    fontSize: 14,
-    lineHeight: 24,
-    color: '#333',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+    gap: 8,
   },
-  divider: {
-    marginVertical: 24,
+  listIcon: {
+    marginTop: 2,
   },
+  githubCard: {
+    marginBottom: 8,
+  },
+  githubContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  githubText: {
+    flex: 1,
+  },
+  divider: { marginVertical: 24 },
   copyright: {
     textAlign: 'center',
-    fontSize: 12,
-    color: '#999',
-    marginBottom: 16,
+    marginBottom: 8,
   },
 });
