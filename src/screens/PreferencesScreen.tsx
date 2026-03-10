@@ -9,8 +9,7 @@ import {
   Divider,
   Portal,
   Dialog,
-  Button,
-  Provider
+  Button
 } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -137,7 +136,6 @@ export default function PreferencesScreen() {
   };
 
   return (
-    <Provider>
       <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
         <Appbar.Header>
           <Appbar.BackAction onPress={() => navigation.navigate('Config')} />
@@ -272,7 +270,6 @@ export default function PreferencesScreen() {
           </View>
         </ScrollView>
       </SafeAreaView>
-    </Provider>
   );
 }
 
