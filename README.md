@@ -1,147 +1,147 @@
 # Monopop
 
-Gerenciador de estoque e lista de compras para Android. Offline-first, sem backend, sem conta — todos os dados vivem no SQLite do dispositivo.
+An Android inventory and shopping list manager. Offline-first, no backend, no account — all data lives in SQLite on the device.
 
-Desenvolvido para uso real e diário: a usuária primária usa o app no trabalho para controlar inventário e fazer compras corredor por corredor no mercado. Não é um projeto demo — tem dados reais em produção, feedback loop real e bugs com consequências reais.
+Built for real daily use: the primary user manages inventory at work and shops aisle-by-aisle at the supermarket. Not a demo project — real data in production, real feedback loop, real consequences when things break.
 
 [⬇️ Download APK](https://github.com/mahjard/monopop/releases/latest)
 
 ---
 
-## Funcionalidades
+## Features
 
-- **Múltiplas listas independentes** — mesmos produtos, estoques separados por lista (trabalho, casa, etc.)
-- **Lista de compras com rastreamento de preços** — preço sugerido automaticamente por loja, com fallback para qualquer loja
-- **Menor preço em 90 dias** — por produto, carregado em background para não bloquear a interação
-- **Importação via texto** — cola uma lista de qualquer fonte; matching fuzzy mapeia para produtos existentes
-- **Invoices de compra** — ao concluir, registra nota com data, loja e preços pagos; histórico sem esforço extra
-- **Análise de gastos** — tendência vs período anterior, filtrável por data e loja
-- **Histórico de quantidades** — rastreia variação de estoque ao longo do tempo; calcula consumo médio/semana
-- **Reordenação por drag-and-drop** — ordem customizada do inventário, persistida no banco
-- **Categorias colapsáveis na lista de compras** — organização por corredor de mercado
-- **Backup e restauração** — exporta tudo como JSON; usuário não fica refém do app
-- **100% offline** — sem conta, sem internet, sem latência de rede
+- **Multiple independent lists** — same products, separate inventory per list (work, home, etc.)
+- **Shopping list with price tracking** — price auto-suggested per store, with fallback to any store
+- **Lowest price in 90 days** — per product, loaded in background to avoid blocking interaction
+- **Text import** — paste a list from any source; fuzzy matching maps to existing products
+- **Purchase invoices** — on checkout, records a note with date, store and prices paid; history with zero extra effort
+- **Spending analysis** — trend vs previous period, filterable by date and store
+- **Quantity history** — tracks stock changes over time; calculates average weekly consumption
+- **Drag-and-drop reordering** — custom inventory order, persisted in the database
+- **Collapsible categories in shopping list** — aisle-by-aisle organization
+- **Backup and restore** — exports everything as JSON; users are never locked in
+- **100% offline** — no account, no internet, no network latency
 
 ---
 
 ## Stack
 
-| Camada | Tecnologia |
+| Layer | Technology |
 |---|---|
 | Framework | React Native (Expo SDK 54, bare workflow) |
 | UI | React Native Paper (Material Design 3) |
-| Banco de dados | expo-sqlite (SQLite, schema V8, WAL mode) |
-| Navegação | React Navigation (Stack + Bottom Tabs) |
-| Animações | Reanimated v4 |
-| Runtime | New Architecture (JSI) habilitada |
+| Database | expo-sqlite (SQLite, schema V8, WAL mode) |
+| Navigation | React Navigation (Stack + Bottom Tabs) |
+| Animations | Reanimated v4 |
+| Runtime | New Architecture (JSI) enabled |
 
 ---
 
-## Arquitetura
+## Architecture
 
-### Schema relacional
+### Relational schema
 
-`Product` (entidade genérica) é separado de `InventoryItem` (instância em uma lista) e de `ShoppingListItem` (intenção de compra). Um produto existe independente de listas; o inventário é sempre scoped a uma lista. Isso permite que o mesmo produto apareça em múltiplas listas com quantidades independentes sem duplicar dados.
+`Product` (generic entity) is separate from `InventoryItem` (instance within a list) and `ShoppingListItem` (purchase intent). A product exists independently of lists; inventory is always scoped to a list. This allows the same product to appear across multiple lists with independent quantities without duplicating data.
 
-`Invoice` + `InvoiceItem` emergem naturalmente do fluxo de conclusão de compras — o histórico de preços por produto por loja surge sem nenhum esforço extra do usuário. Dados acionáveis como consequência natural do uso.
+`Invoice` + `InvoiceItem` emerge naturally from the checkout flow — per-product, per-store price history is built up with zero extra user effort. Actionable data as a natural consequence of use.
 
-### Gerenciamento de estado
+### State management
 
-Dois contextos propositalmente separados: `ListContext` guarda apenas `listId` + `setListId` (seleção de navegação); `ListDataContext` guarda os dados dependentes do `listId`. Telas que só precisam do `listId` não carregam o overhead dos dados.
+Two intentionally separate contexts: `ListContext` holds only `listId` + `setListId` (navigation selection); `ListDataContext` holds the data dependent on `listId`. Screens that only need the `listId` don't load the data overhead.
 
-`BottomTabNavigator` recebe `key={listId}` — quando `listId` muda, o navigator remonta inteiro. Efeito colateral intencional: estado local de todas as tabs é limpo ao trocar de lista sem lógica explícita de reset.
+`BottomTabNavigator` receives `key={listId}` — when `listId` changes, the entire navigator remounts. Intentional side effect: local state across all tabs is cleared on list switch without explicit reset logic.
 
-`ShoppingListScreen` usa `FlatList` com array flat de rows tipadas (`section-header | category-header | item`) em vez de `SectionList`. Necessário para dois níveis de agrupamento (pendentes/carrinho + sub-headers de categoria colapsáveis) — `SectionList` suporta apenas um nível nativamente.
+`ShoppingListScreen` uses a `FlatList` with a flat array of typed rows (`section-header | category-header | item`) instead of `SectionList`. Required for two levels of grouping (pending/cart + collapsible category sub-headers) — `SectionList` only supports one level natively.
 
-### Carregamento em duas fases
+### Two-phase loading
 
-Dados principais chegam em uma única query com JOIN. Preços históricos (`getLowestPriceForProducts` — JOIN em `invoice_items → invoices → stores`) são carregados em background via `.then()`. A separação é intencional: preços históricos são informativos, não bloqueantes. A lista é interagível imediatamente.
+Main data arrives in a single JOIN query. Historical prices (`getLowestPriceForProducts` — JOIN across `invoice_items → invoices → stores`) load in background via `.then()`. The split is intentional: historical prices are informational, not blocking. The list is interactive immediately.
 
-### Encapsulamento de renderização
+### Rendering encapsulation
 
-`InventoryList` detecta `sortOrder === 'category'` internamente e alterna entre `DraggableFlatList` e `SectionList` sem expor isso ao `HomeScreen`. Drag-and-drop entre categorias mudaria o `categoryId` do produto — poderoso mas arriscado de deixar implícito. Comportamento claro: drag desabilitado quando sort é por categoria.
+`InventoryList` detects `sortOrder === 'category'` internally and switches between `DraggableFlatList` and `SectionList` without exposing this to `HomeScreen`. Drag-and-drop across categories would implicitly change a product's `categoryId` — powerful but risky to leave implicit. Clear behavior: drag disabled when sort is by category.
 
-### Reuso de lógica de importação
+### Import logic reuse
 
-`useImportEngine` expõe callbacks injetáveis (`applyMatch`, `applyNew`) em vez de comportamento fixo. O mesmo modal de importação é reutilizado tanto para inventário quanto para lista de compras com comportamentos completamente diferentes — zero duplicação de componente.
+`useImportEngine` exposes injectable callbacks (`applyMatch`, `applyNew`) instead of fixed behavior. The same import modal is reused for both inventory imports and shopping list imports with completely different behaviors — zero component duplication.
 
 ---
 
-## Decisões técnicas notáveis
+## Notable technical decisions
 
-**New Architecture (JSI)** — o projeto vinha de uma migração de SDK e nunca tinha habilitado a New Architecture. Com JSI, chamadas SQLite param de serializar/deserializar pela bridge JSON. Cold start: ~3s → ~1s. Cerca de 90% do ganho total de performance veio dessa mudança isolada.
+**New Architecture (JSI)** — the project came from an SDK migration and had never enabled the New Architecture. With JSI, SQLite calls no longer serialize/deserialize across the JSON bridge. Cold start: ~3s → ~1s. Roughly 90% of total performance gains came from this single change.
 
-**WAL mode + PRAGMAs** — `synchronous = NORMAL`, `temp_store = memory`, `cache_size = -8000` configurados explicitamente. WAL elimina lock overhead entre leituras e escritas concorrentes; repeat-visit load time caiu de ~900ms para ~33ms.*
+**WAL mode + PRAGMAs** — `synchronous = NORMAL`, `temp_store = memory`, `cache_size = -8000` configured explicitly. WAL eliminates lock overhead between concurrent reads and writes; repeat-visit load time dropped from ~900ms to ~33ms.*
 
-**Índices via migration** — após profiling, índices adicionados em `invoices`, `invoice_items` e `inventory_history` na migration V8. `getLowestPriceForProducts` caiu de 1287ms para 5ms.*
+**Indexes via migration** — after profiling, indexes added to `invoices`, `invoice_items` and `inventory_history` in the V8 migration. `getLowestPriceForProducts` dropped from 1287ms to 5ms.*
 
-**Batch queries** — padrão N+1 eliminado. `getLowestPriceForProducts(ids[])`, `getLastUnitPricesForProductsAtStore`, `getLastUnitPricesForProducts` retornam `Map<productId, value>` para lookup O(1). O código original fazia uma query por item em loop.
+**Batch queries** — N+1 pattern eliminated. `getLowestPriceForProducts(ids[])`, `getLastUnitPricesForProductsAtStore`, `getLastUnitPricesForProducts` all return `Map<productId, value>` for O(1) lookup. The original code ran one query per item in a loop.
 
-**`useInventoryItem` otimista** — salva quantidade na DB imediatamente para garantir responsividade do +/− na HomeScreen. `EditInventoryItemScreen` lida com isso guardando `initialQuantityRef` para reverter no discard, em vez de tentar batchear o save — que quebraria o comportamento da HomeScreen.
+**Optimistic `useInventoryItem`** — saves quantity to the DB immediately to guarantee responsiveness of the +/− controls on HomeScreen. `EditInventoryItemScreen` handles this by storing `initialQuantityRef` to revert on discard, instead of trying to batch the save — which would break HomeScreen's behavior.
 
-**`manualPrices` ref** — durante a sessão de compras, preços editados manualmente ficam protegidos num `useRef<Map>`. Trocar de loja não sobrescreve o que o usuário digitou. Sem essa proteção, a UX seria inaceitável para quem alterna lojas no meio da compra.
+**`manualPrices` ref** — during a shopping session, manually edited prices are protected in a `useRef<Map>`. Switching stores doesn't overwrite what the user typed. Without this, the UX would be unacceptable for anyone who switches stores mid-session.
 
-**`SearchablePickerDialog` com prop `embedded`** — Modal aninhado dentro de Modal tem comportamento problemático no Android. Modo `embedded` renderiza apenas input + lista sem Portal/Modal próprio, usando `ScrollView` + `map` em vez de `FlatList` (que colapsa sem altura explícita dentro de outro Modal).
+**`SearchablePickerDialog` with `embedded` prop** — nested Modal inside Modal has problematic behavior on Android. `embedded` mode renders only input + list without its own Portal/Modal, using `ScrollView` + `map` instead of `FlatList` (which collapses without an explicit height inside another Modal).
 
-**`ConfirmationModal` extraído para arquivo separado** — quando definido dentro do componente pai, React recriava o componente a cada re-render do pai, causando reset de estado no meio do fluxo de importação. Problema silencioso: o modal fechava visualmente mas o estado interno era perdido.
+**`ConfirmationModal` extracted to a separate file** — when defined inside the parent component, React recreated it on every parent re-render, causing state resets mid import flow. Silent problem: the modal would visually close but its internal state was lost.
 
-**`MaterialCommunityIcons` em vez de `Checkbox` do Paper** — o componente nativo do Paper tem `overflow: hidden` forçado no Android, causando clipping inconsistente do ícone de check. Ícone direto contorna o pipeline de renderização do Paper e resolve o problema.
+**`MaterialCommunityIcons` instead of Paper's `Checkbox`** — the native Paper component has `overflow: hidden` forced on Android, causing inconsistent icon clipping. Using the icon directly bypasses Paper's rendering pipeline and resolves the issue.
 
-**Dirty tracking com `loadingRef` / `mountedRef`** — `loadAll` é assíncrono; sem `loadingRef`, os `setState` internos disparavam o `useEffect` de dirty tracking antes do load terminar, marcando a tela como modificada ao abrir. `mountedRef` resolve o mesmo problema para o primeiro render: sem ele, o `useEffect` com deps de estado roda no mount com valores iniciais e marca `isDirty = true` imediatamente.
+**Dirty tracking with `loadingRef` / `mountedRef`** — `loadAll` is async; without `loadingRef`, the internal `setState` calls triggered the dirty tracking `useEffect` before load finished, marking the screen as modified on open. `mountedRef` solves the same problem for the first render: without it, the `useEffect` with state deps runs on mount with initial values and immediately sets `isDirty = true`.
 
-**Timezone fix** — datas `YYYY-MM-DD` do SQLite são interpretadas como UTC meia-noite pelo JS. Em UTC-3, viram o dia anterior. Fix: append `T00:00:00` antes de `parseISO` do date-fns para forçar interpretação local.
+**Timezone fix** — `YYYY-MM-DD` dates from SQLite are interpreted as UTC midnight by JS. In UTC-3, they become the previous day. Fix: append `T00:00:00` before `parseISO` from date-fns to force local interpretation.
 
-**`PRAGMA foreign_keys` fora de transaction** — expo-sqlite não permite executar esse pragma dentro de `withTransactionAsync`. Solução: executa fora da transaction, com re-enable no `finally` para garantir execução mesmo em erro.
+**`PRAGMA foreign_keys` outside transactions** — expo-sqlite doesn't allow this pragma inside `withTransactionAsync`. Solution: run it outside the transaction, with re-enable in `finally` to guarantee execution even on error.
 
-**Sistema de migrations versionadas** — `PRAGMA user_version` rastreia o schema atual. Cada migration roda uma vez. Permite evolução segura em dispositivos com dados existentes. V1 → V8 em produção.
+**Versioned migration system** — `PRAGMA user_version` tracks the current schema. Each migration runs once. Allows safe schema evolution on devices with existing data. V1 → V8 in production.
 
-*_Números de sessão anterior — não verificados contra baseline atual._
+*_Numbers from a previous session — not verified against current baseline._
 
 ---
 
 ## Product thinking
 
-**`defaultStoreMode` (ask / last / fixed)** — em vez de sempre perguntar qual loja ou sempre assumir a última, o usuário configura o comportamento que faz sentido pro seu fluxo. Quem sempre compra no mesmo lugar usa `fixed`; quem varia usa `ask`. Esse tipo de decisão distingue feature que funciona de feature que se adapta.
+**`defaultStoreMode` (ask / last / fixed)** — instead of always prompting for a store or always assuming the last one, the user configures the behavior that fits their workflow. Someone who always shops at the same place uses `fixed`; someone who rotates uses `ask`. This kind of decision distinguishes a feature that works from a feature that adapts.
 
-**Pre-fill de preço com fallback em cascata** — ao selecionar loja, o app tenta preencher com o último valor pago naquela loja; se não existe, cai para o último preço em qualquer loja. O usuário raramente precisa digitar preço do zero.
+**Price pre-fill with cascading fallback** — on store selection, the app tries to fill prices from the last purchase at that specific store; if no history exists there, it falls back to the last price at any store. Users rarely need to type a price from scratch.
 
-**`isFirstLoad` ref na ShoppingListScreen** — sem esse ref, `useFocusEffect` resetava a loja selecionada toda vez que a usuária voltava de outra aba. Pequeno detalhe com impacto real: a sessão de compras inteira é organizada em torno da loja selecionada.
+**`isFirstLoad` ref in ShoppingListScreen** — without this ref, `useFocusEffect` would reset the selected store every time the user returned from another tab. Small detail, real impact: the entire shopping session is organized around the selected store.
 
-**`handleAcceptAllSuggestions`** — importação gera sugestões de matching por produto. "Aceitar tudo" aplica best-match silenciosamente. Veio de feedback real: confirmar 30 itens individualmente era intolerável na prática.
+**`handleAcceptAllSuggestions`** — import generates per-product match suggestions. "Accept all" applies best-match silently. Came from real feedback: confirming 30 items individually was intolerable in practice.
 
-**Categorias colapsáveis durante compra** — o caso de uso é genuíno: usuária percorre corredores e colapsa categorias conforme termina cada um, inclusive itens que ficaram pendentes por preço. Features que vêm de comportamento observado tendem a ser mais corretas que as que vêm de especulação.
+**Collapsible categories during shopping** — the use case is genuine: the user moves aisle-by-aisle and collapses categories as each one is done, including items left pending due to price. Features that come from observed behavior tend to be more correct than ones from speculation.
 
-**Date picker no `ConfirmInvoiceModal` com default hoje** — conclusão retroativa é caso de uso real (compra de ontem registrada hoje). Preview do total visível antes de confirmar — o usuário não deveria confirmar uma nota sem ver o valor sendo registrado.
+**Date picker in `ConfirmInvoiceModal` defaulting to today** — retroactive checkout is a real use case (yesterday's shopping recorded today). Total preview visible before confirming — users shouldn't confirm an invoice without seeing the amount being recorded.
 
-**Stats derivadas no `EditInventoryItemScreen`** — consumo médio/semana, preço médio 90d e menor preço 90d aparecem sem campo extra, sem esforço do usuário. Dados já existiam nas tabelas; é só computar no momento certo. O usuário pode consultar histórico de preços sem entrar em modo edição.
+**Derived stats in `EditInventoryItemScreen`** — average weekly consumption, 90-day average price, and 90-day lowest price appear without any extra field or user effort. The data already existed in the tables; it's just a matter of computing it at the right moment. Users can review price history without entering edit mode.
 
-**Aliases de produto (v1.6)** — o problema que isso resolve é real: "leite integral" e "leite" são o mesmo produto, mas a nomenclatura vem de notas fiscais fora do controle do usuário. Aliases são mais robustos do que forçar padronização manual.
-
----
-
-## Debugging não-trivial
-
-**Bug silencioso no Hermes release** — `console.time` sem `timeEnd` correspondente, dentro de um bloco `try` sem `finally`, lançava exceção silenciosa no Hermes em modo release. A exceção impedia o `timeEnd` de executar, que por sua vez lançava outra exceção, cortando a função no meio sem logar nada. O mesmo código funcionava no debug. Identificado por eliminação com stepped alerts em build de release.
-
-**`Promise.all` pendente indefinidamente** — durante debug, uma query não resolvia nem rejeitava; o `await Promise.all` ficava pendurado sem entrar no catch. Diagnóstico exigiu substituir por awaits sequenciais com alerts intermediários para isolar qual query estava hangando.
-
-**Cache SQLite como efeito colateral útil** — observação comportamental: aguardar ~3s na HomeScreen antes de navegar fazia a ShoppingListScreen carregar em <1s. A hipótese era "warm-up do SQLite", mas a causa real era que as queries do inventário populavam o page cache com páginas que a ShoppingListScreen também precisava. Diagnóstico por análise de padrão de uso real, sem profiling externo. Isso levou ao `ListDataContext`: compartilhar dados entre telas em vez de queries duplicadas para as mesmas tabelas.
-
-**Bug silencioso em `saveInventoryHistorySnapshot`** — dois bugs coexistentes: (1) INSERT ignorava `quantityToSave` e sempre usava `currentInventoryItem.quantity`; (2) SELECT de date matching usava `=` em vez de `LIKE`, falhando silenciosamente com formatos mistos no DB vindos de versões anteriores. Resultado: dados históricos corrompidos em produção sem erro visível.
+**Product aliases (v1.6)** — the problem this solves is real: "whole milk" and "milk" are the same product, but nomenclature comes from invoices outside the user's control. Aliases are more robust than forcing manual standardization.
 
 ---
 
-## Contexto de desenvolvimento
+## Non-trivial debugging
 
-Desenvolvido com agente de código (Cursor/Windsurf) com fluxo estruturado: prompt → código → confirmação → revisão explícita do diff → commit → próxima issue. A revisão explícita antes do commit é parte do processo — não confiança cega no agente.
+**Silent bug in Hermes release** — `console.time` without a matching `timeEnd`, inside a `try` block without `finally`, threw a silent exception in Hermes release mode. The exception prevented `timeEnd` from running, which itself threw another exception, cutting the function mid-execution with nothing logged. The same code worked in debug. Identified by elimination using stepped alerts in a release build.
 
-**Package name e rename** — o app se chamava ListaÍ. Durante o desenvolvimento, um competidor já havia registrado `com.listai.app` na Play Store. O rename para Monopop foi uma decisão de produto com consequência técnica direta: package name `com.mahjard.listai` é mantido por ora para não invalidar instalações existentes, mas será migrado antes da publicação formal.
+**`Promise.all` hanging indefinitely** — during debugging, one query neither resolved nor rejected; `await Promise.all` hung without entering the catch block. Diagnosis required replacing it with sequential awaits and intermediate alerts to isolate which query was hanging.
 
-Dois APKs coexistem no dispositivo da usuária: `com.mahjard.listai` (release, uso diário) e `com.mahjard.listai.dev` (debug, desenvolvimento). O sufixo `.dev` via `applicationIdSuffix` foi uma decisão deliberada para não sobrescrever o app em produção durante o desenvolvimento — padrão comum em times mobile profissionais.
+**SQLite cache as a useful side effect** — behavioral observation: waiting ~3s on HomeScreen before navigating made ShoppingListScreen load in <1s. The hypothesis was "SQLite warm-up", but the real cause was that the inventory queries populated the page cache with pages ShoppingListScreen also needed. Diagnosed through real usage pattern analysis, no external profiler. This led to `ListDataContext`: sharing data between screens instead of duplicate queries against the same tables.
+
+**Silent bug in `saveInventoryHistorySnapshot`** — two coexisting bugs: (1) INSERT ignored `quantityToSave` and always used `currentInventoryItem.quantity`; (2) date matching SELECT used `=` instead of `LIKE`, silently failing on mixed formats in the DB from older versions. Result: corrupted history data in production with no visible error.
 
 ---
 
-## Estrutura
+## Development context
+
+Built with an AI coding agent (Cursor/Windsurf) following a structured workflow: prompt → code → confirmation → explicit diff review → commit → next issue. The explicit review before committing is part of the process — not blind trust in the agent.
+
+**Package name and rename** — the app was called ListaÍ. During development, a competitor had already registered `com.listai.app` on the Play Store. The rename to Monopop was a product decision with a direct technical consequence: package name `com.mahjard.listai` is kept for now to avoid invalidating existing installs, but will be migrated before formal publishing.
+
+Two APKs coexist on the user's device: `com.mahjard.listai` (release, daily use) and `com.mahjard.listai.dev` (debug, development). The `.dev` suffix via `applicationIdSuffix` was a deliberate decision to avoid overwriting the production app during development — standard practice in professional mobile teams.
+
+---
+
+## Project structure
 
 ```
 src/
@@ -149,29 +149,29 @@ src/
 ├── components/    # ImportModal, ConfirmInvoiceModal, ShoppingListItemCard, DateRangePickerModal, ...
 ├── hooks/         # useImportEngine, useInventory, useListData
 ├── context/       # ListContext, ListDataContext
-├── database/      # database.ts — todas as queries SQLite
+├── database/      # database.ts — all SQLite queries
 └── utils/         # importParsers, similarityUtils, sortUtils, stringUtils
 ```
 
 ---
 
-## Build local (Android)
+## Local build (Android)
 
 ```bash
 cd android
 ./gradlew assembleRelease
 ```
 
-APK em `android/app/build/outputs/apk/release/`. Requer JDK 17+ e Android SDK. `gradlew clean` necessário após mudanças nativas; builds subsequentes são rápidos pelo cache do Gradle.
+APK at `android/app/build/outputs/apk/release/`. Requires JDK 17+ and Android SDK. `gradlew clean` needed after native changes; subsequent builds are fast via Gradle cache.
 
 ---
 
 ## Roadmap
 
-- [ ] Aliases de produto — mapear nomes equivalentes para evitar prompts repetidos no import
-- [ ] Sincronização entre dispositivos (feature paga planejada)
-- [ ] Widget Android para adição rápida sem abrir o app
+- [ ] Product aliases — map equivalent names to avoid repeated prompts on import
+- [ ] Cross-device sync (planned paid feature)
+- [ ] Android widget for quick item addition without opening the app
 
 ---
 
-Desenvolvido por [Mah Jardim](https://github.com/mahjard)
+Built by [Mah Jardim](https://github.com/mahjard)
