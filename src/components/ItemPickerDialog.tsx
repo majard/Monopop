@@ -14,6 +14,8 @@ interface ItemPickerDialogProps {
   selectedId: number | null;
   onSelect: (id: number) => void;
   title: string;
+  withNullOption?: boolean;
+  nullOptionLabel?: string
 }
 
 export function ItemPickerDialog({
@@ -23,6 +25,8 @@ export function ItemPickerDialog({
   selectedId,
   onSelect,
   title,
+  withNullOption = false,
+  nullOptionLabel = 'Nenhuma',
 }: ItemPickerDialogProps) {
   return (
     <Portal>
@@ -30,6 +34,13 @@ export function ItemPickerDialog({
         <Dialog.Title>{title}</Dialog.Title>
         <Dialog.ScrollArea>
           <ScrollView>
+            {withNullOption && (
+              <List.Item
+                title={nullOptionLabel}
+                onPress={() => { onSelect(null); onDismiss(); }}
+                right={props => selectedId === null && <List.Icon {...props} icon="check" />}
+              />
+            )}
             {items.map(item => (
               <List.Item
                 key={item.id}

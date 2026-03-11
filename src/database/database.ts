@@ -1484,3 +1484,210 @@ export const getLowestPriceForProducts = async (
   }
   return result;
 };
+
+// ─── Reference Price — single upserts ────────────────────────────────────────
+
+export const upsertProductStorePrice = async (
+  productId: number,
+  storeId: number,
+  price: number
+): Promise<void> => {
+  const db = getDb();
+  const now = new Date().toISOString();
+  try {
+    await db.runAsync(
+      `INSERT INTO product_store_prices (productId, storeId, price, updatedAt)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT (productId, storeId) DO UPDATE SET
+         price     = excluded.price,
+         updatedAt = excluded.updatedAt;`,
+      [productId, storeId, price, now]
+    );
+  } catch (error) {
+    console.error('Error upserting product store price:', error);
+    throw error;
+  }
+};
+
+export const upsertProductBasePrice = async (
+  productId: number,
+  price: number
+): Promise<void> => {
+  const db = getDb();
+  const now = new Date().toISOString();
+  try {
+    await db.runAsync(
+      `INSERT INTO product_base_prices (productId, price, updatedAt)
+       VALUES (?, ?, ?)
+       ON CONFLICT (productId) DO UPDATE SET
+         price     = excluded.price,
+         updatedAt = excluded.updatedAt;`,
+      [productId, price, now]
+    );
+  } catch (error) {
+    console.error('Error upserting product base price:', error);
+    throw error;
+  }
+};
+
+// ─── Reference Price — single lookup (full chain) ────────────────────────────
+
+/**
+ * Returns the best reference price for a product, walking the full chain:
+ * 1. product_store_prices @ storeId
+ * 2. product_base_prices
+ * 4. last invoice price @ any store
+ *
+ * storeId is optional — if null, skips steps 1 and 2.
+ */
+export const getReferencePriceForProduct = async (
+  productId: number,
+  storeId: number | null
+): Promise<number | null> => {
+  const db = getDb();
+  try {
+    if (storeId !== null) {
+      // 1. Store reference price
+      const storeRef = await db.getFirstAsync<{ price: number }>(
+        `SELECT price FROM product_store_prices WHERE productId = ? AND storeId = ?;`,
+        [productId, storeId]
+      );
+      if (storeRef?.price != null) return storeRef.price;
+
+      // 2. Last invoice at this store
+      const storeInvoice = await db.getFirstAsync<{ unitPrice: number }>(
+        `SELECT ii.unitPrice
+         FROM invoice_items ii
+         INNER JOIN invoices i ON ii.invoiceId = i.id
+         WHERE ii.productId = ? AND i.storeId = ?
+         ORDER BY i.createdAt DESC
+         LIMIT 1;`,
+        [productId, storeId]
+      );
+      return storeInvoice?.unitPrice ?? null;
+    }
+
+    // storeId === null
+    // 1. Base reference price
+    const baseRef = await db.getFirstAsync<{ price: number }>(
+      `SELECT price FROM product_base_prices WHERE productId = ?;`,
+      [productId]
+    );
+    if (baseRef?.price != null) return baseRef.price;
+
+    // 2. Last invoice any store
+    const anyInvoice = await db.getFirstAsync<{ unitPrice: number }>(
+      `SELECT unitPrice
+       FROM invoice_items
+       WHERE productId = ? AND unitPrice IS NOT NULL
+       ORDER BY createdAt DESC
+       LIMIT 1;`,
+      [productId]
+    );
+    return anyInvoice?.unitPrice ?? null;
+
+  } catch (error) {
+    console.error('Error getting reference price for product:', error);
+    return null;
+  }
+};
+
+// ─── Reference Price — batch lookup (for ShoppingListScreen) ─────────────────
+
+/**
+ * Returns a Map<productId, price> with the best reference price for each product.
+ * Walks the same 4-step chain but in batch — O(1) per item after the queries.
+ *
+ * storeId is optional — if null, skips store-specific steps.
+ */
+export const getReferencePricesForProducts = async (
+  productIds: number[],
+  storeId: number | null
+): Promise<Map<number, number>> => {
+  if (productIds.length === 0) return new Map();
+
+  const db = getDb();
+  const result = new Map<number, number>();
+  const remaining = new Set(productIds);
+  const placeholders = productIds.map(() => '?').join(',');
+
+  try {
+    if (storeId !== null) {
+      // 1. Store reference prices
+      const rows = await db.getAllAsync<{ productId: number; price: number }>(
+        `SELECT productId, price
+         FROM product_store_prices
+         WHERE productId IN (${placeholders}) AND storeId = ?;`,
+        [...productIds, storeId]
+      );
+      for (const row of rows) {
+        result.set(row.productId, row.price);
+        remaining.delete(row.productId);
+      }
+
+      if (remaining.size === 0) return result;
+
+      // 2. Last invoice at this store
+      const remainingIds = [...remaining];
+      const remainingPlaceholders = remainingIds.map(() => '?').join(',');
+      const invoiceStoreRows = await db.getAllAsync<{ productId: number; unitPrice: number }>(
+        `SELECT ii.productId, ii.unitPrice
+         FROM invoice_items ii
+         INNER JOIN invoices i ON ii.invoiceId = i.id
+         WHERE ii.productId IN (${remainingPlaceholders}) AND i.storeId = ? AND ii.unitPrice IS NOT NULL
+         ORDER BY ii.productId, i.createdAt DESC;`,
+        [...remainingIds, storeId]
+      );
+      const seenStore = new Set<number>();
+      for (const row of invoiceStoreRows) {
+        if (!seenStore.has(row.productId)) {
+          result.set(row.productId, row.unitPrice);
+          remaining.delete(row.productId);
+          seenStore.add(row.productId);
+        }
+      }
+
+      return result;
+    }
+
+    // storeId === null
+    // 1. Base reference prices
+    const baseRows = await db.getAllAsync<{ productId: number; price: number }>(
+      `SELECT productId, price
+       FROM product_base_prices
+       WHERE productId IN (${placeholders});`,
+      productIds
+    );
+    for (const row of baseRows) {
+      result.set(row.productId, row.price);
+      remaining.delete(row.productId);
+    }
+
+    if (remaining.size === 0) return result;
+
+    // 2. Last invoice any store
+    const remainingIds = [...remaining];
+    const remainingPlaceholders = remainingIds.map(() => '?').join(',');
+    const invoiceAnyRows = await db.getAllAsync<{ productId: number; unitPrice: number }>(
+      `SELECT productId, unitPrice
+       FROM invoice_items
+       WHERE productId IN (${remainingPlaceholders}) AND unitPrice IS NOT NULL
+       ORDER BY productId, createdAt DESC;`,
+      remainingIds
+    );
+    const seenAny = new Set<number>();
+    for (const row of invoiceAnyRows) {
+      if (!seenAny.has(row.productId)) {
+        result.set(row.productId, row.unitPrice);
+        remaining.delete(row.productId);
+        seenAny.add(row.productId);
+      }
+    }
+
+    return result;
+
+  } catch (error) {
+    console.error('Error getting reference prices for products:', error);
+    throw error;
+  }
+};

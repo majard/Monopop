@@ -9,7 +9,6 @@ import {
 import { useNavigation, useRoute, useFocusEffect, usePreventRemove } from '@react-navigation/native';
 import { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { LineChart } from 'react-native-chart-kit';
 import { parseISO, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -23,8 +22,6 @@ import {
   getCategories,
   addCategory,
   updateProductCategory,
-  getLastUnitPriceForProduct,
-  getLastUnitPriceForProductAtStore,
   addShoppingListItem,
   updateShoppingListItem,
   deleteShoppingListItem,
@@ -33,11 +30,15 @@ import {
   getSetting,
   getStores,
   getPriceHistory,
+  getReferencePriceForProduct,
+  upsertProductStorePrice,
+  upsertProductBasePrice
 } from '../database/database';
 import { InventoryHistory } from '../database/models';
 import { RootStackParamList } from '../types/navigation';
 import ContextualHeader from '../components/ContextualHeader';
 import { ItemPickerDialog } from '../components/ItemPickerDialog';
+import { StoreSelector } from '../components/StoreSelector';
 import { SearchablePickerDialog } from '../components/SearchablePickerDialog';
 import { useInventoryItem } from '../hooks/useInventoryItem';
 import QuantityHistorySection from '../components/QuantityHistorySection';
@@ -83,6 +84,8 @@ export default function EditInventoryItem() {
   const [suggestedPrice, setSuggestedPrice] = useState<number>(0);
   const [editingPrice, setEditingPrice] = useState(false);
   const [priceInput, setPriceInput] = useState('');
+  const [selectedStoreId, setSelectedStoreId] = useState<number | null>(null);
+  const [stores, setStores] = useState<{ id: number; name: string }[]>([]);
 
   // History
   const [history, setHistory] = useState<InventoryHistory[]>([]);
@@ -165,6 +168,14 @@ export default function EditInventoryItem() {
         await addShoppingListItem(inventoryItem.listId, inventoryItem.productName, shoppingListItem.quantity, finalPrice);
       }
 
+      if (finalPrice > 0) {
+        if (selectedStoreId !== null) {
+          await upsertProductStorePrice(inventoryItem.productId, selectedStoreId, finalPrice);
+        } else {
+          await upsertProductBasePrice(inventoryItem.productId, finalPrice);
+        }
+      }
+
       setSuggestedPrice(finalPrice);
       setPriceInput(finalPrice.toFixed(2));
       isDirtyRef.current = false;
@@ -211,16 +222,25 @@ export default function EditInventoryItem() {
     const ph = await getPriceHistory(inventoryItem.productId);
     setPriceHistory(ph);
 
+    // Initialize stores
+    const storesData = await getStores();
+    setStores(storesData);
+
+    const initialStoreId = defaultStoreMode === 'fixed' && defaultStoreId
+      ? parseInt(defaultStoreId)
+      : null;
+    setSelectedStoreId(initialStoreId);
+
     // Determine suggested price
     if (sli?.price) {
       setSuggestedPrice(sli.price);
       setPriceInput(sli.price.toFixed(2));
-    } else if (defaultStoreMode === 'fixed' && defaultStoreId) {
-      const storePrice = await getLastUnitPriceForProductAtStore(inventoryItem.productId, parseInt(defaultStoreId));
-      if (storePrice) { setSuggestedPrice(storePrice); setPriceInput(storePrice.toFixed(2)); }
     } else {
-      const lastPrice = await getLastUnitPriceForProduct(inventoryItem.productId);
-      if (lastPrice) { setSuggestedPrice(lastPrice); setPriceInput(lastPrice.toFixed(2)); }
+      const refPrice = await getReferencePriceForProduct(inventoryItem.productId, initialStoreId);
+      if (refPrice != null) {
+        setSuggestedPrice(refPrice);
+        setPriceInput(refPrice.toFixed(2));
+      }
     }
 
     // Set initial refs after loadAll completes
@@ -300,6 +320,20 @@ export default function EditInventoryItem() {
     setEditingPrice(false);
     isDirtyRef.current = true;
   }, [priceInput]);
+
+  const handleStoreSelect = useCallback(async (storeId: number | null) => {
+    setSelectedStoreId(storeId);
+    if (!inventoryItem) return;
+    const price = await getReferencePriceForProduct(inventoryItem.productId, storeId);
+    if (price != null) {
+      setSuggestedPrice(price);
+      setPriceInput(price.toFixed(2));
+    } else {
+      setSuggestedPrice(0);
+      setPriceInput('');
+    }
+    isDirtyRef.current = true;
+  }, [inventoryItem]);
 
   const handleDelete = useCallback(() => {
     Alert.alert(
@@ -393,7 +427,14 @@ export default function EditInventoryItem() {
 
             {/* Price + shopping list inline */}
 
-            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', gap: 12, paddingLeft: 16 }}>
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', gap: 12, paddingLeft: 12 }}>
+              <StoreSelector
+                stores={stores}
+                selectedStoreId={selectedStoreId}
+                onStoreChange={handleStoreSelect}
+                nullOptionLabel="Qualquer loja"
+                iconOnly
+              />
               {editingPrice ? (
                 <RNTextInput
                   value={priceInput}
@@ -404,11 +445,12 @@ export default function EditInventoryItem() {
                   style={[editInventoryItemStyles.priceInput, {
                     color: theme.colors.onSurface,
                     borderBottomColor: theme.colors.primary,
+                    flex: 1,
                   }]}
                 />
               ) : (
-                <Pressable onPress={() => setEditingPrice(true)}>
-                  <Text style={{ color: theme.colors.onSurface, fontSize: 18, minWidth: 100 }}>
+                <Pressable onPress={() => setEditingPrice(true)} style={{ flexShrink: 1 }}>
+                  <Text style={{ color: theme.colors.onSurface, fontSize: 16 }}>
                     {suggestedPrice > 0 ? formatCurrency(suggestedPrice) : '—'}
                   </Text>
                 </Pressable>
@@ -416,7 +458,7 @@ export default function EditInventoryItem() {
               <Pressable onPress={handleToggleShoppingList}>
                 <MaterialCommunityIcons
                   name={shoppingListItem ? 'cart-check' : 'cart-plus'}
-                  size={28}
+                  size={26}
                   color={shoppingListItem ? theme.colors.primary : theme.colors.onSurfaceVariant}
                 />
               </Pressable>

@@ -3,7 +3,7 @@ import { View, StyleSheet, Text, FlatList, Pressable, Alert, Modal } from 'react
 import { Button, Surface, useTheme } from 'react-native-paper';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { concludeShoppingForListWithInvoice, getShoppingListItemsByListId, updateShoppingListItem, deleteShoppingListItem, setSetting, getLastUnitPriceForProductAtStore, getLastUnitPriceForProduct, getLowestPriceForProducts, updateProductCategory, getLastUnitPricesForProductsAtStore, getLastUnitPricesForProducts, addProduct, addShoppingListItem } from '../database/database';
+import { concludeShoppingForListWithInvoice, getShoppingListItemsByListId, updateShoppingListItem, deleteShoppingListItem, setSetting, getLowestPriceForProducts, updateProductCategory, addProduct, addShoppingListItem, getReferencePricesForProducts, upsertProductStorePrice, upsertProductBasePrice } from '../database/database';
 import { RootStackParamList } from '../types/navigation';
 import { ShoppingListItem } from '../database/models';
 import { useListContext } from '../context/ListContext';
@@ -14,7 +14,6 @@ import { ConfirmInvoiceModal, StoreOption } from '../components/ConfirmInvoiceMo
 import ContextualHeader from '../components/ContextualHeader';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AddItemButton } from '../components/AddItemButton';
-import { ItemPickerDialog } from '../components/ItemPickerDialog';
 import { createHomeScreenStyles } from '../styles/HomeScreenStyles';
 import { SortMenu } from '../components/SortMenu';
 import { sortItems, SortOrder } from '../utils/sortUtils';
@@ -23,6 +22,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import SearchBar from '../components/SearchBar';
 import ShoppingListSkeleton from '../components/ShoppingListSkeleton';
 import ImportModal from '../components/ImportModal';
+import { StoreSelector } from '../components/StoreSelector';
 import { generateShoppingListText } from '../utils/stringUtils';
 import * as Clipboard from 'expo-clipboard';
 
@@ -57,7 +57,6 @@ export default function ShoppingListScreen() {
   const [defaultStoreName, setDefaultStoreName] = useState('');
   const [selectedStoreId, setSelectedStoreId] = useState<number | null>(null);
   const [lastStoreId, setLastStoreId] = useState<number | null>(null);
-  const [storePickerVisible, setStorePickerVisible] = useState(false);
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   const [sortOrder, setSortOrder] = useState<SortOrder>('alphabetical');
   const [actionsVisible, setActionsVisible] = useState(false);
@@ -140,39 +139,23 @@ export default function ShoppingListScreen() {
     }
   }, [listId, stores, defaultStoreMode, defaultStoreId, lastStoreName]);
 
-  const updatePricesForStore = useCallback(async (storeId: number, items: ShoppingListItemWithDetails[]) => {
+  const updatePricesForStore = useCallback(async (storeId: number | null, items: ShoppingListItemWithDetails[]) => {
     try {
-      // Extract product IDs for bulk lookup
       const productIds = items.map(item => item.productId).filter(id => id > 0);
+      if (productIds.length === 0) return;
 
-      if (productIds.length === 0) {
-        return;
-      }
+      // Full 4-step lookup chain, in batch
+      const referencePriceMap = await getReferencePricesForProducts(productIds, storeId);
 
-      // Get store-specific prices and fallback prices in parallel
-      const [storePriceMap, fallbackPriceMap] = await Promise.all([
-        getLastUnitPricesForProductsAtStore(productIds, storeId),
-        getLastUnitPricesForProducts(productIds)
-      ]);
-
-      // Map over items using O(1) lookup from the Maps
       const updatedItems = items.map(item => {
-        if (item.productId === 0) {
-          return item; // Skip items without valid productId
-        }
-
-        // Try store-specific price first, then fallback
-        const storePrice = storePriceMap.get(item.productId);
-        const fallbackPrice = fallbackPriceMap.get(item.productId);
-        const newPrice = storePrice ?? fallbackPrice ?? item.price;
-
-        return { ...item, price: newPrice };
+        if (item.productId === 0) return item;
+        const referencePrice = referencePriceMap.get(item.productId);
+        return { ...item, price: referencePrice };
       });
 
       setShoppingListItems(updatedItems);
     } catch (error) {
       console.error('Error updating prices for store:', error);
-    } finally {
     }
   }, []);
 
@@ -216,11 +199,23 @@ export default function ShoppingListScreen() {
           item.id === editingItem.id ? { ...item, quantity, price } : item
         )
       );
+
+      if (price && price > 0) {
+        const item = shoppingListItems.find(i => i.id === editingItem.id);
+        if (item?.productId) {
+          if (selectedStoreId !== null) {
+            await upsertProductStorePrice(item.productId, selectedStoreId, price);
+          } else {
+            await upsertProductBasePrice(item.productId, price);
+          }
+        }
+      }
+
       setEditingItem(null);
     } catch (error) {
       console.error('Erro ao atualizar item:', error);
     }
-  }, [editingItem]);
+  }, [editingItem, shoppingListItems, selectedStoreId]);
 
   const handleCategorySelect = useCallback(async (categoryId: number) => {
     if (!editingItem) return;
@@ -431,16 +426,20 @@ export default function ShoppingListScreen() {
       />
 
       <View style={[localStyles.topRow, { borderBottomColor: theme.colors.outlineVariant }]}>
-        <Pressable
-          onPress={() => setStorePickerVisible(true)}
-          style={[localStyles.storeButton, { borderColor: theme.colors.outline }]}
-        >
-          <MaterialCommunityIcons
-            name="store-edit-outline"
-            size={18}
-            color={defaultStoreName ? theme.colors.primary : theme.colors.onSurfaceVariant}
-          />
-        </Pressable>
+        <StoreSelector
+          stores={stores}
+          selectedStoreId={selectedStoreId}
+          onStoreChange={(id) => {
+            if (id === null) {
+              setSelectedStoreId(null);
+              setDefaultStoreName('');
+              updatePricesForStore(null, shoppingListItems);
+            } else {
+              handleStoreSelect(id);
+            }
+          }}
+          nullOptionLabel="Sem loja"
+        />
 
         <View style={localStyles.searchWrapper}>
           <SearchBar
@@ -636,14 +635,6 @@ export default function ShoppingListScreen() {
         onConfirm={handleConfirmConclude}
         onDismiss={() => setConfirmVisible(false)}
         loading={loading}
-      />
-      <ItemPickerDialog
-        visible={storePickerVisible}
-        items={stores}
-        selectedId={selectedStoreId}
-        onSelect={handleStoreSelect}
-        onDismiss={() => setStorePickerVisible(false)}
-        title="Escolher loja"
       />
     </SafeAreaView>
   );

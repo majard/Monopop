@@ -80,3 +80,16 @@ export interface InvoiceItem {
   lineTotal: number;
   createdAt: string;
 }
+
+export interface ProductStorePrice {
+  productId: number;
+  storeId: number;
+  price: number;
+  updatedAt: string;
+}
+
+export interface ProductBasePrice {
+  productId: number;
+  price: number;
+  updatedAt: string;
+}

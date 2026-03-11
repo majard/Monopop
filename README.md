@@ -1,8 +1,11 @@
 # Monopop
+### People Power Applied to Prices
 
 An Android inventory and shopping list manager. Offline-first, no backend, no account — all data lives in SQLite on the device.
 
 Built for real daily use: the primary user manages inventory at work and shops aisle-by-aisle at the supermarket. Not a demo project — real data in production, real feedback loop, real consequences when things break.
+
+The name comes from *monopsônio popular* — a market with a single dominant buyer. The consumer, collectively, as that buyer. Price tracking, purchase history, spending analysis, and store comparison are the first layer of that idea made functional.
 
 [⬇️ Download APK](https://github.com/majard/listai/releases)
 
@@ -14,13 +17,13 @@ Built for real daily use: the primary user manages inventory at work and shops a
 - **Shopping list with price tracking** — price auto-suggested per store, with fallback to any store
 - **Lowest price in 90 days** — per product, loaded in background to avoid blocking interaction
 - **Text import** — paste a list from any source; fuzzy matching maps to existing products
-- **Purchase invoices** — on checkout, records a note with date, store and prices paid; history with zero extra effort
+- **Purchase invoices** — on checkout, records date, store and prices paid per item; history with zero extra effort
 - **Spending analysis** — trend vs previous period, filterable by date and store
 - **Quantity history** — tracks stock changes over time; calculates average weekly consumption
 - **Drag-and-drop reordering** — custom inventory order, persisted in the database
 - **Collapsible categories in shopping list** — aisle-by-aisle organization
 - **Backup and restore** — exports everything as JSON; users are never locked in
-- **100% offline** — no account, no internet, no network latency
+- **100% offline** — no account, no internet, no network latency. Data belongs to the user by architecture, not by policy.
 
 ---
 
@@ -95,12 +98,7 @@ Main data arrives in a single JOIN query. Historical prices (`getLowestPriceForP
 
 **Versioned migration system** — `PRAGMA user_version` tracks the current schema. Each migration runs once. Allows safe schema evolution on devices with existing data. V1 → V8 in production.
 
-**Price input as shift register** — monetary values are stored as integers (cents) 
-throughout the app to avoid floating point errors. The price input works as a shift 
-register: each digit typed shifts left, so typing "1", "2", "3" produces "R$ 1,23" 
-without the user managing separators. Backspace shifts right. Standard pattern for 
-monetary input on mobile but requires careful handling of the initial state and 
-copy-paste edge cases.
+**Price input as shift register** — monetary values are stored as integers (cents) throughout the app to avoid floating point errors. The price input works as a shift register: each digit typed shifts left, so typing "1", "2", "3" produces "R$ 1,23" without the user managing separators. Backspace shifts right. Standard pattern for monetary input on mobile but requires careful handling of the initial state and copy-paste edge cases.
 
 *_Numbers from a previous session — not verified against current baseline._
 
@@ -142,7 +140,7 @@ copy-paste edge cases.
 
 Developed using an AI-assisted workflow (Cursor/Windsurf): prompt → code → confirmation → explicit diff review → commit → next issue. Every change is reviewed before committing — the AI assists the process, it doesn't replace it.
 
-**Package name and rename** — the app was called ListaÍ. During development, a competitor had already registered `com.listai.app` on the Play Store. The rename to Monopop was a product decision with a direct technical consequence: package name `com.mahjard.listai` is kept for now to avoid invalidating existing installs, but will be migrated before formal publishing.
+**Package name** — the app was originally called ListaÍ. It was renamed to Monopop as a product decision: the name carries a thesis (*monopsônio popular*) that the utility name never could. The package name `com.mahjard.listai` is kept for now to avoid invalidating existing installs, but will be migrated before formal publishing.
 
 Two APKs coexist on the user's device: `com.mahjard.listai` (release, daily use) and `com.mahjard.listai.dev` (debug, development). The `.dev` suffix via `applicationIdSuffix` was a deliberate decision to avoid overwriting the production app during development — standard practice in professional mobile teams.
 
@@ -175,6 +173,7 @@ APK at `android/app/build/outputs/apk/release/`. Requires JDK 17+ and Android SD
 
 ## Roadmap
 
+- [ ] Reference price per store — set a target price per product/store; alert on drift
 - [ ] Product aliases — map equivalent names to avoid repeated prompts on import
 - [ ] Cross-device sync (planned paid feature)
 - [ ] Android widget for quick item addition without opening the app
