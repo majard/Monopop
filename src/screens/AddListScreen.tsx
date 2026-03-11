@@ -15,6 +15,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { addList } from '../database/database'; 
 import { RootStackParamList } from '../types/navigation';
+import { useListContext } from '../context/ListContext';
 
 type AddListScreenNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
@@ -25,10 +26,12 @@ export default function AddListScreen() {
   const [name, setName] = useState('');
   const navigation = useNavigation<AddListScreenNavigationProp>();
   const theme = useTheme();
+  const { setListId } = useListContext();
 
   const handleSubmit = async () => {
     try {
       const listId = await addList(name);
+      setListId(listId);
       navigation.navigate('MainTabs', { listId });
     } catch (error) {
       console.error('Erro ao adicionar lista:', error);

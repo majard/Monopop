@@ -24,9 +24,10 @@ interface ConfirmInvoiceModalProps {
   stores: StoreOption[];
   defaultStoreName: string;
   total: number;
-  onConfirm: (storeName: string, date: Date) => void;
+  onConfirm: (storeName: string, date: Date, updateReferencePrices: boolean) => void;
   onDismiss: () => void;
   loading?: boolean;
+  updateReferencePrices?: boolean;
 }
 
 export function ConfirmInvoiceModal({
@@ -37,16 +38,19 @@ export function ConfirmInvoiceModal({
   onConfirm,
   onDismiss,
   loading,
+  updateReferencePrices = true,
 }: ConfirmInvoiceModalProps) {
   const theme = useTheme();
   const [storeName, setStoreName] = useState("");
   const [date, setDate] = useState(new Date());
   const [datePickerVisible, setDatePickerVisible] = useState(false);
+  const [updateRef, setUpdateRef] = useState(true);
 
   useEffect(() => {
     if (visible) {
       setStoreName(defaultStoreName || '');
       setDate(new Date());
+      setUpdateRef(true);
     }
   }, [visible, defaultStoreName]);
 
@@ -106,13 +110,27 @@ export function ConfirmInvoiceModal({
             </Text>
           </Pressable>
 
+          <Pressable
+            onPress={() => setUpdateRef(v => !v)}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 }}
+          >
+            <MaterialCommunityIcons
+              name={updateRef ? 'checkbox-marked' : 'checkbox-blank-outline'}
+              size={20}
+              color={updateRef ? theme.colors.primary : theme.colors.onSurfaceVariant}
+            />
+            <Text style={{ color: theme.colors.onSurface, fontSize: 14 }}>
+              Atualizar preços de referência
+            </Text>
+          </Pressable>
+
           <View style={styles.buttonRow}>
             <Button onPress={onDismiss} style={styles.button}>
               Cancelar
             </Button>
             <Button
               mode="contained"
-              onPress={() => onConfirm(storeName, date)}
+              onPress={() => onConfirm(storeName, date, updateRef)}
               disabled={!canConfirm || !!loading}
               loading={!!loading}
               style={styles.button}

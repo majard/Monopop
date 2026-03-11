@@ -384,7 +384,7 @@ export default function ShoppingListScreen() {
     setConfirmVisible(true);
   }, [checkedItems.length]);
 
-  const handleConfirmConclude = useCallback(async (storeName: string, date: Date) => {
+  const handleConfirmConclude = useCallback(async (storeName: string, date: Date, updateReferencePrices: boolean) => {
     if (checkedItems.length === 0) return;
     setLoading(true);
     try {
@@ -393,6 +393,15 @@ export default function ShoppingListScreen() {
       if (store) {
         await setSetting('defaultStoreId', store.id.toString());
       }
+      
+      if (updateReferencePrices) {
+        for (const item of checkedItems) {
+          if (item.productId && item.price && item.price > 0) {
+            await upsertProductStorePrice(item.productId, store.id, item.price);
+          }
+        }
+      }
+      
       setConfirmVisible(false);
       await refreshStoreSettings();
       await loadData();
