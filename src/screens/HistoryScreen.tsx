@@ -133,8 +133,8 @@ export default function HistoryScreen() {
     let prevEnd: Date | null = null;
 
     if (dateRange.start) {
-      const rangeMs = (endOfDay(dateRange.end ?? dateRange.start)).getTime() 
-                    - startOfDay(dateRange.start).getTime();
+      const rangeMs = (endOfDay(dateRange.end ?? dateRange.start)).getTime()
+        - startOfDay(dateRange.start).getTime();
       prevEnd = new Date(startOfDay(dateRange.start).getTime() - 1);
       prevStart = new Date(prevEnd.getTime() - rangeMs);
     } else {
@@ -145,7 +145,7 @@ export default function HistoryScreen() {
     }
 
     const prevLabel = prevStart && prevEnd
-      ? `${format(prevStart, 'dd/MM')}–${format(prevEnd, 'dd/MM')}` 
+      ? `${format(prevStart, 'dd/MM')}–${format(prevEnd, 'dd/MM')}`
       : '—';
 
     const prevPurchases = events.filter(e => {
@@ -533,7 +533,9 @@ export default function HistoryScreen() {
 }
 
 const localStyles = StyleSheet.create({
-  container: { flex: 1 },
+  // TODO: investigate why paddingBottom is needed to prevent content clipping
+
+  container: { flex: 1, paddingBottom: -96 },
   summaryCard: {
     margin: 16,
     marginBottom: 8,

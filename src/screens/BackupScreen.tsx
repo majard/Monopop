@@ -61,6 +61,8 @@ export default function BackupScreen() {
       const shoppingListItems = await db.getAllAsync('SELECT * FROM shopping_list_items ORDER BY id');
       const invoices = await db.getAllAsync('SELECT * FROM invoices ORDER BY id');
       const invoiceItems = await db.getAllAsync('SELECT * FROM invoice_items ORDER BY id');
+      const productStorePrices = await db.getAllAsync('SELECT * FROM product_store_prices ORDER BY productId, storeId');
+      const productBasePrices = await db.getAllAsync('SELECT * FROM product_base_prices ORDER BY productId');
       const settings = await db.getAllAsync('SELECT * FROM settings ORDER BY id');
 
       const exportData = {
@@ -76,6 +78,8 @@ export default function BackupScreen() {
           shopping_list_items: shoppingListItems,
           invoices,
           invoice_items: invoiceItems,
+          product_store_prices: productStorePrices,
+          product_base_prices: productBasePrices,
           settings,
         },
       };
@@ -129,6 +133,8 @@ export default function BackupScreen() {
         await db.runAsync('DELETE FROM invoices');
         await db.runAsync('DELETE FROM inventory_history');
         await db.runAsync('DELETE FROM inventory_items');
+        await db.runAsync('DELETE FROM product_store_prices');
+        await db.runAsync('DELETE FROM product_base_prices');
         await db.runAsync('DELETE FROM products');
         await db.runAsync('DELETE FROM categories');
         await db.runAsync('DELETE FROM stores');
@@ -201,6 +207,20 @@ export default function BackupScreen() {
           );
         }
 
+        for (const psp of tables.product_store_prices || []) {
+          await db.runAsync(
+            'INSERT INTO product_store_prices (productId, storeId, price, updatedAt) VALUES (?, ?, ?, ?)',
+            [psp.productId, psp.storeId, psp.price, psp.updatedAt]
+          );
+        }
+
+        for (const pbp of tables.product_base_prices || []) {
+          await db.runAsync(
+            'INSERT INTO product_base_prices (productId, price, updatedAt) VALUES (?, ?, ?)',
+            [pbp.productId, pbp.price, pbp.updatedAt]
+          );
+        }
+
         for (const setting of tables.settings || []) {
           await db.runAsync(
             'INSERT INTO settings (id, key, value, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?)',
@@ -260,6 +280,8 @@ export default function BackupScreen() {
         await db.runAsync('DELETE FROM shopping_list_items');
         await db.runAsync('DELETE FROM inventory_history');
         await db.runAsync('DELETE FROM inventory_items');
+        await db.runAsync('DELETE FROM product_store_prices');
+        await db.runAsync('DELETE FROM product_base_prices');
         await db.runAsync('DELETE FROM products');
         await db.runAsync('DELETE FROM categories');
         await db.runAsync('DELETE FROM stores');
