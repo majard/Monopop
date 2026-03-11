@@ -30,6 +30,7 @@ import InventoryList from "../components/InventoryList";
 import ContextualHeader from "../components/ContextualHeader";
 import { deleteInventoryItem } from "../database/database";
 import { useListContext } from "../context/ListContext";
+import { ActionMenuButton } from "../components/ActionMenuButton";
 
 type HomeScreenNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
@@ -158,20 +159,7 @@ export default function HomeScreen() {
           <SearchBar searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
         </View>
         <SortMenu setSortOrder={handleSortOrderChange} sortOrder={sortOrder} iconOnly />
-        <Pressable
-          onPress={() => setActionsVisible(true)}
-          style={({ pressed }) => ({
-            padding: 8,
-            borderRadius: 20,
-            backgroundColor: pressed ? theme.colors.surfaceVariant : 'transparent',
-          })}
-        >
-          <MaterialCommunityIcons
-            name="dots-vertical"
-            size={22}
-            color={theme.colors.onSurfaceVariant}
-          />
-        </Pressable>
+        <ActionMenuButton onPress={() => setActionsVisible(true)} />
       </View>
 
       {isSelectionMode && (

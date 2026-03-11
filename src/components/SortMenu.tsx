@@ -44,9 +44,10 @@ interface SortMenuProps {
   setSortOrder: (order: SortOrder) => void;
   mode?: SortMenuMode;
   iconOnly?: boolean;
+  style?: any;
 }
 
-export const SortMenu = ({ sortOrder, setSortOrder, mode = 'inventoryItem', iconOnly = false }: SortMenuProps) => {
+export const SortMenu = ({ sortOrder, setSortOrder, mode = 'inventoryItem', iconOnly = false, style }: SortMenuProps) => {
   const [visible, setVisible] = useState(false);
   const theme = useTheme();
 
@@ -69,23 +70,27 @@ export const SortMenu = ({ sortOrder, setSortOrder, mode = 'inventoryItem', icon
         <Pressable
           onPress={() => setVisible(true)}
           style={({ pressed }) => ({
-            padding: 8,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+            paddingHorizontal: 10,
+            paddingVertical: 8,
             borderRadius: 20,
+            borderWidth: 1,
+            borderColor: isDefault ? theme.colors.outline : theme.colors.primary,
             backgroundColor: pressed ? theme.colors.surfaceVariant : 'transparent',
           })}
         >
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
-            <MaterialCommunityIcons
-              name="sort"
-              size={18}
-              color={isDefault ? theme.colors.onSurfaceVariant : theme.colors.primary}
-            />
-            <MaterialCommunityIcons
-              name={activeOption.icon as any}
-              size={18}
-              color={isDefault ? theme.colors.onSurfaceVariant : theme.colors.primary}
-            />
-          </View>
+          <MaterialCommunityIcons
+            name={activeOption.icon as any}
+            size={16}
+            color={isDefault ? theme.colors.onSurfaceVariant : theme.colors.primary}
+          />
+          <MaterialCommunityIcons
+            name="chevron-down"
+            size={14}
+            color={isDefault ? theme.colors.onSurfaceVariant : theme.colors.primary}
+          />
         </Pressable>
       ) : (
         <Pressable

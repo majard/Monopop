@@ -25,6 +25,7 @@ import ImportModal from '../components/ImportModal';
 import { StoreSelector } from '../components/StoreSelector';
 import { generateShoppingListText } from '../utils/stringUtils';
 import * as Clipboard from 'expo-clipboard';
+import { ActionMenuButton } from '../components/ActionMenuButton';
 
 type ListRow =
   | { type: 'section-header'; title: string; sectionType: 'pending' | 'cart' }
@@ -418,7 +419,9 @@ export default function ShoppingListScreen() {
   const bottomBarHeight = checkedItems.length > 0 ? 64 : 0;
 
   return (
-    <SafeAreaView style={styles.container}>
+
+    // TODO: investigate why paddingBottom is needed to prevent content clipping
+    <SafeAreaView style={[styles.container, {paddingBottom: -96}]}>
       <ContextualHeader
         listName={listName}
         onListNameSave={handleListNameSave}
@@ -454,20 +457,7 @@ export default function ShoppingListScreen() {
           mode="shoppingList"
           iconOnly
         />
-        <Pressable
-          onPress={() => setActionsVisible(true)}
-          style={({ pressed }) => ({
-            padding: 8,
-            borderRadius: 20,
-            backgroundColor: pressed ? theme.colors.surfaceVariant : 'transparent',
-          })}
-        >
-          <MaterialCommunityIcons
-            name="dots-vertical"
-            size={22}
-            color={theme.colors.onSurfaceVariant}
-          />
-        </Pressable>
+        <ActionMenuButton onPress={() => setActionsVisible(true)} />
       </View>
 
       {initialLoading ? (
