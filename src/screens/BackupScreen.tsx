@@ -6,7 +6,8 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types/navigation';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getDb } from '../database/database';
-import { File, Paths } from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
+import { StorageAccessFramework } from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
 
@@ -25,6 +26,8 @@ export default function BackupScreen() {
   const [resetDialogVisible, setResetDialogVisible] = useState(false);
   const [importDialogVisible, setImportDialogVisible] = useState(false);
   const [importData, setImportData] = useState<any>(null);
+  const [importFileName, setImportFileName] = useState<string | null>(null);
+
 
   // Countdown timer for import confirmation
   useEffect(() => {
@@ -46,60 +49,104 @@ export default function BackupScreen() {
     }
   }, [resetDialogVisible, resetTimer]);
 
-  const handleExport = async () => {
+  const buildExportData = async () => {
+    const db = getDb();
+
+    // Export tables in dependency order
+    const categories = await db.getAllAsync('SELECT * FROM categories ORDER BY id');
+    const stores = await db.getAllAsync('SELECT * FROM stores ORDER BY id');
+    const products = await db.getAllAsync('SELECT * FROM products ORDER BY id');
+    const lists = await db.getAllAsync('SELECT * FROM lists ORDER BY id');
+    const inventoryItems = await db.getAllAsync('SELECT * FROM inventory_items ORDER BY id');
+    const inventoryHistory = await db.getAllAsync('SELECT * FROM inventory_history ORDER BY id');
+    const shoppingListItems = await db.getAllAsync('SELECT * FROM shopping_list_items ORDER BY id');
+    const invoices = await db.getAllAsync('SELECT * FROM invoices ORDER BY id');
+    const invoiceItems = await db.getAllAsync('SELECT * FROM invoice_items ORDER BY id');
+    const productStorePrices = await db.getAllAsync('SELECT * FROM product_store_prices ORDER BY productId, storeId');
+    const productBasePrices = await db.getAllAsync('SELECT * FROM product_base_prices ORDER BY productId');
+    const settings = await db.getAllAsync('SELECT * FROM settings ORDER BY id');
+
+    const exportData = {
+      version: DB_VERSION,
+      exportedAt: new Date().toISOString(),
+      tables: {
+        categories,
+        stores,
+        products,
+        lists,
+        inventory_items: inventoryItems,
+        inventory_history: inventoryHistory,
+        shopping_list_items: shoppingListItems,
+        invoices,
+        invoice_items: invoiceItems,
+        product_store_prices: productStorePrices,
+        product_base_prices: productBasePrices,
+        settings,
+      },
+    };
+
+    const jsonString = JSON.stringify(exportData, null, 2);
+    const today = new Date().toISOString().slice(0, 10); // "2026-03-11"
+    const fileName = `monopop-${today}.json`;
+
+    return { jsonString, fileName };
+  };
+
+  const handleSaveToDevice = async () => {
     try {
       setLoading(true);
-      const db = getDb();
+      const { jsonString, fileName } = await buildExportData();
 
-      // Export tables in dependency order
-      const categories = await db.getAllAsync('SELECT * FROM categories ORDER BY id');
-      const stores = await db.getAllAsync('SELECT * FROM stores ORDER BY id');
-      const products = await db.getAllAsync('SELECT * FROM products ORDER BY id');
-      const lists = await db.getAllAsync('SELECT * FROM lists ORDER BY id');
-      const inventoryItems = await db.getAllAsync('SELECT * FROM inventory_items ORDER BY id');
-      const inventoryHistory = await db.getAllAsync('SELECT * FROM inventory_history ORDER BY id');
-      const shoppingListItems = await db.getAllAsync('SELECT * FROM shopping_list_items ORDER BY id');
-      const invoices = await db.getAllAsync('SELECT * FROM invoices ORDER BY id');
-      const invoiceItems = await db.getAllAsync('SELECT * FROM invoice_items ORDER BY id');
-      const productStorePrices = await db.getAllAsync('SELECT * FROM product_store_prices ORDER BY productId, storeId');
-      const productBasePrices = await db.getAllAsync('SELECT * FROM product_base_prices ORDER BY productId');
-      const settings = await db.getAllAsync('SELECT * FROM settings ORDER BY id');
-
-      const exportData = {
-        version: DB_VERSION,
-        exportedAt: new Date().toISOString(),
-        tables: {
-          categories,
-          stores,
-          products,
-          lists,
-          inventory_items: inventoryItems,
-          inventory_history: inventoryHistory,
-          shopping_list_items: shoppingListItems,
-          invoices,
-          invoice_items: invoiceItems,
-          product_store_prices: productStorePrices,
-          product_base_prices: productBasePrices,
-          settings,
-        },
-      };
-
-      const jsonString = JSON.stringify(exportData, null, 2);
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const fileName = `monopop-backup-${timestamp}.json`;
+      // Request directory permissions
+      const permissions = await StorageAccessFramework.requestDirectoryPermissionsAsync();
       
-      const file = new File(Paths.cache, fileName);
-      await file.write(jsonString);
-      const fileUri = file.uri;
+      if (permissions.granted) {
+        // Create file in the selected directory
+        const fileUri = await StorageAccessFramework.createFileAsync(
+          permissions.directoryUri,
+          fileName,
+          'application/json'
+        );
+        
+        // Write content to the file
+        await FileSystem.writeAsStringAsync(fileUri, jsonString);
+        
+        Alert.alert('Sucesso', `Backup salvo como ${fileName}`);
+      } else {
+        // Permission denied, fall back to share flow with warning
+        Alert.alert(
+          'Permissão Negada',
+          'Não foi possível acessar o armazenamento. Abrindo compartilhamento...',
+          [
+            { text: 'OK', onPress: () => handleShare() }
+          ]
+        );
+      }
+    } catch (error) {
+      console.error('Error saving to device:', error);
+      Alert.alert('Erro', 'Falha ao salvar no dispositivo');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleShare = async () => {
+    try {
+      setLoading(true);
+      const { jsonString, fileName } = await buildExportData();
+
+      // Create temporary file in cache
+      const cacheUri = `${FileSystem.cacheDirectory}${fileName}`;
+      await FileSystem.writeAsStringAsync(cacheUri, jsonString);
 
       // Share the file
-      await Sharing.shareAsync(fileUri, {
+      await Sharing.shareAsync(cacheUri, {
         mimeType: 'application/json',
         dialogTitle: 'Compartilhar Backup Listai',
       });
     } catch (error) {
-      console.error('Error exporting data:', error);
-      Alert.alert('Erro', 'Falha ao exportar dados');
+      console.error('Error sharing data:', error);
+      Alert.alert('Erro', 'Falha ao compartilhar dados');
     } finally {
       setLoading(false);
     }
@@ -254,10 +301,10 @@ export default function BackupScreen() {
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const fileUri = result.assets[0].uri;
-        const file = new File(fileUri);
-        const fileContent = await file.text();
+        const fileContent = await FileSystem.readAsStringAsync(fileUri);
         const parsedData = JSON.parse(fileContent);
         setImportData(parsedData);
+        setImportFileName(result.assets[0].name);
       }
     } catch (error) {
       console.error('Error selecting file:', error);
@@ -323,8 +370,16 @@ export default function BackupScreen() {
             <Text style={styles.description}>
               Exporte todos os seus dados para um arquivo JSON que pode ser compartilhado ou salvo.
             </Text>
-            <Button mode="contained" onPress={handleExport} icon="cloud-upload" style={styles.button}>
-              Exportar Backup
+            <Button mode="contained" onPress={handleSaveToDevice} icon="download" style={styles.button}>
+              Salvar no dispositivo
+            </Button>
+            <Button 
+              mode="outlined" 
+              onPress={handleShare} 
+              icon="share-variant" 
+              style={styles.shareButton}
+            >
+              Compartilhar
             </Button>
           </Card.Content>
         </Card>
@@ -348,7 +403,9 @@ export default function BackupScreen() {
             </Button>
             {importData && (
               <Text style={styles.selectedFileText}>
-                Arquivo selecionado: {importData.version ? `Backup v${importData.version}` : 'Arquivo JSON'}
+                Arquivo selecionado:
+                {'\n'}
+                {importFileName ?? 'arquivo.json'}
               </Text>
             )}
             <Button
@@ -477,6 +534,9 @@ const styles = StyleSheet.create({
     color: '#666',
     marginBottom: 16,
     fontStyle: 'italic',
+  },
+  shareButton: {
+    marginTop: 8,
   },
   button: {
     marginTop: 8,
