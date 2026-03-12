@@ -15,6 +15,7 @@ The name comes from *monopsônio popular* — a market with a single dominant bu
 
 - **Multiple independent lists** — same products, separate inventory per list (work, home, etc.)
 - **Shopping list with price tracking** — price auto-suggested per store, with fallback to any store
+- **Reference price per store** — set an expected price per product/store; used as the primary suggestion, updated automatically on save or checkout
 - **Lowest price in 90 days** — per product, loaded in background to avoid blocking interaction
 - **Text import** — paste a list from any source; fuzzy matching maps to existing products
 - **Purchase invoices** — on checkout, records date, store and prices paid per item; history with zero extra effort
@@ -33,7 +34,7 @@ The name comes from *monopsônio popular* — a market with a single dominant bu
 |---|---|
 | Framework | React Native (Expo SDK 54, bare workflow) |
 | UI | React Native Paper (Material Design 3) |
-| Database | expo-sqlite (SQLite, schema V8, WAL mode) |
+| Database | expo-sqlite (SQLite, schema V9, WAL mode) |
 | Navigation | React Navigation (Stack + Bottom Tabs) |
 | Animations | Reanimated v4 |
 | Runtime | New Architecture (JSI) enabled |
@@ -100,6 +101,10 @@ Main data arrives in a single JOIN query. Historical prices (`getLowestPriceForP
 
 **Price input as shift register** — monetary values are stored as integers (cents) throughout the app to avoid floating point errors. The price input works as a shift register: each digit typed shifts left, so typing "1", "2", "3" produces "R$ 1,23" without the user managing separators. Backspace shifts right. Standard pattern for monetary input on mobile but requires careful handling of the initial state and copy-paste edge cases.
 
+**Reference price cascade** — the lookup chain for price suggestions is strictly scoped: store-specific reference → base reference → last invoice at that store → null. It deliberately never falls back across stores. A price from Store A has no business pre-filling a session at Store B — cross-contamination would silently corrupt the user's price memory, the one thing the app exists to build.
+
+**StorageAccessFramework for backup export** — Android 10+ scoped storage removes direct filesystem access; WRITE_EXTERNAL_STORAGE is a no-op on Android 13+. The backup screen uses SAF via StorageAccessFramework (expo-file-system/legacy) to open a native folder picker and write directly to any user-chosen directory. Android restricts direct access to root-level protected folders like Downloads — the user must select or create a subfolder within it. Falls back to Sharing.shareAsync if permission is denied. Both paths share the same buildExportData() helper to avoid duplicating the query logic.
+
 *_Numbers from a previous session — not verified against current baseline._
 
 ---
@@ -120,7 +125,7 @@ Main data arrives in a single JOIN query. Historical prices (`getLowestPriceForP
 
 **Derived stats in `EditInventoryItemScreen`** — average weekly consumption, 90-day average price, and 90-day lowest price appear without any extra field or user effort. The data already existed in the tables; it's just a matter of computing it at the right moment. Users can review price history without entering edit mode.
 
-**Product aliases (v1.6)** — the problem this solves is real: "whole milk" and "milk" are the same product, but nomenclature comes from invoices outside the user's control. Aliases are more robust than forcing manual standardization.
+**Product aliases (v1.8)** — the problem this solves is real: "whole milk" and "milk" are the same product, but nomenclature comes from invoices outside the user's control. Aliases are more robust than forcing manual standardization.
 
 ---
 
@@ -173,7 +178,8 @@ APK at `android/app/build/outputs/apk/release/`. Requires JDK 17+ and Android SD
 
 ## Roadmap
 
-- [ ] Reference price per store — set a target price per product/store; alert on drift
+- [x] Reference price per store — set a target price per product/store; updated on checkout
+- [ ] Price drift alert — warn when price paid diverges significantly from reference
 - [ ] Product aliases — map equivalent names to avoid repeated prompts on import
 - [ ] Cross-device sync (planned paid feature)
 - [ ] Android widget for quick item addition without opening the app
