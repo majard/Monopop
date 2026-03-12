@@ -86,8 +86,8 @@ export default function BackupScreen() {
     };
 
     const jsonString = JSON.stringify(exportData, null, 2);
-    const today = new Date().toISOString().slice(0, 10); // "2026-03-11"
-    const fileName = `monopop-${today}.json`;
+    const ts = new Date().toISOString().slice(0, 16).replace('T', '-').replace(':', 'h'); // "2026-03-11-23h25"
+    const fileName = `monopop-backup-${ts}.json`;
 
     return { jsonString, fileName };
   };
@@ -99,7 +99,7 @@ export default function BackupScreen() {
 
       // Request directory permissions
       const permissions = await StorageAccessFramework.requestDirectoryPermissionsAsync();
-      
+
       if (permissions.granted) {
         // Create file in the selected directory
         const fileUri = await StorageAccessFramework.createFileAsync(
@@ -107,10 +107,10 @@ export default function BackupScreen() {
           fileName,
           'application/json'
         );
-        
+
         // Write content to the file
         await FileSystem.writeAsStringAsync(fileUri, jsonString);
-        
+
         Alert.alert('Sucesso', `Backup salvo como ${fileName}`);
       } else {
         // Permission denied, fall back to share flow with warning
@@ -373,10 +373,10 @@ export default function BackupScreen() {
             <Button mode="contained" onPress={handleSaveToDevice} icon="download" style={styles.button}>
               Salvar no dispositivo
             </Button>
-            <Button 
-              mode="outlined" 
-              onPress={handleShare} 
-              icon="share-variant" 
+            <Button
+              mode="outlined"
+              onPress={handleShare}
+              icon="share-variant"
               style={styles.shareButton}
             >
               Compartilhar
