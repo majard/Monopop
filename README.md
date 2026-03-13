@@ -14,8 +14,9 @@ The name comes from *monopsônio popular* — a market with a single dominant bu
 ## Features
 
 - **Multiple independent lists** — same products, separate inventory per list (work, home, etc.)
-- **Shopping list with price tracking** — price auto-suggested per store, with fallback to any store
+- **Shopping list with price tracking** — price auto-suggested per store (no cross-store contamination)
 - **Reference price per store** — set an expected price per product/store; used as the primary suggestion, updated automatically on save or checkout
+- **Per-unit price normalisation (v1.7)** — compares prices across different package sizes in real time
 - **Lowest price in 90 days** — per product, loaded in background to avoid blocking interaction
 - **Text import** — paste a list from any source; fuzzy matching maps to existing products
 - **Purchase invoices** — on checkout, records date, store and prices paid per item; history with zero extra effort
@@ -34,7 +35,7 @@ The name comes from *monopsônio popular* — a market with a single dominant bu
 |---|---|
 | Framework | React Native (Expo SDK 54, bare workflow) |
 | UI | React Native Paper (Material Design 3) |
-| Database | expo-sqlite (SQLite, schema V9, WAL mode) |
+| Database | expo-sqlite (SQLite, schema V10, WAL mode) |
 | Navigation | React Navigation (Stack + Bottom Tabs) |
 | Animations | Reanimated v4 |
 | Runtime | New Architecture (JSI) enabled |
@@ -79,6 +80,8 @@ Main data arrives in a single JOIN query. Historical prices (`getLowestPriceForP
 
 **Indexes via migration** — after profiling, indexes added to `invoices`, `invoice_items` and `inventory_history` in the V8 migration. `getLowestPriceForProducts` dropped from 1287ms to 5ms.*
 
+**Units pricing invariant (v1.7)** — reference prices store `pricePerUnit` plus the store/base `packageSize` context. Unit-configured products ignore legacy ref rows without `packageSize` to avoid ambiguous semantics.
+
 **Batch queries** — N+1 pattern eliminated. `getLowestPriceForProducts(ids[])`, `getLastUnitPricesForProductsAtStore`, `getLastUnitPricesForProducts` all return `Map<productId, value>` for O(1) lookup. The original code ran one query per item in a loop.
 
 **Optimistic `useInventoryItem`** — saves quantity to the DB immediately to guarantee responsiveness of the +/− controls on HomeScreen. `EditInventoryItemScreen` handles this by storing `initialQuantityRef` to revert on discard, instead of trying to batch the save — which would break HomeScreen's behavior.
@@ -113,7 +116,7 @@ Main data arrives in a single JOIN query. Historical prices (`getLowestPriceForP
 
 **`defaultStoreMode` (ask / last / fixed)** — instead of always prompting for a store or always assuming the last one, the user configures the behavior that fits their workflow. Someone who always shops at the same place uses `fixed`; someone who rotates uses `ask`. This kind of decision distinguishes a feature that works from a feature that adapts.
 
-**Price pre-fill with cascading fallback** — on store selection, the app tries to fill prices from the last purchase at that specific store; if no history exists there, it falls back to the last price at any store. Users rarely need to type a price from scratch.
+**Price pre-fill with store-scoped history** — on store selection, the app tries to fill prices from the last purchase at that specific store. Users rarely need to type a price from scratch, and store switching never imports prices from other stores.
 
 **`isFirstLoad` ref in ShoppingListScreen** — without this ref, `useFocusEffect` would reset the selected store every time the user returned from another tab. Small detail, real impact: the entire shopping session is organized around the selected store.
 
@@ -185,5 +188,9 @@ APK at `android/app/build/outputs/apk/release/`. Requires JDK 17+ and Android SD
 - [ ] Android widget for quick item addition without opening the app
 
 ---
+
+## Specs
+
+Specs live in `specs/` (start here: `specs/monopop-v1.7.0-units.md`).
 
 Built by [Mah Jardim](https://github.com/majard)
