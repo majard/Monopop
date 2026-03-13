@@ -41,3 +41,5 @@ android/app/keystore.jks
 android/app/keystore.properties
 
 changes
+
+coverage/
