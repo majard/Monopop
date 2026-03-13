@@ -207,8 +207,8 @@ export default function BackupScreen() {
 
         for (const product of tables.products || []) {
           await db.runAsync(
-            'INSERT INTO products (id, name, categoryId, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?)',
-            [product.id, product.name, product.categoryId, product.createdAt, product.updatedAt]
+            'INSERT INTO products (id, name, categoryId, unit, standardPackageSize, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [product.id, product.name, product.categoryId, product.unit ?? null, product.standardPackageSize ?? null, product.createdAt, product.updatedAt]
           );
         }
 
@@ -235,8 +235,8 @@ export default function BackupScreen() {
 
         for (const sli of tables.shopping_list_items || []) {
           await db.runAsync(
-            'INSERT INTO shopping_list_items (id, inventoryItemId, quantity, checked, price, sortOrder, notes, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [sli.id, sli.inventoryItemId, sli.quantity, sli.checked, sli.price, sli.sortOrder, sli.notes, sli.createdAt, sli.updatedAt]
+            'INSERT INTO shopping_list_items (id, inventoryItemId, quantity, checked, price, packageSize, pricePerUnit, sortOrder, notes, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [sli.id, sli.inventoryItemId, sli.quantity, sli.checked, sli.price, sli.packageSize ?? null, sli.pricePerUnit ?? null, sli.sortOrder, sli.notes, sli.createdAt, sli.updatedAt]
           );
         }
 
@@ -249,22 +249,22 @@ export default function BackupScreen() {
 
         for (const ii of tables.invoice_items || []) {
           await db.runAsync(
-            'INSERT INTO invoice_items (id, invoiceId, productId, quantity, unitPrice, lineTotal, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [ii.id, ii.invoiceId, ii.productId, ii.quantity, ii.unitPrice, ii.lineTotal, ii.createdAt]
+            'INSERT INTO invoice_items (id, invoiceId, productId, quantity, unitPrice, lineTotal, packageSize, pricePerUnit, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [ii.id, ii.invoiceId, ii.productId, ii.quantity, ii.unitPrice, ii.lineTotal, ii.packageSize ?? null, ii.pricePerUnit ?? null, ii.createdAt]
           );
         }
 
         for (const psp of tables.product_store_prices || []) {
           await db.runAsync(
-            'INSERT INTO product_store_prices (productId, storeId, price, updatedAt) VALUES (?, ?, ?, ?)',
-            [psp.productId, psp.storeId, psp.price, psp.updatedAt]
+            'INSERT INTO product_store_prices (productId, storeId, price, packageSize, updatedAt) VALUES (?, ?, ?, ?, ?)',
+            [psp.productId, psp.storeId, psp.price, psp.packageSize ?? null, psp.updatedAt]
           );
         }
 
         for (const pbp of tables.product_base_prices || []) {
           await db.runAsync(
-            'INSERT INTO product_base_prices (productId, price, updatedAt) VALUES (?, ?, ?)',
-            [pbp.productId, pbp.price, pbp.updatedAt]
+            'INSERT INTO product_base_prices (productId, price, packageSize, updatedAt) VALUES (?, ?, ?, ?)',
+            [pbp.productId, pbp.price, pbp.packageSize ?? null, pbp.updatedAt]
           );
         }
 

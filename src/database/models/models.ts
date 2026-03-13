@@ -24,6 +24,8 @@ export interface InventoryItem {
   productName: string;
   categoryId?: number | null;
   categoryName?: string | null;
+  unit?: string | null;
+  standardPackageSize?: number | null;
 }
 
 export interface InventoryHistory {
@@ -55,6 +57,8 @@ export interface ShoppingListItem {
   productName?: string; // Added from JOIN
   productId?: number; // Added from JOIN
   currentInventoryQuantity?: number; // Added from JOIN
+  packageSize?: number | null;
+  pricePerUnit?: number | null;
 }
 
 export interface Store {
