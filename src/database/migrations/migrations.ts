@@ -8,8 +8,9 @@ import { migrateToV6 } from './migrateToV6';
 import { migrateToV7 } from './migrateToV7';
 import { migrateToV8 } from './migrateToV8';
 import { migrateToV9 } from './migrateToV9';
+import { migrateToV10 } from './migrateToV10';
 
-export const CURRENT_DATABASE_VERSION = 9;
+export const CURRENT_DATABASE_VERSION = 10;
 
 export const runMigrations = async (db: SQLite.SQLiteDatabase, currentVersion: number) => {
     if (currentVersion < 1) {
@@ -18,7 +19,6 @@ export const runMigrations = async (db: SQLite.SQLiteDatabase, currentVersion: n
     }
     if (currentVersion < 2) {
         try {
-            // This function is not supported on web.
             await db.withExclusiveTransactionAsync(async () => {
               await migrateToV2(db);
               await db.runAsync('PRAGMA user_version = 2;');
@@ -28,7 +28,6 @@ export const runMigrations = async (db: SQLite.SQLiteDatabase, currentVersion: n
             throw e;
           }
     }
-
     if (currentVersion < 3) {
         try {
             await db.withExclusiveTransactionAsync(async () => {
@@ -70,5 +69,16 @@ export const runMigrations = async (db: SQLite.SQLiteDatabase, currentVersion: n
     if (currentVersion < 9) {
         await migrateToV9(db);
         await db.runAsync('PRAGMA user_version = 9;');
+    }
+    if (currentVersion < 10) {
+        try {
+            await db.withExclusiveTransactionAsync(async () => {
+              await migrateToV10(db);
+              await db.runAsync('PRAGMA user_version = 10;');
+            });
+          } catch (e) {
+            console.error("Migration to V10 failed:", e);
+            throw e;
+          }
     }
 };
