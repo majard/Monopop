@@ -1,8 +1,29 @@
-import React, { useRef, useState, useCallback, useMemo, useEffect } from 'react';
-import { View, StyleSheet, Text, FlatList, Pressable, Alert, Modal } from 'react-native';
-import { Button, Surface, TextInput, useTheme } from 'react-native-paper';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import React, {
+  useRef,
+  useState,
+  useCallback,
+  useMemo,
+  useEffect,
+} from "react";
+import {
+  View,
+  StyleSheet,
+  Text,
+  FlatList,
+  Pressable,
+  Alert,
+  Modal,
+} from "react-native";
+import {
+  Button,
+  Surface,
+  TextInput,
+  useTheme,
+  Portal,
+  Dialog,
+} from "react-native-paper";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import {
   getShoppingListItemsByListId,
   updateShoppingListItem,
@@ -19,40 +40,57 @@ import {
   getLastInvoiceItemForProduct,
   clearReferencePricesForProduct,
   concludeShoppingForListWithInvoiceV2,
-} from '../database/database';
-import type { RefPrice } from '../database/database';
-import { RootStackParamList } from '../types/navigation';
-import { ShoppingListItem } from '../database/models';
-import { useListContext } from '../context/ListContext';
-import { useListData } from '../context/ListDataContext';
-import { useList } from '../hooks/useList';
-import { EditShoppingItemModal } from '../components/EditShoppingItemModal';
-import type { UnitSaveData } from '../components/EditShoppingItemModal';
-import { ConfirmInvoiceModal, StoreOption } from '../components/ConfirmInvoiceModal';
-import ContextualHeader from '../components/ContextualHeader';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { AddItemButton } from '../components/AddItemButton';
-import { createHomeScreenStyles } from '../styles/HomeScreenStyles';
-import { SortMenu } from '../components/SortMenu';
-import { sortItems, SortOrder } from '../utils/sortUtils';
-import { ShoppingListItemCard } from '../components/ShoppingListItemCard';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import SearchBar from '../components/SearchBar';
-import ShoppingListSkeleton from '../components/ShoppingListSkeleton';
-import ImportModal from '../components/ImportModal';
-import { StoreSelector } from '../components/StoreSelector';
-import { generateShoppingListText } from '../utils/stringUtils';
-import * as Clipboard from 'expo-clipboard';
-import { ActionMenuButton } from '../components/ActionMenuButton';
+} from "../database/database";
+import type { RefPrice } from "../database/database";
+import { RootStackParamList } from "../types/navigation";
+import { ShoppingListItem } from "../database/models";
+import { useListContext } from "../context/ListContext";
+import { useListData } from "../context/ListDataContext";
+import { useList } from "../hooks/useList";
+import { EditShoppingItemModal } from "../components/EditShoppingItemModal";
+import type { UnitSaveData } from "../components/EditShoppingItemModal";
+import {
+  ConfirmInvoiceModal,
+  StoreOption,
+} from "../components/ConfirmInvoiceModal";
+import ContextualHeader from "../components/ContextualHeader";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { AddItemButton } from "../components/AddItemButton";
+import { createHomeScreenStyles } from "../styles/HomeScreenStyles";
+import { SortMenu } from "../components/SortMenu";
+import { sortItems, SortOrder } from "../utils/sortUtils";
+import { ShoppingListItemCard } from "../components/ShoppingListItemCard";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import SearchBar from "../components/SearchBar";
+import ShoppingListSkeleton from "../components/ShoppingListSkeleton";
+import ImportModal from "../components/ImportModal";
+import { StoreSelector } from "../components/StoreSelector";
+import { generateShoppingListText } from "../utils/stringUtils";
+import * as Clipboard from "expo-clipboard";
+import { ActionMenuButton } from "../components/ActionMenuButton";
 
 type ListRow =
-  | { type: 'section-header'; title: string; sectionType: 'pending' | 'cart' }
-  | { type: 'category-header'; category: string; sectionType: 'pending' | 'cart' }
-  | { type: 'item'; item: ShoppingListItemWithDetails; sectionType: 'pending' | 'cart' };
+  | { type: "section-header"; title: string; sectionType: "pending" | "cart" }
+  | {
+      type: "category-header";
+      category: string;
+      sectionType: "pending" | "cart";
+    }
+  | {
+      type: "item";
+      item: ShoppingListItemWithDetails;
+      sectionType: "pending" | "cart";
+    };
 
-type ShoppingListScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'ShoppingList'>;
+type ShoppingListScreenNavigationProp = NativeStackNavigationProp<
+  RootStackParamList,
+  "ShoppingList"
+>;
 
-interface ShoppingListItemWithDetails extends Omit<ShoppingListItem, 'checked'> {
+interface ShoppingListItemWithDetails extends Omit<
+  ShoppingListItem,
+  "checked"
+> {
   checked: boolean;
   productName: string;
   productId: number;
@@ -70,24 +108,42 @@ interface ShoppingListItemWithDetails extends Omit<ShoppingListItem, 'checked'> 
 export default function ShoppingListScreen() {
   const { listId } = useListContext();
   const { listName, handleListNameSave, handleListDelete } = useList(listId);
-  const { categories, stores, defaultStoreMode, defaultStoreId, lastStoreName, refreshStoreSettings, findByProductId } = useListData();
-  const [shoppingListItems, setShoppingListItems] = useState<ShoppingListItemWithDetails[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
+  const {
+    categories,
+    stores,
+    defaultStoreMode,
+    defaultStoreId,
+    lastStoreName,
+    refreshStoreSettings,
+    findByProductId,
+  } = useListData();
+  const [shoppingListItems, setShoppingListItems] = useState<
+    ShoppingListItemWithDetails[]
+  >([]);
+  const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
-  const [editingItem, setEditingItem] = useState<ShoppingListItemWithDetails | null>(null);
+  const [editingItem, setEditingItem] =
+    useState<ShoppingListItemWithDetails | null>(null);
   const [isCartCollapsed, setIsCartCollapsed] = useState(false);
   const [confirmVisible, setConfirmVisible] = useState(false);
-  const [defaultStoreName, setDefaultStoreName] = useState('');
+  const [defaultStoreName, setDefaultStoreName] = useState("");
   const [selectedStoreId, setSelectedStoreId] = useState<number | null>(null);
   const [lastStoreId, setLastStoreId] = useState<number | null>(null);
-  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
-  const [sortOrder, setSortOrder] = useState<SortOrder>('alphabetical');
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(
+    new Set(),
+  );
+  const [sortOrder, setSortOrder] = useState<SortOrder>("alphabetical");
   const [actionsVisible, setActionsVisible] = useState(false);
   const [importModalVisible, setImportModalVisible] = useState(false);
   const [retroVisible, setRetroVisible] = useState(false);
-  const [retroPackageSizeText, setRetroPackageSizeText] = useState('');
+  const [retroPackageSizeText, setRetroPackageSizeText] = useState("");
   const [retroUnit, setRetroUnit] = useState<string | null>(null);
+  const [retroInvoiceInfo, setRetroInvoiceInfo] = useState<{
+    storeName: string;
+    createdAt: string;
+    unitPrice: number;
+  } | null>(null);
   const navigation = useNavigation<ShoppingListScreenNavigationProp>();
   const theme = useTheme();
   const styles = createHomeScreenStyles(theme);
@@ -99,67 +155,98 @@ export default function ShoppingListScreen() {
   >(new Map());
 
   const updatePricesForStoreRef = useRef<
-    ((storeId: number | null, items: ShoppingListItemWithDetails[]) => Promise<void>) | null
+    | ((
+        storeId: number | null,
+        items: ShoppingListItemWithDetails[],
+      ) => Promise<void>)
+    | null
   >(null);
 
-  const getStoreKey = useCallback((storeId: number | null) => (storeId === null ? 'base' : String(storeId)), []);
+  const getStoreKey = useCallback(
+    (storeId: number | null) => (storeId === null ? "base" : String(storeId)),
+    [],
+  );
 
-  const getManualOverride = useCallback((storeId: number | null, productId: number) => {
-    const map = manualOverridesRef.current.get(getStoreKey(storeId));
-    return map?.get(productId) ?? null;
-  }, [getStoreKey]);
+  const getManualOverride = useCallback(
+    (storeId: number | null, productId: number) => {
+      const map = manualOverridesRef.current.get(getStoreKey(storeId));
+      return map?.get(productId) ?? null;
+    },
+    [getStoreKey],
+  );
 
-  const hasManualOverride = useCallback((storeId: number | null, productId: number) => {
-    return getManualOverride(storeId, productId) != null;
-  }, [getManualOverride]);
+  const hasManualOverride = useCallback(
+    (storeId: number | null, productId: number) => {
+      return getManualOverride(storeId, productId) != null;
+    },
+    [getManualOverride],
+  );
 
-  const setManualOverride = useCallback((
-    storeId: number | null,
-    productId: number,
-    override: { price: number; packageSize: number | null }
-  ) => {
-    const key = getStoreKey(storeId);
-    const existing = manualOverridesRef.current.get(key);
-    if (existing) {
-      existing.set(productId, override);
-      return;
-    }
-    manualOverridesRef.current.set(key, new Map([[productId, override]]));
-  }, [getStoreKey]);
+  const setManualOverride = useCallback(
+    (
+      storeId: number | null,
+      productId: number,
+      override: { price: number; packageSize: number | null },
+    ) => {
+      const key = getStoreKey(storeId);
+      const existing = manualOverridesRef.current.get(key);
+      if (existing) {
+        existing.set(productId, override);
+        return;
+      }
+      manualOverridesRef.current.set(key, new Map([[productId, override]]));
+    },
+    [getStoreKey],
+  );
 
-  const clearManualOverride = useCallback((storeId: number | null, productId: number) => {
-    const key = getStoreKey(storeId);
-    const existing = manualOverridesRef.current.get(key);
-    if (!existing) return;
-    existing.delete(productId);
-    if (existing.size === 0) manualOverridesRef.current.delete(key);
-  }, [getStoreKey]);
+  const clearManualOverride = useCallback(
+    (storeId: number | null, productId: number) => {
+      const key = getStoreKey(storeId);
+      const existing = manualOverridesRef.current.get(key);
+      if (!existing) return;
+      existing.delete(productId);
+      if (existing.size === 0) manualOverridesRef.current.delete(key);
+    },
+    [getStoreKey],
+  );
 
   useEffect(() => {
     if (!editingItem) return;
-    const fresh = shoppingListItems.find(i => i.id === editingItem.id);
+    const fresh = shoppingListItems.find((i) => i.id === editingItem.id);
     if (!fresh) return;
-    setEditingItem(prev => {
+    setEditingItem((prev) => {
       if (!prev || prev.id !== fresh.id) return prev;
       return { ...prev, ...fresh };
     });
   }, [editingItem?.id, shoppingListItems]);
 
   const retroResolveRef = useRef<((value: number | null) => void) | null>(null);
-  const promptForRetroPackageSize = useCallback(async (prefill: number, unit: string): Promise<number | null> => {
-    setRetroUnit(unit);
-    setRetroPackageSizeText(String(prefill));
-    setRetroVisible(true);
-    return await new Promise(resolve => {
-      retroResolveRef.current = resolve;
-    });
-  }, []);
+  const promptForRetroPackageSize = useCallback(
+    async (
+      prefill: number,
+      unit: string,
+      invoiceInfo: {
+        storeName: string;
+        createdAt: string;
+        unitPrice: number;
+      } | null,
+    ): Promise<number | null> => {
+      setRetroInvoiceInfo(invoiceInfo);
+      setRetroUnit(unit);
+      setRetroPackageSizeText(String(prefill));
+      setRetroVisible(true);
+      return await new Promise((resolve) => {
+        retroResolveRef.current = resolve;
+      });
+    },
+    [],
+  );
 
   useFocusEffect(
     useCallback(() => {
       loadDataRef.current?.();
       return;
-    }, [listId])
+    }, [listId]),
   );
 
   const loadData = useCallback(async () => {
@@ -168,70 +255,111 @@ export default function ShoppingListScreen() {
         getShoppingListItemsByListId(listId),
       ]);
 
-      const enhancedShoppingItems = shopping.map(item => ({
-        ...item,
-        checked: Boolean(item.checked),
-        productName: item.productName || 'Unknown Product',
-        productId: item.productId || 0,
-        currentInventoryQuantity: item.currentInventoryQuantity || 0,
-        price: item.price,
-        categoryName: item.categoryName ?? null,
-        lowestPrice90d: null,
-        refPrice: null,
-        packageSize: item.packageSize ?? null,
-      } as ShoppingListItemWithDetails));
+      const enhancedShoppingItems = shopping.map(
+        (item) =>
+          ({
+            ...item,
+            checked: Boolean(item.checked),
+            productName: item.productName || "Unknown Product",
+            productId: item.productId || 0,
+            currentInventoryQuantity: item.currentInventoryQuantity || 0,
+            price: item.price,
+            categoryName: item.categoryName ?? null,
+            lowestPrice90d: null,
+            refPrice: null,
+            packageSize: item.packageSize ?? null,
+          }) as ShoppingListItemWithDetails,
+      );
 
       setShoppingListItems(enhancedShoppingItems);
-      console.log('[DIAG:loadData] raw items', enhancedShoppingItems.map(item => ({ productId: item.productId, price: item.price })));
+      console.log(
+        "[DIAG:loadData] raw items",
+        enhancedShoppingItems.map((item) => ({
+          productId: item.productId,
+          price: item.price,
+        })),
+      );
 
       // Load lowest prices in background without blocking
-      const productIds = enhancedShoppingItems.map(item => item.productId).filter(id => id > 0);
+      const productIds = enhancedShoppingItems
+        .map((item) => item.productId)
+        .filter((id) => id > 0);
       if (productIds.length > 0) {
-        getLowestPriceForProducts(productIds).then(lowestPriceMap => {
-          setShoppingListItems(prev => prev.map(item => ({
-            ...item,
-            lowestPrice90d: lowestPriceMap.get(item.productId) ?? null,
-          })));
-        }).catch(error => {
-          console.error('Error loading lowest prices:', error);
-        });
+        getLowestPriceForProducts(productIds)
+          .then((lowestPriceMap) => {
+            setShoppingListItems((prev) =>
+              prev.map((item) => ({
+                ...item,
+                lowestPrice90d: lowestPriceMap.get(item.productId) ?? null,
+              })),
+            );
+          })
+          .catch((error) => {
+            console.error("Error loading lowest prices:", error);
+          });
       }
 
       let storeIdToSet: number | null = null;
 
       if (isFirstLoad.current) {
-        const lastStoreObj = stores.find(s => s.name === lastStoreName);
+        const lastStoreObj = stores.find((s) => s.name === lastStoreName);
         setLastStoreId(lastStoreObj?.id ?? null);
 
-        let storeNameToSet = '';
-        if (defaultStoreMode === 'last') {
-          storeNameToSet = lastStoreName ?? '';
+        let storeNameToSet = "";
+        if (defaultStoreMode === "last") {
+          storeNameToSet = lastStoreName ?? "";
           storeIdToSet = lastStoreObj?.id ?? null;
-        } else if (defaultStoreMode === 'fixed' && defaultStoreId) {
-          const defaultStore = stores.find(s => s.id === parseInt(defaultStoreId));
-          storeNameToSet = defaultStore?.name ?? '';
+        } else if (defaultStoreMode === "fixed" && defaultStoreId) {
+          const defaultStore = stores.find(
+            (s) => s.id === parseInt(defaultStoreId),
+          );
+          storeNameToSet = defaultStore?.name ?? "";
           storeIdToSet = defaultStore?.id ?? null;
         }
 
         setDefaultStoreName(storeNameToSet);
         setSelectedStoreId(storeIdToSet);
         isFirstLoad.current = false;
-        console.log('[DIAG:loadData] calling updatePricesForStore', { storeId: storeIdToSet, isFirstLoad: isFirstLoad.current });
-        await updatePricesForStoreRef.current?.(storeIdToSet, enhancedShoppingItems);
+        console.log("[DIAG:loadData] calling updatePricesForStore", {
+          storeId: storeIdToSet,
+          isFirstLoad: isFirstLoad.current,
+        });
+        await updatePricesForStoreRef.current?.(
+          storeIdToSet,
+          enhancedShoppingItems,
+        );
       } else {
-        console.log('[DIAG:loadData] calling updatePricesForStore', { storeId: selectedStoreId, isFirstLoad: isFirstLoad.current });
-        await updatePricesForStoreRef.current?.(selectedStoreId, enhancedShoppingItems);
+        console.log("[DIAG:loadData] calling updatePricesForStore", {
+          storeId: selectedStoreId,
+          isFirstLoad: isFirstLoad.current,
+        });
+        await updatePricesForStoreRef.current?.(
+          selectedStoreId,
+          enhancedShoppingItems,
+        );
       }
     } catch (error) {
-      console.error('Erro ao carregar dados:', error);
+      console.error("Erro ao carregar dados:", error);
     } finally {
       setInitialLoading(false);
     }
-  }, [listId, stores, defaultStoreMode, defaultStoreId, lastStoreName, selectedStoreId]);
+  }, [
+    listId,
+    stores,
+    defaultStoreMode,
+    defaultStoreId,
+    lastStoreName,
+    selectedStoreId,
+  ]);
 
   loadDataRef.current = loadData;
 
-  const resolveDisplayPrice = (item: ShoppingListItemWithDetails, refPrice: RefPrice | null, unit: string | null, standardPackageSize: number | null): number | undefined => {
+  const resolveDisplayPrice = (
+    item: ShoppingListItemWithDetails,
+    refPrice: RefPrice | null,
+    unit: string | null,
+    standardPackageSize: number | null,
+  ): number | undefined => {
     if (!refPrice) return item.price;
     if (!unit || !standardPackageSize) {
       const cents = Math.round(refPrice.price * 100);
@@ -245,19 +373,30 @@ export default function ShoppingListScreen() {
     return cents / 100;
   };
 
-  async function updatePricesForStore(storeId: number | null, items: ShoppingListItemWithDetails[]) {
+  async function updatePricesForStore(
+    storeId: number | null,
+    items: ShoppingListItemWithDetails[],
+  ) {
     try {
-      const productIds = items.map(item => item.productId).filter(id => id > 0);
+      const productIds = items
+        .map((item) => item.productId)
+        .filter((id) => id > 0);
       if (productIds.length === 0) return;
 
       // Returns Map<productId, RefPrice> — price is price-per-package; packageSize is the store/base package context.
-      const referencePriceMap = await getReferencePricesForProducts(productIds, storeId);
-      console.log('[DIAG] updatePricesForStore', {
+      const referencePriceMap = await getReferencePricesForProducts(
+        productIds,
         storeId,
-        entries: [...referencePriceMap.entries()].map(([id, ref]) => ({ id, ...ref })),
+      );
+      console.log("[DIAG] updatePricesForStore", {
+        storeId,
+        entries: [...referencePriceMap.entries()].map(([id, ref]) => ({
+          id,
+          ...ref,
+        })),
       });
 
-      const updatedItems = items.map(item => {
+      const updatedItems = items.map((item) => {
         if (item.productId === 0) return item;
         const refPrice = referencePriceMap.get(item.productId);
         if (!refPrice) return item;
@@ -281,7 +420,8 @@ export default function ShoppingListScreen() {
           if (refPackageSize > 0) {
             const pricePerUnit = refPrice.price / refPackageSize;
             const effectivePackageSize = refPackageSize;
-            const displayPrice = Math.round(pricePerUnit * effectivePackageSize * 100) / 100;
+            const displayPrice =
+              Math.round(pricePerUnit * effectivePackageSize * 100) / 100;
             return {
               ...item,
               price: displayPrice,
@@ -291,10 +431,15 @@ export default function ShoppingListScreen() {
           }
         }
 
-        const displayPrice = resolveDisplayPrice(item, refPrice, unit, standardPackageSize);
+        const displayPrice = resolveDisplayPrice(
+          item,
+          refPrice,
+          unit,
+          standardPackageSize,
+        );
 
         if (unit && standardPackageSize) {
-          console.log('[DIAG] displayPrice for product', item.productId, {
+          console.log("[DIAG] displayPrice for product", item.productId, {
             refPrice,
             standardPackageSize,
             displayPrice,
@@ -306,11 +451,11 @@ export default function ShoppingListScreen() {
       });
 
       // Log each item that has a unit
-      updatedItems.forEach(item => {
+      updatedItems.forEach((item) => {
         const inv = findByProductId(item.productId);
         const unit = inv?.unit ?? null;
         if (unit) {
-          console.log('[DIAG:updatePricesForStore] item result', {
+          console.log("[DIAG:updatePricesForStore] item result", {
             productId: item.productId,
             unit,
             standardPackageSize: inv?.standardPackageSize ?? null,
@@ -323,183 +468,305 @@ export default function ShoppingListScreen() {
 
       setShoppingListItems(updatedItems);
       if (editingItem) {
-        const fresh = updatedItems.find(i => i.id === editingItem.id);
+        const fresh = updatedItems.find((i) => i.id === editingItem.id);
         if (fresh) setEditingItem(fresh);
       }
     } catch (error) {
-      console.error('Error updating prices for store:', error);
+      console.error("Error updating prices for store:", error);
     }
   }
 
   updatePricesForStoreRef.current = updatePricesForStore;
 
-  const handleStoreSelect = useCallback((storeId: number) => {
-    setSelectedStoreId(storeId);
-    const selectedStore = stores.find(s => s.id === storeId);
-    setDefaultStoreName(selectedStore?.name ?? '');
-    updatePricesForStoreRef.current?.(storeId, shoppingListItems);
-  }, [stores, shoppingListItems]);
+  const handleStoreSelect = useCallback(
+    (storeId: number) => {
+      setSelectedStoreId(storeId);
+      const selectedStore = stores.find((s) => s.id === storeId);
+      setDefaultStoreName(selectedStore?.name ?? "");
+      updatePricesForStoreRef.current?.(storeId, shoppingListItems);
+    },
+    [stores, shoppingListItems],
+  );
 
-  const handleToggleChecked = useCallback(async (item: ShoppingListItemWithDetails) => {
-    setShoppingListItems(prev => prev.map(i =>
-      i.id === item.id ? { ...i, checked: !item.checked } : i
-    ));
-    try {
-      await updateShoppingListItem(item.id, { checked: !item.checked });
-    } catch (error) {
-      setShoppingListItems(prev => prev.map(i =>
-        i.id === item.id ? { ...i, checked: item.checked } : i
-      ));
-      console.error('Erro ao atualizar item:', error);
-    }
-  }, []);
+  const handleToggleChecked = useCallback(
+    async (item: ShoppingListItemWithDetails) => {
+      setShoppingListItems((prev) =>
+        prev.map((i) =>
+          i.id === item.id ? { ...i, checked: !item.checked } : i,
+        ),
+      );
+      try {
+        await updateShoppingListItem(item.id, { checked: !item.checked });
+      } catch (error) {
+        setShoppingListItems((prev) =>
+          prev.map((i) =>
+            i.id === item.id ? { ...i, checked: item.checked } : i,
+          ),
+        );
+        console.error("Erro ao atualizar item:", error);
+      }
+    },
+    [],
+  );
 
-  const handleDeleteItem = useCallback(async (item: ShoppingListItemWithDetails) => {
-    try {
-      await deleteShoppingListItem(item.id);
-      await loadData();
-    } catch (error) {
-      console.error('Erro ao deletar item:', error);
-    }
-  }, [loadData]);
+  const handleDeleteItem = useCallback(
+    async (item: ShoppingListItemWithDetails) => {
+      try {
+        await deleteShoppingListItem(item.id);
+        await loadData();
+      } catch (error) {
+        console.error("Erro ao deletar item:", error);
+      }
+    },
+    [loadData],
+  );
 
-  const handleSaveEdit = useCallback(async (
-    quantity: number,
-    price: number | undefined,
-    unitData?: UnitSaveData,
-  ) => {
-    console.log('[DIAG:handleSaveEdit] called', {
-      editingItemId: editingItem?.id,
-      editingItemProductId: editingItem?.productId,
-      quantity,
-      price,
-      unitData,
-    });
-    if (!editingItem) return;
-    try {
-      if (unitData?.unit && unitData.newStandardPackageSize != null) {
-        const choice = await new Promise<'cancel' | 'no' | 'yes'>(resolve => {
-          Alert.alert(
-            'Calcular referência histórica?',
-            'Encontramos sua última compra deste produto. Você pode usar o tamanho da embalagem que comprou para preencher uma referência automaticamente.',
-            [
-              { text: 'Cancelar', style: 'cancel', onPress: () => resolve('cancel') },
-              { text: 'Não', onPress: () => resolve('no') },
-              { text: 'Sim', onPress: () => resolve('yes') },
-            ]
+  const handleSaveEdit = useCallback(
+    async (
+      quantity: number,
+      price: number | undefined,
+      unitData?: UnitSaveData,
+    ) => {
+      console.log("[DIAG:handleSaveEdit] called", {
+        editingItemId: editingItem?.id,
+        editingItemProductId: editingItem?.productId,
+        quantity,
+        price,
+        unitData,
+      });
+      if (!editingItem) return;
+      
+  // Store needed data before closing modal
+  const itemProductId = editingItem.productId;
+  const itemId = editingItem.id;
+  
+  // Close edit modal immediately
+  setEditingItem(null);
+      try {
+        if (unitData?.unit && unitData.newStandardPackageSize != null) {
+          const formatCurrency = (v: number) =>
+            `R$ ${v.toFixed(2).replace(".", ",")}`;
+          const formatDateTime = (iso: string) => {
+            const d = new Date(iso);
+            return (
+              d.toLocaleDateString("pt-BR", {
+                day: "2-digit",
+                month: "2-digit",
+                year: "numeric",
+              }) +
+              " " +
+              d.toLocaleTimeString("pt-BR", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })
+            );
+          };
+
+          const last = await getLastInvoiceItemForProduct(
+            itemProductId,
           );
-        });
+          const msg = last
+            ? `Última compra encontrada:\n\n• Loja: ${last.storeName}\n• Data: ${formatDateTime(last.createdAt)}\n• Preço: ${formatCurrency(last.unitPrice)}\n\nQuer usar essa compra para preencher uma referência? Você só precisa confirmar o tamanho da embalagem.`
+            : "Nenhuma compra anterior foi encontrada para este produto. Você pode continuar sem calcular uma referência histórica.";
 
-        if (choice === 'cancel') {
-          unitData = undefined;
-        } else {
-          await updateProductUnit(editingItem.productId, unitData.unit, unitData.newStandardPackageSize);
-          await clearReferencePricesForProduct(editingItem.productId);
+          const choice = await new Promise<"cancel" | "no" | "yes">(
+            (resolve) => {
+              Alert.alert("Calcular referência histórica?", msg, [
+                {
+                  text: "Cancelar",
+                  style: "cancel",
+                  onPress: () => resolve("cancel"),
+                },
+                { text: "Não", onPress: () => resolve("no") },
+                { text: "Sim", onPress: () => resolve("yes") },
+              ]);
+            },
+          );
 
-          if (choice === 'yes') {
-            const last = await getLastInvoiceItemForProduct(editingItem.productId);
-            if (last) {
-              const enteredSize = await promptForRetroPackageSize(unitData.newStandardPackageSize, unitData.unit);
+          if (choice === "cancel") {
+            unitData = undefined;
+          } else {
+            await updateProductUnit(
+              itemProductId,
+              unitData.unit,
+              unitData.newStandardPackageSize,
+            );
+            await clearReferencePricesForProduct(itemProductId);
+
+            if (choice === "yes" && last) {
+              const enteredSize = await promptForRetroPackageSize(
+                unitData.newStandardPackageSize,
+                unitData.unit,
+                {
+                  storeName: last.storeName,
+                  createdAt: last.createdAt,
+                  unitPrice: last.unitPrice,
+                },
+              );
               if (enteredSize != null && enteredSize > 0) {
-                await upsertProductStorePrice(editingItem.productId, last.storeId, last.unitPrice, enteredSize);
-                await upsertProductBasePrice(editingItem.productId, last.unitPrice, enteredSize);
+                await upsertProductStorePrice(
+                  itemProductId,
+                  last.storeId,
+                  last.unitPrice,
+                  enteredSize,
+                );
+                await upsertProductBasePrice(
+                  itemProductId,
+                  last.unitPrice,
+                  enteredSize,
+                );
+                Alert.alert(
+                  "Referência criada",
+                  `${last.storeName} • ${formatDateTime(last.createdAt)}\nPreço: ${formatCurrency(last.unitPrice)}\nTamanho: ${String(enteredSize).replace(".", ",")} ${unitData.unit}`,
+                );
               }
             }
           }
         }
-      }
 
-      const updates: Parameters<typeof updateShoppingListItem>[1] = { quantity };
-      if (price !== undefined) updates.price = price;
-      if (!unitData && price !== undefined && price > 0) {
-        const inv = findByProductId(editingItem.productId);
-        const standardPackageSize = inv?.standardPackageSize ?? null;
-        const unit = inv?.unit ?? null;
-        if (unit && standardPackageSize && standardPackageSize > 0) {
-          updates.packageSize = editingItem.packageSize ?? standardPackageSize;
-        }
-      }
-      if (unitData) {
-        updates.packageSize = unitData.packageSize ?? null;
-      }
-
-      await updateShoppingListItem(editingItem.id, updates);
-
-      if (unitData) {
-        if (unitData.updateReferencePrice && price != null && price > 0) {
-          if (selectedStoreId !== null) {
-            await upsertProductStorePrice(editingItem.productId, selectedStoreId, price, unitData.packageSize ?? null);
-          } else {
-            await upsertProductBasePrice(editingItem.productId, price, unitData.packageSize ?? null);
-          }
-          clearManualOverride(selectedStoreId, editingItem.productId);
-        } else {
-          if (price !== undefined && unitData.packageSize != null) {
-            setManualOverride(selectedStoreId, editingItem.productId, {
-              price,
-              packageSize: unitData.packageSize,
-            });
-          }
-        }
-        if (unitData.updateStandardPackageSize && unitData.packageSize != null) {
-          const inv = findByProductId(editingItem.productId);
-          const unit = inv?.unit ?? null;
-          if (unit) {
-            await updateProductUnit(editingItem.productId, unit, unitData.packageSize);
-          }
-        }
-        console.log('[DIAG] handleSaveEdit', {
-          productId: editingItem.productId,
-          selectedStoreId,
-          packageSize: unitData?.packageSize,
-          updateReferencePrice: unitData?.updateReferencePrice,
-        });
-      } else if (price && price > 0) {
-        const inv = findByProductId(editingItem.productId);
-        const isUnitConfigured = !!inv?.unit && inv?.standardPackageSize != null;
-        if (isUnitConfigured) {
+        const updates: Parameters<typeof updateShoppingListItem>[1] = {
+          quantity,
+        };
+        if (price !== undefined) updates.price = price;
+        if (!unitData && price !== undefined && price > 0) {
+          const inv = findByProductId(itemProductId);
           const standardPackageSize = inv?.standardPackageSize ?? null;
-          if (standardPackageSize && standardPackageSize > 0) {
-            const packageSize = editingItem.packageSize ?? standardPackageSize;
-            if (selectedStoreId !== null) {
-              await upsertProductStorePrice(editingItem.productId, selectedStoreId, price, packageSize);
-            } else {
-              await upsertProductBasePrice(editingItem.productId, price, packageSize);
-            }
-            clearManualOverride(selectedStoreId, editingItem.productId);
-          }
-        } else {
-          if (selectedStoreId !== null) {
-            await upsertProductStorePrice(editingItem.productId, selectedStoreId, price);
-          } else {
-            await upsertProductBasePrice(editingItem.productId, price);
+          const unit = inv?.unit ?? null;
+          if (unit && standardPackageSize && standardPackageSize > 0) {
+            updates.packageSize =
+              editingItem.packageSize ?? standardPackageSize;
           }
         }
+        if (unitData) {
+          updates.packageSize = unitData.packageSize ?? null;
+        }
+
+        await updateShoppingListItem(itemId, updates);
+
+        if (unitData) {
+          if (unitData.updateReferencePrice && price != null && price > 0) {
+            if (selectedStoreId !== null) {
+              await upsertProductStorePrice(
+                itemProductId,
+                selectedStoreId,
+                price,
+                unitData.packageSize ?? null,
+              );
+            } else {
+              await upsertProductBasePrice(
+                itemProductId,
+                price,
+                unitData.packageSize ?? null,
+              );
+            }
+            clearManualOverride(selectedStoreId, itemProductId);
+          } else {
+            if (price !== undefined && unitData.packageSize != null) {
+              setManualOverride(selectedStoreId, itemProductId, {
+                price,
+                packageSize: unitData.packageSize,
+              });
+            }
+          }
+          if (
+            unitData.updateStandardPackageSize &&
+            unitData.packageSize != null
+          ) {
+            const inv = findByProductId(itemProductId);
+            const unit = inv?.unit ?? null;
+            if (unit) {
+              await updateProductUnit(
+                itemProductId,
+                unit,
+                unitData.packageSize,
+              );
+            }
+          }
+          console.log("[DIAG] handleSaveEdit", {
+            productId: itemProductId,
+            selectedStoreId,
+            packageSize: unitData?.packageSize,
+            updateReferencePrice: unitData?.updateReferencePrice,
+          });
+        } else if (price && price > 0) {
+          const inv = findByProductId(itemProductId);
+          const isUnitConfigured =
+            !!inv?.unit && inv?.standardPackageSize != null;
+          if (isUnitConfigured) {
+            const standardPackageSize = inv?.standardPackageSize ?? null;
+            if (standardPackageSize && standardPackageSize > 0) {
+              const packageSize =
+                editingItem.packageSize ?? standardPackageSize;
+              if (selectedStoreId !== null) {
+                await upsertProductStorePrice(
+                  itemProductId,
+                  selectedStoreId,
+                  price,
+                  packageSize,
+                );
+              } else {
+                await upsertProductBasePrice(
+                  itemProductId,
+                  price,
+                  packageSize,
+                );
+              }
+              clearManualOverride(selectedStoreId, itemProductId);
+            }
+          } else {
+            if (selectedStoreId !== null) {
+              await upsertProductStorePrice(
+                itemProductId,
+                selectedStoreId,
+                price,
+              );
+            } else {
+              await upsertProductBasePrice(itemProductId, price);
+            }
+          }
+        }
+
+        console.log("[DIAG:handleSaveEdit] about to loadData", {
+          selectedStoreId,
+        });
+        await loadData();
+
+        setEditingItem(null);
+      } catch (error) {
+        console.error("Erro ao atualizar item:", error);
       }
+    },
+    [
+      editingItem,
+      clearManualOverride,
+      findByProductId,
+      promptForRetroPackageSize,
+      selectedStoreId,
+      setManualOverride,
+    ],
+  );
 
-      console.log('[DIAG:handleSaveEdit] about to loadData', { selectedStoreId });
-      await loadData();
-
-      setEditingItem(null);
-    } catch (error) {
-      console.error('Erro ao atualizar item:', error);
-    }
-  }, [editingItem, clearManualOverride, findByProductId, promptForRetroPackageSize, selectedStoreId, setManualOverride]);
-
-  const handleCategorySelect = useCallback(async (categoryId: number) => {
-    if (!editingItem) return;
-    try {
-      await updateProductCategory(editingItem.productId, categoryId);
-      await loadData();
-      const selectedCategory = categories.find(c => c.id === categoryId);
-      setEditingItem(prev => prev ? { ...prev, categoryName: selectedCategory?.name ?? null } : null);
-    } catch (error) {
-      console.error('Erro ao atualizar categoria:', error);
-    }
-  }, [editingItem, loadData, categories]);
+  const handleCategorySelect = useCallback(
+    async (categoryId: number) => {
+      if (!editingItem) return;
+      try {
+        await updateProductCategory(editingItem.productId, categoryId);
+        await loadData();
+        const selectedCategory = categories.find((c) => c.id === categoryId);
+        setEditingItem((prev) =>
+          prev
+            ? { ...prev, categoryName: selectedCategory?.name ?? null }
+            : null,
+        );
+      } catch (error) {
+        console.error("Erro ao atualizar categoria:", error);
+      }
+    },
+    [editingItem, loadData, categories],
+  );
 
   const toggleCategory = useCallback((key: string) => {
-    setCollapsedCategories(prev => {
+    setCollapsedCategories((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
       else next.add(key);
@@ -507,207 +774,315 @@ export default function ShoppingListScreen() {
     });
   }, []);
 
-  const sortShoppingItems = useCallback((items: ShoppingListItemWithDetails[]) => {
-    const mapped = items.map(item => ({
-      ...item,
-      productName: item.productName,
-      quantity: item.quantity,
-      stockQuantity: item.currentInventoryQuantity,
-      sortOrder: 0,
-      categoryName: item.categoryName ?? null,
-    }));
-    return sortItems(mapped, sortOrder, '') as ShoppingListItemWithDetails[];
-  }, [sortOrder]);
+  const sortShoppingItems = useCallback(
+    (items: ShoppingListItemWithDetails[]) => {
+      const mapped = items.map((item) => ({
+        ...item,
+        productName: item.productName,
+        quantity: item.quantity,
+        stockQuantity: item.currentInventoryQuantity,
+        sortOrder: 0,
+        categoryName: item.categoryName ?? null,
+      }));
+      return sortItems(mapped, sortOrder, "") as ShoppingListItemWithDetails[];
+    },
+    [sortOrder],
+  );
 
   const filteredShoppingItems = useMemo(() => {
     if (!searchQuery.trim()) return shoppingListItems;
     const q = searchQuery.toLowerCase().trim();
-    return shoppingListItems.filter(item =>
-      item.productName.toLowerCase().includes(q)
+    return shoppingListItems.filter((item) =>
+      item.productName.toLowerCase().includes(q),
     );
   }, [shoppingListItems, searchQuery]);
 
-  const checkedItems = filteredShoppingItems.filter(item => item.checked);
-  const uncheckedItems = filteredShoppingItems.filter(item => !item.checked);
+  const checkedItems = filteredShoppingItems.filter((item) => item.checked);
+  const uncheckedItems = filteredShoppingItems.filter((item) => !item.checked);
 
   const rows = useMemo((): ListRow[] => {
     const result: ListRow[] = [];
 
     const buildSection = (
       items: ShoppingListItemWithDetails[],
-      sectionType: 'pending' | 'cart',
+      sectionType: "pending" | "cart",
       title: string,
-      collapsed: boolean
+      collapsed: boolean,
     ) => {
-      result.push({ type: 'section-header', title, sectionType });
+      result.push({ type: "section-header", title, sectionType });
       if (collapsed) return;
 
-      if (sortOrder === 'category') {
+      if (sortOrder === "category") {
         const grouped = new Map<string, ShoppingListItemWithDetails[]>();
         for (const item of items) {
-          const key = item.categoryName ?? 'Sem categoria';
+          const key = item.categoryName ?? "Sem categoria";
           if (!grouped.has(key)) grouped.set(key, []);
           grouped.get(key)!.push(item);
         }
         for (const [category, catItems] of grouped) {
           const collapseKey = `${sectionType}:${category}`;
-          result.push({ type: 'category-header', category, sectionType });
+          result.push({ type: "category-header", category, sectionType });
           if (!collapsedCategories.has(collapseKey)) {
             for (const item of catItems) {
-              result.push({ type: 'item', item, sectionType });
+              result.push({ type: "item", item, sectionType });
             }
           }
         }
       } else {
         for (const item of items) {
-          result.push({ type: 'item', item, sectionType });
+          result.push({ type: "item", item, sectionType });
         }
       }
     };
 
-    buildSection(uncheckedItems, 'pending', `Pendentes (${uncheckedItems.length})`, false);
-    buildSection(checkedItems, 'cart', `No carrinho (${checkedItems.length})`, isCartCollapsed);
+    buildSection(
+      uncheckedItems,
+      "pending",
+      `Pendentes (${uncheckedItems.length})`,
+      false,
+    );
+    buildSection(
+      checkedItems,
+      "cart",
+      `No carrinho (${checkedItems.length})`,
+      isCartCollapsed,
+    );
 
     return result;
-  }, [uncheckedItems, checkedItems, sortOrder, collapsedCategories, isCartCollapsed]);
+  }, [
+    uncheckedItems,
+    checkedItems,
+    sortOrder,
+    collapsedCategories,
+    isCartCollapsed,
+  ]);
 
-  const renderRow = useCallback(({ item: row }: { item: ListRow }) => {
-    if (row.type === 'section-header') {
-      if (row.sectionType === 'cart') {
+  const renderRow = useCallback(
+    ({ item: row }: { item: ListRow }) => {
+      if (row.type === "section-header") {
+        if (row.sectionType === "cart") {
+          return (
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                paddingVertical: 8,
+                paddingHorizontal: 20,
+              }}
+            >
+              <Text
+                style={[
+                  localStyles.subsectionTitle,
+                  { color: theme.colors.onSurfaceVariant },
+                ]}
+              >
+                {row.title}
+              </Text>
+              <Button
+                mode="text"
+                onPress={() => setIsCartCollapsed(!isCartCollapsed)}
+                compact
+              >
+                {isCartCollapsed ? "Mostrar" : "Ocultar"}
+              </Button>
+            </View>
+          );
+        }
         return (
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8, paddingHorizontal: 20 }}>
-            <Text style={[localStyles.subsectionTitle, { color: theme.colors.onSurfaceVariant }]}>
-              {row.title}
-            </Text>
-            <Button mode="text" onPress={() => setIsCartCollapsed(!isCartCollapsed)} compact>
-              {isCartCollapsed ? 'Mostrar' : 'Ocultar'}
-            </Button>
-          </View>
+          <Text
+            style={[
+              localStyles.subsectionTitle,
+              {
+                color: theme.colors.onSurfaceVariant,
+                paddingVertical: 8,
+                paddingHorizontal: 20,
+              },
+            ]}
+          >
+            {row.title}
+          </Text>
         );
       }
-      return (
-        <Text style={[localStyles.subsectionTitle, { color: theme.colors.onSurfaceVariant, paddingVertical: 8, paddingHorizontal: 20 }]}>
-          {row.title}
-        </Text>
-      );
-    }
 
-    if (row.type === 'category-header') {
-      const collapseKey = `${row.sectionType}:${row.category}`;
-      const isCollapsed = collapsedCategories.has(collapseKey);
+      if (row.type === "category-header") {
+        const collapseKey = `${row.sectionType}:${row.category}`;
+        const isCollapsed = collapsedCategories.has(collapseKey);
+        return (
+          <Pressable
+            onPress={() => toggleCategory(collapseKey)}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              paddingHorizontal: 16,
+              paddingVertical: 10,
+              backgroundColor: theme.colors.surfaceVariant,
+              borderRadius: 8,
+              marginBottom: 4,
+              marginTop: 8,
+            }}
+          >
+            <Text
+              style={{
+                color: theme.colors.onSurfaceVariant,
+                textTransform: "uppercase",
+                fontSize: 12,
+                fontWeight: "700",
+                letterSpacing: 0.8,
+              }}
+            >
+              {row.category}
+            </Text>
+            <MaterialCommunityIcons
+              name={isCollapsed ? "chevron-down" : "chevron-up"}
+              size={20}
+              color={theme.colors.onSurfaceVariant}
+            />
+          </Pressable>
+        );
+      }
+
       return (
-        <Pressable
-          onPress={() => toggleCategory(collapseKey)}
-          style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 10, backgroundColor: theme.colors.surfaceVariant, borderRadius: 8, marginBottom: 4, marginTop: 8 }}
-        >
-          <Text style={{ color: theme.colors.onSurfaceVariant, textTransform: 'uppercase', fontSize: 12, fontWeight: '700', letterSpacing: 0.8 }}>
-            {row.category}
+        <ShoppingListItemCard
+          item={row.item}
+          onToggleChecked={() => handleToggleChecked(row.item)}
+          onDelete={() => handleDeleteItem(row.item)}
+          onEdit={() => setEditingItem(row.item)}
+        />
+      );
+    },
+    [
+      theme,
+      isCartCollapsed,
+      collapsedCategories,
+      toggleCategory,
+      handleToggleChecked,
+      handleDeleteItem,
+    ],
+  );
+
+  const listEmptyComponent = useCallback(
+    () => (
+      <View style={{ paddingHorizontal: 16 }}>
+        <Surface style={localStyles.emptyState}>
+          <Text
+            style={{
+              textAlign: "center",
+              color: theme.colors.onSurfaceVariant,
+              fontSize: 16,
+              lineHeight: 24,
+            }}
+          >
+            Sua lista de compras está vazia.{"\n"}
+            Toque no botão abaixo para adicionar produtos!
           </Text>
-          <MaterialCommunityIcons
-            name={isCollapsed ? 'chevron-down' : 'chevron-up'}
-            size={20}
-            color={theme.colors.onSurfaceVariant}
-          />
-        </Pressable>
-      );
-    }
-
-    return (
-      <ShoppingListItemCard
-        item={row.item}
-        onToggleChecked={() => handleToggleChecked(row.item)}
-        onDelete={() => handleDeleteItem(row.item)}
-        onEdit={() => setEditingItem(row.item)}
-      />
-    );
-  }, [theme, isCartCollapsed, collapsedCategories, toggleCategory, handleToggleChecked, handleDeleteItem]);
-
-  const listEmptyComponent = useCallback(() => (
-    <View style={{ paddingHorizontal: 16 }}>
-      <Surface style={localStyles.emptyState}>
-        <Text style={{
-          textAlign: 'center',
-          color: theme.colors.onSurfaceVariant,
-          fontSize: 16,
-          lineHeight: 24
-        }}>
-          Sua lista de compras está vazia.{'\n'}
-          Toque no botão abaixo para adicionar produtos!
-        </Text>
-      </Surface>
-    </View>
-  ), [theme]);
+        </Surface>
+      </View>
+    ),
+    [theme],
+  );
 
   const openConfirmConclude = useCallback(() => {
     if (checkedItems.length === 0) return;
     setConfirmVisible(true);
   }, [checkedItems.length]);
 
-  const handleConfirmConclude = useCallback(async (storeName: string, date: Date, updateReferencePrices: boolean) => {
-    if (checkedItems.length === 0) return;
-    setLoading(true);
-    try {
-      // Build per-item overrides with unit data from local state
-      const overrides = new Map<number, {
-        packageSize: number | null;
-        standardPackageSize: number | null;
-        updateReferencePrice: boolean;
-      }>();
-      for (const item of checkedItems) {
-        const inv = findByProductId(item.productId);
-        overrides.set(item.id, {
-          packageSize: item.packageSize ?? null,
-          standardPackageSize: inv?.standardPackageSize ?? null,
-          updateReferencePrice: updateReferencePrices && !!inv?.unit && item.price != null && item.price > 0,
-        });
-      }
-
-      await concludeShoppingForListWithInvoiceV2(listId, storeName, date, overrides);
-
-      const store = stores.find(s => s.name === storeName);
-
-      // Update defaultStoreId setting for store selector memory
-      if (store) {
-        await setSetting('defaultStoreId', store.id.toString());
-      }
-
-      // Legacy fallback: products without unit configured still get ref price updated per package.
-      if (updateReferencePrices && store) {
+  const handleConfirmConclude = useCallback(
+    async (storeName: string, date: Date, updateReferencePrices: boolean) => {
+      if (checkedItems.length === 0) return;
+      setLoading(true);
+      try {
+        // Build per-item overrides with unit data from local state
+        const overrides = new Map<
+          number,
+          {
+            packageSize: number | null;
+            standardPackageSize: number | null;
+            updateReferencePrice: boolean;
+          }
+        >();
         for (const item of checkedItems) {
           const inv = findByProductId(item.productId);
-          if (!inv?.unit && item.productId && item.price && item.price > 0) {
-            await upsertProductStorePrice(item.productId, store.id, item.price);
+          overrides.set(item.id, {
+            packageSize: item.packageSize ?? null,
+            standardPackageSize: inv?.standardPackageSize ?? null,
+            updateReferencePrice:
+              updateReferencePrices &&
+              !!inv?.unit &&
+              item.price != null &&
+              item.price > 0,
+          });
+        }
+
+        await concludeShoppingForListWithInvoiceV2(
+          listId,
+          storeName,
+          date,
+          overrides,
+        );
+
+        const store = stores.find((s) => s.name === storeName);
+
+        // Update defaultStoreId setting for store selector memory
+        if (store) {
+          await setSetting("defaultStoreId", store.id.toString());
+        }
+
+        // Legacy fallback: products without unit configured still get ref price updated per package.
+        if (updateReferencePrices && store) {
+          for (const item of checkedItems) {
+            const inv = findByProductId(item.productId);
+            if (!inv?.unit && item.productId && item.price && item.price > 0) {
+              await upsertProductStorePrice(
+                item.productId,
+                store.id,
+                item.price,
+              );
+            }
           }
         }
-      }
 
-      setConfirmVisible(false);
-      await refreshStoreSettings();
-      await loadData();
-    } catch (error) {
-      console.error('Erro ao concluir compras:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [checkedItems, listId, stores, findByProductId, loadData, refreshStoreSettings]);
+        setConfirmVisible(false);
+        await refreshStoreSettings();
+        await loadData();
+      } catch (error) {
+        console.error("Erro ao concluir compras:", error);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [
+      checkedItems,
+      listId,
+      stores,
+      findByProductId,
+      loadData,
+      refreshStoreSettings,
+    ],
+  );
 
   const totalCheckedPrice = checkedItems.reduce((total, item) => {
     if (item.price) return total + item.quantity * item.price;
     return total;
   }, 0);
 
-  const formatCurrency = (value: number) => `R$ ${value.toFixed(2).replace('.', ',')}`;
+  const formatCurrency = (value: number) =>
+    `R$ ${value.toFixed(2).replace(".", ",")}`;
 
   const copyShoppingList = useCallback(async () => {
     const text = generateShoppingListText(shoppingListItems);
     await Clipboard.setStringAsync(text);
-    Alert.alert('Lista copiada!', 'Pronta para importar no estoque.');
+    Alert.alert("Lista copiada!", "Pronta para importar no estoque.");
   }, [shoppingListItems]);
 
   // Derive unit props for the editing item
-  const editingInventoryItem = editingItem ? findByProductId(editingItem.productId) : undefined;
+  const editingInventoryItem = editingItem
+    ? findByProductId(editingItem.productId)
+    : undefined;
   const editingProductUnit = editingInventoryItem?.unit ?? null;
-  const editingProductStdSize = editingInventoryItem?.standardPackageSize ?? null;
+  const editingProductStdSize =
+    editingInventoryItem?.standardPackageSize ?? null;
 
   const bottomBarHeight = checkedItems.length > 0 ? 64 : 0;
 
@@ -719,14 +1094,19 @@ export default function ShoppingListScreen() {
         onListDelete={handleListDelete}
       />
 
-      <View style={[localStyles.topRow, { borderBottomColor: theme.colors.outlineVariant }]}>
+      <View
+        style={[
+          localStyles.topRow,
+          { borderBottomColor: theme.colors.outlineVariant },
+        ]}
+      >
         <StoreSelector
           stores={stores}
           selectedStoreId={selectedStoreId}
           onStoreChange={(id) => {
             if (id === null) {
               setSelectedStoreId(null);
-              setDefaultStoreName('');
+              setDefaultStoreName("");
               updatePricesForStoreRef.current?.(null, shoppingListItems);
             } else {
               handleStoreSelect(id);
@@ -757,7 +1137,9 @@ export default function ShoppingListScreen() {
         <FlatList
           data={rows}
           keyExtractor={(row, index) =>
-            row.type === 'item' ? row.item.id.toString() : `${row.type}-${index}`
+            row.type === "item"
+              ? row.item.id.toString()
+              : `${row.type}-${index}`
           }
           renderItem={renderRow}
           ListEmptyComponent={listEmptyComponent}
@@ -769,9 +1151,13 @@ export default function ShoppingListScreen() {
       )}
 
       <AddItemButton
-        onPress={() => navigation.navigate('AddProductToShoppingList', { listId })}
+        onPress={() =>
+          navigation.navigate("AddProductToShoppingList", { listId })
+        }
         label="Adicionar à Lista de Compras"
-        style={checkedItems.length > 0 ? { bottom: bottomBarHeight } : undefined}
+        style={
+          checkedItems.length > 0 ? { bottom: bottomBarHeight } : undefined
+        }
       />
 
       <EditShoppingItemModal
@@ -781,7 +1167,11 @@ export default function ShoppingListScreen() {
         productUnit={editingProductUnit}
         productStandardPackageSize={editingProductStdSize}
         refPrice={editingItem?.refPrice ?? null}
-        manualOverrideActive={editingItem ? hasManualOverride(selectedStoreId, editingItem.productId) : false}
+        manualOverrideActive={
+          editingItem
+            ? hasManualOverride(selectedStoreId, editingItem.productId)
+            : false
+        }
         onSave={handleSaveEdit}
         onToggleChecked={async () => {
           if (!editingItem) return;
@@ -789,86 +1179,112 @@ export default function ShoppingListScreen() {
           setEditingItem(updated);
           await handleToggleChecked(editingItem);
         }}
-        onDelete={() => { handleDeleteItem(editingItem!); setEditingItem(null); }}
+        onDelete={() => {
+          handleDeleteItem(editingItem!);
+          setEditingItem(null);
+        }}
         onDismiss={() => setEditingItem(null)}
-        onCategoryChange={() => { }}
+        onCategoryChange={() => {}}
         categories={categories}
         onCategorySelect={handleCategorySelect}
-        key={editingItem?.id ?? 'none'}
+        key={editingItem?.id ?? "none"}
       />
 
-      <Modal
-        visible={retroVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => {
-          setRetroVisible(false);
-          retroResolveRef.current?.(null);
-          retroResolveRef.current = null;
-        }}
-      >
-        <Pressable
-          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: 20 }}
-          onPress={() => {
+      <Portal>
+        <Dialog
+          visible={retroVisible}
+          onDismiss={() => {
             setRetroVisible(false);
             retroResolveRef.current?.(null);
             retroResolveRef.current = null;
           }}
+          style={{ zIndex: 1000 }}
         >
-          <Pressable
-            style={{ width: '100%' }}
-            onPress={() => { }}
-          >
-            <Surface style={{ padding: 16, borderRadius: 12, elevation: 4 }}>
-              <Text style={{ fontSize: 16, fontWeight: '600', textAlign: 'center', marginBottom: 10 }}>
-                Qual era o tamanho da embalagem?
+          <Dialog.Title>Qual era o tamanho da embalagem?</Dialog.Title>
+          <Dialog.Content>
+            <Text
+              style={{
+                fontSize: 12,
+                color: theme.colors.onSurfaceVariant,
+                textAlign: "center",
+                marginBottom: 10,
+              }}
+            >
+              Confirme o tamanho da embalagem da compra abaixo para criar uma
+              referência.
+            </Text>
+            {retroInvoiceInfo && (
+              <Text
+                style={{
+                  fontSize: 12,
+                  color: theme.colors.onSurfaceVariant,
+                  textAlign: "center",
+                  marginBottom: 12,
+                }}
+              >
+                {retroInvoiceInfo.storeName} •{" "}
+                {new Date(retroInvoiceInfo.createdAt).toLocaleDateString(
+                  "pt-BR",
+                )}{" "}
+                • R$ {retroInvoiceInfo.unitPrice.toFixed(2).replace(".", ",")}
               </Text>
-              <Text style={{ fontSize: 12, color: theme.colors.onSurfaceVariant, textAlign: 'center', marginBottom: 12 }}>
-                Use o tamanho da sua última compra para calcular o preço por unidade.
+            )}
+
+            <View
+              style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+            >
+              <TextInput
+                mode="outlined"
+                value={retroPackageSizeText}
+                onChangeText={setRetroPackageSizeText}
+                keyboardType="decimal-pad"
+                style={{ flex: 1 }}
+                autoFocus
+              />
+              <Text
+                style={{
+                  color: theme.colors.onSurfaceVariant,
+                  fontSize: 14,
+                  minWidth: 28,
+                }}
+              >
+                {retroUnit ?? ""}
               </Text>
-
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <TextInput
-                  mode="outlined"
-                  value={retroPackageSizeText}
-                  onChangeText={setRetroPackageSizeText}
-                  keyboardType="decimal-pad"
-                  style={{ flex: 1 }}
-                  autoFocus
-                />
-                <Text style={{ color: theme.colors.onSurfaceVariant, fontSize: 14, minWidth: 28 }}>
-                  {retroUnit ?? ''}
-                </Text>
-              </View>
-
-              <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 14 }}>
-                <Button
-                  onPress={() => {
-                    setRetroVisible(false);
-                    retroResolveRef.current?.(null);
-                    retroResolveRef.current = null;
-                  }}
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  mode="contained"
-                  onPress={() => {
-                    const v = parseFloat((retroPackageSizeText ?? '').replace(',', '.'));
-                    if (!isFinite(v) || v <= 0) return;
-                    setRetroVisible(false);
-                    retroResolveRef.current?.(v);
-                    retroResolveRef.current = null;
-                  }}
-                  disabled={!isFinite(parseFloat((retroPackageSizeText ?? '').replace(',', '.'))) || parseFloat((retroPackageSizeText ?? '').replace(',', '.')) <= 0}
-                >
-                  Confirmar
-                </Button>
-              </View>
-            </Surface>
-          </Pressable>
-        </Pressable>
-      </Modal>
+            </View>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button
+              onPress={() => {
+                setRetroVisible(false);
+                retroResolveRef.current?.(null);
+                retroResolveRef.current = null;
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              mode="contained"
+              onPress={() => {
+                const v = parseFloat(
+                  (retroPackageSizeText ?? "").replace(",", "."),
+                );
+                if (!isFinite(v) || v <= 0) return;
+                setRetroVisible(false);
+                retroResolveRef.current?.(v);
+                retroResolveRef.current = null;
+              }}
+              disabled={
+                !isFinite(
+                  parseFloat((retroPackageSizeText ?? "").replace(",", ".")),
+                ) ||
+                parseFloat((retroPackageSizeText ?? "").replace(",", ".")) <= 0
+              }
+            >
+              Confirmar
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
 
       <Modal
         visible={actionsVisible}
@@ -877,7 +1293,11 @@ export default function ShoppingListScreen() {
         onRequestClose={() => setActionsVisible(false)}
       >
         <Pressable
-          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' }}
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.4)",
+            justifyContent: "flex-end",
+          }}
           onPress={() => setActionsVisible(false)}
         >
           <Pressable
@@ -890,50 +1310,75 @@ export default function ShoppingListScreen() {
               paddingTop: 12,
               elevation: 8,
             }}
-            onPress={() => { }}
+            onPress={() => {}}
           >
-            <View style={{
-              width: 40, height: 4, borderRadius: 2,
-              backgroundColor: theme.colors.outlineVariant,
-              alignSelf: 'center', marginBottom: 16,
-            }} />
-            <Text style={{
-              textTransform: 'uppercase',
-              letterSpacing: 1,
-              color: theme.colors.onSurfaceVariant,
-              marginBottom: 8,
-              paddingHorizontal: 4,
-            }}>
+            <View
+              style={{
+                width: 40,
+                height: 4,
+                borderRadius: 2,
+                backgroundColor: theme.colors.outlineVariant,
+                alignSelf: "center",
+                marginBottom: 16,
+              }}
+            />
+            <Text
+              style={{
+                textTransform: "uppercase",
+                letterSpacing: 1,
+                color: theme.colors.onSurfaceVariant,
+                marginBottom: 8,
+                paddingHorizontal: 4,
+              }}
+            >
               Ações
             </Text>
             {[
-              { icon: 'content-copy', label: 'Copiar lista', onPress: copyShoppingList },
-              { icon: 'import', label: 'Importar lista', onPress: () => setImportModalVisible(true) },
               {
-                icon: 'cart-remove',
-                label: 'Limpar carrinho',
+                icon: "content-copy",
+                label: "Copiar lista",
+                onPress: copyShoppingList,
+              },
+              {
+                icon: "import",
+                label: "Importar lista",
+                onPress: () => setImportModalVisible(true),
+              },
+              {
+                icon: "cart-remove",
+                label: "Limpar carrinho",
                 onPress: async () => {
-                  const unchecked = shoppingListItems.map(i => ({ ...i, checked: false }));
+                  const unchecked = shoppingListItems.map((i) => ({
+                    ...i,
+                    checked: false,
+                  }));
                   setShoppingListItems(unchecked);
                   await Promise.all(
-                    shoppingListItems.filter(i => i.checked).map(i =>
-                      updateShoppingListItem(i.id, { checked: false })
-                    )
+                    shoppingListItems
+                      .filter((i) => i.checked)
+                      .map((i) =>
+                        updateShoppingListItem(i.id, { checked: false }),
+                      ),
                   );
-                }
+                },
               },
-            ].map(action => (
+            ].map((action) => (
               <Pressable
                 key={action.label}
-                onPress={() => { setActionsVisible(false); action.onPress(); }}
+                onPress={() => {
+                  setActionsVisible(false);
+                  action.onPress();
+                }}
                 style={({ pressed }) => ({
-                  flexDirection: 'row',
-                  alignItems: 'center',
+                  flexDirection: "row",
+                  alignItems: "center",
                   paddingVertical: 14,
                   paddingHorizontal: 12,
                   borderRadius: 10,
                   marginBottom: 2,
-                  backgroundColor: pressed ? theme.colors.surfaceVariant : 'transparent',
+                  backgroundColor: pressed
+                    ? theme.colors.surfaceVariant
+                    : "transparent",
                 })}
               >
                 <MaterialCommunityIcons
@@ -961,16 +1406,42 @@ export default function ShoppingListScreen() {
         }}
         applyNew={async ({ product }) => {
           const productId = await addProduct(product.originalName);
-          await addShoppingListItem(listId, product.originalName, product.quantity);
+          await addShoppingListItem(
+            listId,
+            product.originalName,
+            product.quantity,
+          );
           return { productId, productName: product.originalName };
         }}
       />
 
       {checkedItems.length > 0 && (
-        <View style={[localStyles.bottomBar, { backgroundColor: theme.colors.surface, borderTopColor: theme.colors.outlineVariant }]}>
+        <View
+          style={[
+            localStyles.bottomBar,
+            {
+              backgroundColor: theme.colors.surface,
+              borderTopColor: theme.colors.outlineVariant,
+            },
+          ]}
+        >
           <View style={localStyles.bottomBarSummary}>
-            <Text style={[localStyles.bottomBarLabel, { color: theme.colors.onSurfaceVariant }]}>Total no carrinho:</Text>
-            <Text style={[localStyles.bottomBarValue, { color: theme.colors.primary }]}>{formatCurrency(totalCheckedPrice)}</Text>
+            <Text
+              style={[
+                localStyles.bottomBarLabel,
+                { color: theme.colors.onSurfaceVariant },
+              ]}
+            >
+              Total no carrinho:
+            </Text>
+            <Text
+              style={[
+                localStyles.bottomBarValue,
+                { color: theme.colors.primary },
+              ]}
+            >
+              {formatCurrency(totalCheckedPrice)}
+            </Text>
           </View>
           <Button
             mode="contained"
@@ -1000,8 +1471,8 @@ export default function ShoppingListScreen() {
 
 const localStyles = StyleSheet.create({
   topRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderBottomWidth: 1,
@@ -1011,24 +1482,24 @@ const localStyles = StyleSheet.create({
     padding: 8,
     borderRadius: 20,
     borderWidth: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   searchWrapper: {
     flex: 1,
   },
   subsectionTitle: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   emptyState: {
     padding: 32,
     borderRadius: 12,
-    alignItems: 'center',
+    alignItems: "center",
     margin: 16,
   },
   bottomBar: {
-    position: 'absolute',
+    position: "absolute",
     left: 0,
     right: 0,
     bottom: 0,
@@ -1036,9 +1507,9 @@ const localStyles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 12,
     borderTopWidth: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     gap: 12,
   },
   bottomBarSummary: {
@@ -1049,7 +1520,7 @@ const localStyles = StyleSheet.create({
   },
   bottomBarValue: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   bottomBarButton: {
     borderRadius: 8,
