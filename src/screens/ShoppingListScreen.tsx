@@ -95,9 +95,14 @@ export default function ShoppingListScreen() {
   const styles = createHomeScreenStyles(theme);
 
   const isFirstLoad = useRef(true);
+  const loadDataRef = useRef<(() => Promise<void>) | null>(null);
   const manualOverridesRef = useRef<
     Map<string, Map<number, { price: number; packageSize: number | null; pricePerUnit: number | null }>>
   >(new Map());
+
+  const updatePricesForStoreRef = useRef<
+    ((storeId: number | null, items: ShoppingListItemWithDetails[]) => Promise<void>) | null
+  >(null);
 
   const getStoreKey = useCallback((storeId: number | null) => (storeId === null ? 'base' : String(storeId)), []);
 
@@ -154,7 +159,8 @@ export default function ShoppingListScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      loadData();
+      loadDataRef.current?.();
+      return;
     }, [listId])
   );
 
@@ -214,23 +220,26 @@ export default function ShoppingListScreen() {
         setSelectedStoreId(storeIdToSet);
         isFirstLoad.current = false;
         console.log('[DIAG:loadData] calling updatePricesForStore', { storeId: storeIdToSet, isFirstLoad: isFirstLoad.current });
-        await updatePricesForStore(storeIdToSet, enhancedShoppingItems);
+        await updatePricesForStoreRef.current?.(storeIdToSet, enhancedShoppingItems);
       } else {
         console.log('[DIAG:loadData] calling updatePricesForStore', { storeId: selectedStoreId, isFirstLoad: isFirstLoad.current });
-        await updatePricesForStore(selectedStoreId, enhancedShoppingItems);
+        await updatePricesForStoreRef.current?.(selectedStoreId, enhancedShoppingItems);
       }
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
     } finally {
       setInitialLoading(false);
     }
-  }, [listId, stores, defaultStoreMode, defaultStoreId, lastStoreName, selectedStoreId, updatePricesForStore]);
+  }, [listId, stores, defaultStoreMode, defaultStoreId, lastStoreName, selectedStoreId]);
+
+  loadDataRef.current = loadData;
 
   const resolveDisplayPrice = (item: ShoppingListItemWithDetails, refPrice: RefPrice | null, unit: string | null, standardPackageSize: number | null): number | undefined => {
     if (!unit || !standardPackageSize) return item.price;
     if (!refPrice) return item.price;
-    const packageSize = refPrice.packageSize ?? standardPackageSize;
-    return refPrice.price * packageSize;
+    const packageSize = item.packageSize ?? refPrice.packageSize ?? standardPackageSize;
+    const cents = Math.round(refPrice.price * packageSize * 100);
+    return cents / 100;
   };
 
   async function updatePricesForStore(storeId: number | null, items: ShoppingListItemWithDetails[]) {
@@ -316,12 +325,14 @@ export default function ShoppingListScreen() {
     }
   }
 
+  updatePricesForStoreRef.current = updatePricesForStore;
+
   const handleStoreSelect = useCallback((storeId: number) => {
     setSelectedStoreId(storeId);
     const selectedStore = stores.find(s => s.id === storeId);
     setDefaultStoreName(selectedStore?.name ?? '');
-    updatePricesForStore(storeId, shoppingListItems);
-  }, [stores, shoppingListItems, updatePricesForStore]);
+    updatePricesForStoreRef.current?.(storeId, shoppingListItems);
+  }, [stores, shoppingListItems]);
 
   const handleToggleChecked = useCallback(async (item: ShoppingListItemWithDetails) => {
     setShoppingListItems(prev => prev.map(i =>
@@ -720,7 +731,7 @@ export default function ShoppingListScreen() {
             if (id === null) {
               setSelectedStoreId(null);
               setDefaultStoreName('');
-              updatePricesForStore(null, shoppingListItems);
+              updatePricesForStoreRef.current?.(null, shoppingListItems);
             } else {
               handleStoreSelect(id);
             }
