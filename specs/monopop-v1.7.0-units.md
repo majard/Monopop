@@ -33,19 +33,18 @@ The user cannot answer these questions without mental arithmetic. Monopop v1.7.0
 
 ## Core architectural decision
 
-**Store `price_per_unit`. Derive everything else.**
+**Store paid price per package + `packageSize`. Derive per-unit values.**
 
 ```
-price_per_unit = price_per_package / standard_package_size
-               = price / package_size
+price_per_unit = price_per_package / package_size
 
-display per standard package = price_per_unit × standard_package_size   → R$13.33/400g
-display per unit             = price_per_unit                          → R$0.0333/g
+display per standard package = price_per_unit × standardPackageSize     → R$13.33/400g
+display per unit             = price_per_unit                           → R$0.0333/g
 ```
 
-`price_per_unit` is the invariant. It survives `standard_package_size` changes and historical queries without becoming stale.
+The stored invariants are the purchase facts: `price` (paid per package) and `packageSize`. Per-unit is derived on the fly. This keeps paid prices exact (cents) while still supporting cross-size comparison.
 
-Consequence: `product_store_prices.price` and `product_base_prices.price` now semantically mean `price_per_unit` for unit-configured products. Column names unchanged — documented via comments/notes.
+Consequence: `product_store_prices.price` and `product_base_prices.price` now semantically mean paid price per package, with `packageSize` providing the context required to derive per-unit values.
 
 ---
 
@@ -53,7 +52,7 @@ Consequence: `product_store_prices.price` and `product_base_prices.price` now se
 
 Load-bearing. Every name must communicate exactly one thing.
 
-Note: DB column names use camelCase in SQLite for this project (`standardPackageSize`, `packageSize`, `pricePerUnit`).
+Note: DB column names use camelCase in SQLite for this project (`standardPackageSize`, `packageSize`).
 
 | Concept | Field name | PT UI label | Notes |
 |---|---|---|---|
@@ -62,14 +61,14 @@ Note: DB column names use camelCase in SQLite for this project (`standardPackage
 | This purchase's package size | `packageSize` | "Quantidade adquirida" | Actual size of the package bought this time, in the product’s `unit`. Nullable — if null, assume the store’s ref `packageSize`, else `standardPackageSize` |
 | How many packages bought | `package_quantity` | "Quantidade" | Integer always. This is how many packages the user is buying, not the quantity inside each package |
 | Shelf label price | `price_per_package` | "Preço por [emb. padrão]" | What the shelf implies for the standard package. Derived, never stored. Label uses `standardPackageSize` + `unit` display formatting |
-| Actual price paid | `price` | "Preço pago" | Total for this `package_size`. One of the three editable triangle fields |
-| Price per unit of measure | `pricePerUnit` | "Preço por unidade" | R$0.0333/g. The stored anchor. Derived, not directly editable by user |
+| Actual price paid | `price` | "Preço pago" | Paid price for one package of size `packageSize`. One of the three editable triangle fields |
+| Price per unit of measure | *(derived)* | "Preço por unidade" | `price / packageSize` (e.g. R$/g, R$/ml, R$/un). Derived, not stored |
 | Total paid | *(derived)* | "Total" | `price × package_quantity`. Computed live, never stored |
 
 **Note on `product_store_prices.price` and `product_base_prices.price`:** column name stays `price` for minimal disruption.
 
-- If `products.unit IS NULL` (legacy), `price` means "price per package"
-- If `products.unit IS NOT NULL` (unit-configured), `price` means `price_per_unit` (e.g. R$/g, R$/ml, R$/un)
+- `price` means paid price per package (both legacy and unit-configured products)
+- For unit-configured products, `packageSize` is required to derive per-unit values
 
 This requires that any reference-price read joins `products` and branches on `products.unit`.
 
@@ -123,10 +122,6 @@ ALTER TABLE shopping_list_items ADD COLUMN packageSize REAL;
 -- actual size of the package bought this time, in the product's unit
 -- NULL = assume store/base ref packageSize; if missing, fall back to standardPackageSize
 
-ALTER TABLE shopping_list_items ADD COLUMN pricePerUnit REAL;
--- stored on save for historical record and reference price updates
--- pricePerUnit = price / packageSize
-
 -- existing `quantity` column: represents package_quantity (how many packages bought)
 ```
 
@@ -136,16 +131,14 @@ ALTER TABLE shopping_list_items ADD COLUMN pricePerUnit REAL;
 ALTER TABLE invoice_items ADD COLUMN packageSize REAL;
 -- actual size bought, stored for shrinkflation analysis later
 
-ALTER TABLE invoice_items ADD COLUMN pricePerUnit REAL;
--- immutable historical anchor at time of purchase
-
 -- existing `quantity` column: same package_quantity note as shopping_list_items
 ```
 
 ### Fields never stored (always derived)
 
 ```
-price_per_package = pricePerUnit × standardPackageSize
+price_per_unit    = price / packageSize
+price_per_package = price_per_unit × standardPackageSize
 total_price       = price × package_quantity
 ```
 
@@ -158,10 +151,8 @@ ALTER TABLE products ADD COLUMN unit TEXT;
 ALTER TABLE products ADD COLUMN standardPackageSize REAL;
 
 ALTER TABLE shopping_list_items ADD COLUMN packageSize REAL;
-ALTER TABLE shopping_list_items ADD COLUMN pricePerUnit REAL;
 
 ALTER TABLE invoice_items ADD COLUMN packageSize REAL;
-ALTER TABLE invoice_items ADD COLUMN pricePerUnit REAL;
 
 ALTER TABLE product_store_prices ADD COLUMN packageSize REAL;
 ALTER TABLE product_base_prices  ADD COLUMN packageSize REAL;
@@ -177,7 +168,7 @@ Backward compatibility:
 
 ---
 
-## Retroactive price_per_unit calculation (first-time unit setup)
+## Retroactive reference calculation (first-time unit setup)
 
 When the user sets `unit` and `standard_package_size` on a product for the first time, show an alert:
 
@@ -193,8 +184,7 @@ When the user sets `unit` and `standard_package_size` on a product for the first
 
 1. Fetch last invoice item for this product
 2. Show input: "Qual era o tamanho da embalagem?" pre-filled with `standard_package_size`
-3. Compute `price_per_unit = last_invoice_price / entered_package_size`
-4. Upsert `product_store_prices` (for that invoice’s store) and `product_base_prices` with `price_per_unit`
+3. Upsert `product_store_prices` (for that invoice’s store) and `product_base_prices` with `last_invoice_price` and the entered package size
 
 Runs once per product. May drift if the user doesn’t remember the exact package size — acceptable.
 
@@ -206,17 +196,16 @@ Reference-price rows created before units exist are semantically “price per pa
 
 ## Legacy invoice handling (unit-configured products)
 
-Old invoice rows (pre-v1.7) will not have `invoice_items.pricePerUnit`.
+Old invoice rows (pre-v1.7) will not have `invoice_items.packageSize`.
 
 For products with `products.unit IS NOT NULL`:
 
-- Any feature that requires unit-aware comparisons or price suggestion fallbacks must ignore invoice rows without `price_per_unit` (treat as unknown), rather than guessing.
-- Any feature that requires unit-aware comparisons or price suggestion fallbacks must ignore invoice rows without `pricePerUnit` (treat as unknown), rather than guessing.
+- Any feature that requires unit-aware comparisons or price suggestion fallbacks must ignore invoice rows without `packageSize` (treat as unknown), rather than guessing.
 - Legacy invoice rows remain visible as historical purchases; they just don’t participate in per-unit logic.
 
 For reference price rows on unit-configured products:
 
-- `product_store_prices.price` and `product_base_prices.price` are interpreted as `pricePerUnit`
+- `product_store_prices.price` and `product_base_prices.price` are interpreted as paid price per package
 - `product_store_prices.packageSize` / `product_base_prices.packageSize` represent the package size that price was observed/set for at that store/base
 - If `products.unit IS NOT NULL` and a ref row has `packageSize IS NULL`, treat it as legacy/ambiguous and ignore it
 
@@ -224,13 +213,13 @@ For reference price rows on unit-configured products:
 
 ## The purchase triangle
 
-**`pricePerUnit` is not directly editable.** It is always derived and displayed only.
+**Price per unit is not directly editable.** It is always derived and displayed only.
 
 Three editable fields. Any two determine the third, given `standard_package_size` is known from the product:
 
 ```
-pricePerUnit = price_per_package / standardPackageSize
-             = price / packageSize
+pricePerUnit = price / packageSize
+price_per_package = pricePerUnit × standardPackageSize
 ```
 
 Derivations:

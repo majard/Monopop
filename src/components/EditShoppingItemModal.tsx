@@ -70,8 +70,6 @@ const PriceInput = React.memo(({ onChangeCents, borderColor, textColor, placehol
 
 export interface UnitSaveData {
   packageSize: number | null;
-  pricePerUnit: number | null;
-  pricePerPackage: number | null;
   updateReferencePrice: boolean;
   updateStandardPackageSize: boolean;
   /** Non-null when user configured unit inline in this session (product had no unit before). */
@@ -354,11 +352,14 @@ export function EditShoppingItemModal({
       setPricePaidCents(initPricePaid);
       setPricePaidKey(k => k + 1);
       lastTouchedRef.current = [];
-    } else if (productUnit && productStandardPackageSize && refPrice) {
+    } else if (productUnit && productStandardPackageSize && refPrice && refPrice.packageSize != null && refPrice.packageSize > 0) {
       // Pre-fill triangle from existing ref price
-      const initPricePerPkg = Math.round(refPrice.price * productStandardPackageSize * 100);
+      const refPricePerUnit = refPrice.price / refPrice.packageSize;
+      const initPricePerPkg = Math.round(refPricePerUnit * productStandardPackageSize * 100);
       const initPackageSize = item.packageSize ?? refPrice.packageSize ?? productStandardPackageSize;
-      const initPricePaid = Math.round(refPrice.price * initPackageSize * 100);
+      const initPricePaid = initPackageSize === refPrice.packageSize
+        ? Math.round(refPrice.price * 100)
+        : Math.round(refPricePerUnit * initPackageSize * 100);
       pricePerPkgRef.current = initPricePerPkg;
       packageSizeRef.current = initPackageSize;
       pricePaidRef.current = initPricePaid;
@@ -450,25 +451,19 @@ export function EditShoppingItemModal({
   }, [touchField, deriveThird, effectiveStdSize]);
 
   // ─── Derived display ────────────────────────────────────────────────────────
-  const derivedPricePerUnit = (hasUnit && effectiveStdSize && pricePerPkgCents > 0)
-    ? (pricePerPkgCents / 100) / effectiveStdSize
-    : null;
   const currentPackageSize = parseFloat(packageSizeStr) || 0;
+  const derivedPricePerUnit = (hasUnit && currentPackageSize > 0 && pricePaidCents > 0)
+    ? (pricePaidCents / 100) / currentPackageSize
+    : null;
 
   // ─── Save ───────────────────────────────────────────────────────────────────
   const handleSave = () => {
     if (checked !== item?.checked) onToggleChecked();
 
     if (expanded && hasUnit && effectiveStdSize) {
-      const pricePerUnit = pricePerPkgRef.current > 0
-        ? (pricePerPkgRef.current / 100) / effectiveStdSize
-        : null;
-      const pricePerPackage = pricePerPkgRef.current > 0 ? pricePerPkgRef.current / 100 : null;
       const price = pricePaidRef.current > 0 ? pricePaidRef.current / 100 : undefined;
       const unitDataForLog = {
         packageSize: packageSizeRef.current > 0 ? packageSizeRef.current : null,
-        pricePerUnit,
-        pricePerPackage,
         updateReferencePrice: updateRefPrice,
         updateStandardPackageSize: updateStdSize,
         unit: unitConfiguredInline ? effectiveUnit : null,
@@ -577,9 +572,9 @@ export function EditShoppingItemModal({
           )}
 
           {/* Unit summary line (collapsed + unit configured) */}
-          {!expanded && hasUnit && refPrice && (
+          {!expanded && hasUnit && refPrice && refPrice.packageSize != null && refPrice.packageSize > 0 && (
             <Text style={[styles.unitSummary, { color: theme.colors.onSurfaceVariant }]}>
-              {formatPricePerUnitDisplay(refPrice.price, effectiveUnit!)} · {formatPerStdPkg(refPrice.price, effectiveUnit!, effectiveStdSize!)}
+              {formatPricePerUnitDisplay(refPrice.price / refPrice.packageSize, effectiveUnit!)} · {formatPerStdPkg(refPrice.price / refPrice.packageSize, effectiveUnit!, effectiveStdSize!)}
             </Text>
           )}
 

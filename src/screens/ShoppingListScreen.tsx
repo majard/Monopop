@@ -57,7 +57,7 @@ interface ShoppingListItemWithDetails extends Omit<ShoppingListItem, 'checked'> 
   productName: string;
   productId: number;
   currentInventoryQuantity: number;
-  /** Display price (pricePerUnit × standardPackageSize for unit products; price_per_package for legacy). */
+  /** Display price (suggested paid price for one package in the current store/base context). */
   price?: number;
   categoryName?: string | null;
   lowestPrice90d: { price: number; storeName: string } | null;
@@ -65,8 +65,6 @@ interface ShoppingListItemWithDetails extends Omit<ShoppingListItem, 'checked'> 
   refPrice?: RefPrice | null;
   /** Set when user edits in expanded triangle view. Written to invoice_items on conclude. */
   packageSize?: number | null;
-  /** Set when user edits in expanded triangle view. Written to ref price tables on conclude. */
-  pricePerUnit?: number | null;
 }
 
 export default function ShoppingListScreen() {
@@ -97,7 +95,7 @@ export default function ShoppingListScreen() {
   const isFirstLoad = useRef(true);
   const loadDataRef = useRef<(() => Promise<void>) | null>(null);
   const manualOverridesRef = useRef<
-    Map<string, Map<number, { price: number; packageSize: number | null; pricePerUnit: number | null }>>
+    Map<string, Map<number, { price: number; packageSize: number | null }>>
   >(new Map());
 
   const updatePricesForStoreRef = useRef<
@@ -118,7 +116,7 @@ export default function ShoppingListScreen() {
   const setManualOverride = useCallback((
     storeId: number | null,
     productId: number,
-    override: { price: number; packageSize: number | null; pricePerUnit: number | null }
+    override: { price: number; packageSize: number | null }
   ) => {
     const key = getStoreKey(storeId);
     const existing = manualOverridesRef.current.get(key);
@@ -181,7 +179,6 @@ export default function ShoppingListScreen() {
         lowestPrice90d: null,
         refPrice: null,
         packageSize: item.packageSize ?? null,
-        pricePerUnit: item.pricePerUnit ?? null,
       } as ShoppingListItemWithDetails));
 
       setShoppingListItems(enhancedShoppingItems);
@@ -235,10 +232,16 @@ export default function ShoppingListScreen() {
   loadDataRef.current = loadData;
 
   const resolveDisplayPrice = (item: ShoppingListItemWithDetails, refPrice: RefPrice | null, unit: string | null, standardPackageSize: number | null): number | undefined => {
-    if (!unit || !standardPackageSize) return item.price;
     if (!refPrice) return item.price;
-    const packageSize = item.packageSize ?? refPrice.packageSize ?? standardPackageSize;
-    const cents = Math.round(refPrice.price * packageSize * 100);
+    if (!unit || !standardPackageSize) {
+      const cents = Math.round(refPrice.price * 100);
+      return cents / 100;
+    }
+    const refPackageSize = refPrice.packageSize ?? standardPackageSize;
+    if (refPackageSize <= 0) return item.price;
+    const pricePerUnit = refPrice.price / refPackageSize;
+    const effectivePackageSize = refPackageSize;
+    const cents = Math.round(pricePerUnit * effectivePackageSize * 100);
     return cents / 100;
   };
 
@@ -247,7 +250,7 @@ export default function ShoppingListScreen() {
       const productIds = items.map(item => item.productId).filter(id => id > 0);
       if (productIds.length === 0) return;
 
-      // Returns Map<productId, RefPrice> — price is pricePerUnit for unit products, price_per_package for legacy.
+      // Returns Map<productId, RefPrice> — price is price-per-package; packageSize is the store/base package context.
       const referencePriceMap = await getReferencePricesForProducts(productIds, storeId);
       console.log('[DIAG] updatePricesForStore', {
         storeId,
@@ -265,7 +268,6 @@ export default function ShoppingListScreen() {
             ...item,
             price: manual.price,
             packageSize: manual.packageSize,
-            pricePerUnit: manual.pricePerUnit,
             refPrice,
           };
         }
@@ -273,6 +275,21 @@ export default function ShoppingListScreen() {
         const inv = findByProductId(item.productId);
         const standardPackageSize = inv?.standardPackageSize ?? null;
         const unit = inv?.unit ?? null;
+
+        if (unit && standardPackageSize) {
+          const refPackageSize = refPrice.packageSize ?? standardPackageSize;
+          if (refPackageSize > 0) {
+            const pricePerUnit = refPrice.price / refPackageSize;
+            const effectivePackageSize = refPackageSize;
+            const displayPrice = Math.round(pricePerUnit * effectivePackageSize * 100) / 100;
+            return {
+              ...item,
+              price: displayPrice,
+              packageSize: effectivePackageSize,
+              refPrice,
+            };
+          }
+        }
 
         const displayPrice = resolveDisplayPrice(item, refPrice, unit, standardPackageSize);
 
@@ -283,17 +300,6 @@ export default function ShoppingListScreen() {
             displayPrice,
             itemPriceBefore: item.price,
           });
-        }
-
-        if (unit && standardPackageSize) {
-          const effectivePackageSize = refPrice.packageSize ?? standardPackageSize;
-          return {
-            ...item,
-            price: displayPrice,
-            packageSize: effectivePackageSize,
-            pricePerUnit: refPrice.price,
-            refPrice,
-          };
         }
 
         return { ...item, price: displayPrice, refPrice };
@@ -374,8 +380,8 @@ export default function ShoppingListScreen() {
       if (unitData?.unit && unitData.newStandardPackageSize != null) {
         const choice = await new Promise<'cancel' | 'no' | 'yes'>(resolve => {
           Alert.alert(
-            'Calcular preço por unidade histórico?',
-            'Encontramos sua última compra deste produto. Você pode usar o tamanho da embalagem que comprou para calcular o preço por unidade automaticamente.',
+            'Calcular referência histórica?',
+            'Encontramos sua última compra deste produto. Você pode usar o tamanho da embalagem que comprou para preencher uma referência automaticamente.',
             [
               { text: 'Cancelar', style: 'cancel', onPress: () => resolve('cancel') },
               { text: 'Não', onPress: () => resolve('no') },
@@ -395,9 +401,8 @@ export default function ShoppingListScreen() {
             if (last) {
               const enteredSize = await promptForRetroPackageSize(unitData.newStandardPackageSize, unitData.unit);
               if (enteredSize != null && enteredSize > 0) {
-                const pricePerUnit = last.unitPrice / enteredSize;
-                await upsertProductStorePrice(editingItem.productId, last.storeId, pricePerUnit, enteredSize);
-                await upsertProductBasePrice(editingItem.productId, pricePerUnit, enteredSize);
+                await upsertProductStorePrice(editingItem.productId, last.storeId, last.unitPrice, enteredSize);
+                await upsertProductBasePrice(editingItem.productId, last.unitPrice, enteredSize);
               }
             }
           }
@@ -411,32 +416,28 @@ export default function ShoppingListScreen() {
         const standardPackageSize = inv?.standardPackageSize ?? null;
         const unit = inv?.unit ?? null;
         if (unit && standardPackageSize && standardPackageSize > 0) {
-          updates.packageSize = standardPackageSize;
-          updates.pricePerUnit = price / standardPackageSize;
+          updates.packageSize = editingItem.packageSize ?? standardPackageSize;
         }
       }
       if (unitData) {
         updates.packageSize = unitData.packageSize ?? null;
-        updates.pricePerUnit = unitData.pricePerUnit ?? null;
       }
 
       await updateShoppingListItem(editingItem.id, updates);
 
       if (unitData) {
-        // Unit item: conditionally update reference price with pricePerUnit
-        if (unitData.updateReferencePrice && unitData.pricePerUnit != null) {
+        if (unitData.updateReferencePrice && price != null && price > 0) {
           if (selectedStoreId !== null) {
-            await upsertProductStorePrice(editingItem.productId, selectedStoreId, unitData.pricePerUnit, unitData.packageSize ?? null);
+            await upsertProductStorePrice(editingItem.productId, selectedStoreId, price, unitData.packageSize ?? null);
           } else {
-            await upsertProductBasePrice(editingItem.productId, unitData.pricePerUnit, unitData.packageSize ?? null);
+            await upsertProductBasePrice(editingItem.productId, price, unitData.packageSize ?? null);
           }
           clearManualOverride(selectedStoreId, editingItem.productId);
         } else {
-          if (price !== undefined && unitData.packageSize != null && unitData.pricePerUnit != null) {
+          if (price !== undefined && unitData.packageSize != null) {
             setManualOverride(selectedStoreId, editingItem.productId, {
               price,
               packageSize: unitData.packageSize,
-              pricePerUnit: unitData.pricePerUnit,
             });
           }
         }
@@ -450,7 +451,6 @@ export default function ShoppingListScreen() {
         console.log('[DIAG] handleSaveEdit', {
           productId: editingItem.productId,
           selectedStoreId,
-          pricePerUnit: unitData?.pricePerUnit,
           packageSize: unitData?.packageSize,
           updateReferencePrice: unitData?.updateReferencePrice,
         });
@@ -460,11 +460,11 @@ export default function ShoppingListScreen() {
         if (isUnitConfigured) {
           const standardPackageSize = inv?.standardPackageSize ?? null;
           if (standardPackageSize && standardPackageSize > 0) {
-            const pricePerUnit = price / standardPackageSize;
+            const packageSize = editingItem.packageSize ?? standardPackageSize;
             if (selectedStoreId !== null) {
-              await upsertProductStorePrice(editingItem.productId, selectedStoreId, pricePerUnit, standardPackageSize);
+              await upsertProductStorePrice(editingItem.productId, selectedStoreId, price, packageSize);
             } else {
-              await upsertProductBasePrice(editingItem.productId, pricePerUnit, standardPackageSize);
+              await upsertProductBasePrice(editingItem.productId, price, packageSize);
             }
             clearManualOverride(selectedStoreId, editingItem.productId);
           }
@@ -650,7 +650,6 @@ export default function ShoppingListScreen() {
       // Build per-item overrides with unit data from local state
       const overrides = new Map<number, {
         packageSize: number | null;
-        pricePerUnit: number | null;
         standardPackageSize: number | null;
         updateReferencePrice: boolean;
       }>();
@@ -658,10 +657,8 @@ export default function ShoppingListScreen() {
         const inv = findByProductId(item.productId);
         overrides.set(item.id, {
           packageSize: item.packageSize ?? null,
-          pricePerUnit: item.pricePerUnit ?? null,
           standardPackageSize: inv?.standardPackageSize ?? null,
-          // Unit items: update ref price only if pricePerUnit was set in this session
-          updateReferencePrice: updateReferencePrices && item.pricePerUnit != null,
+          updateReferencePrice: updateReferencePrices && !!inv?.unit && item.price != null && item.price > 0,
         });
       }
 
@@ -674,8 +671,7 @@ export default function ShoppingListScreen() {
         await setSetting('defaultStoreId', store.id.toString());
       }
 
-      // Legacy fallback: items without pricePerUnit (no unit configured) still get ref price
-      // updated via the old per-package price path.
+      // Legacy fallback: products without unit configured still get ref price updated per package.
       if (updateReferencePrices && store) {
         for (const item of checkedItems) {
           const inv = findByProductId(item.productId);

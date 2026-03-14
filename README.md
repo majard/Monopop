@@ -80,7 +80,7 @@ Main data arrives in a single JOIN query. Historical prices (`getLowestPriceForP
 
 **Indexes via migration** — after profiling, indexes added to `invoices`, `invoice_items` and `inventory_history` in the V8 migration. `getLowestPriceForProducts` dropped from 1287ms to 5ms.*
 
-**Units pricing invariant (v1.7)** — reference prices store `pricePerUnit` plus the store/base `packageSize` context. Unit-configured products ignore legacy ref rows without `packageSize` to avoid ambiguous semantics.
+**Units pricing invariant (v1.7)** — reference prices store paid price per package plus the store/base `packageSize` context. Per-unit values are derived on the fly; unit-configured products ignore legacy ref rows without `packageSize` to avoid ambiguous semantics.
 
 **Batch queries** — N+1 pattern eliminated. `getLowestPriceForProducts(ids[])`, `getLastUnitPricesForProductsAtStore`, `getLastUnitPricesForProducts` all return `Map<productId, value>` for O(1) lookup. The original code ran one query per item in a loop.
 

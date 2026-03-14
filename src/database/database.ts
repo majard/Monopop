@@ -813,7 +813,6 @@ export const getShoppingListItemsByListId = async (listId: number): Promise<Shop
           sli.createdAt,
           sli.updatedAt,
           sli.packageSize,
-          sli.pricePerUnit,
           p.name AS productName,       -- Add product name for convenience
           ii.productId AS productId,    -- Add productId for convenience
           ii.quantity AS currentInventoryQuantity, -- Add current inventory quantity
@@ -837,7 +836,7 @@ export const getShoppingListItemsByListId = async (listId: number): Promise<Shop
 
 export const updateShoppingListItem = async (
   id: number, // ShoppingListItem ID
-  updates: { quantity?: number; checked?: boolean; price?: number; sortOrder?: number; notes?: string; packageSize?: number | null; pricePerUnit?: number | null }
+  updates: { quantity?: number; checked?: boolean; price?: number; sortOrder?: number; notes?: string; packageSize?: number | null }
 ): Promise<void> => {
   const db = getDb();
   const now = new Date().toISOString();
@@ -850,7 +849,6 @@ export const updateShoppingListItem = async (
   if (updates.sortOrder !== undefined) { query += `, sortOrder = ?`; params.push(updates.sortOrder); }
   if (updates.notes !== undefined) { query += `, notes = ?`; params.push(updates.notes); }
   if (updates.packageSize !== undefined) { query += `, packageSize = ?`; params.push(updates.packageSize); }
-  if (updates.pricePerUnit !== undefined) { query += `, pricePerUnit = ?`; params.push(updates.pricePerUnit); }
 
   query += ` WHERE id = ?;`;
   params.push(id);
@@ -1517,10 +1515,11 @@ export const getLowestPriceForProducts = async (
 /**
  * A resolved reference price with the package context it was set in.
  *
- * price:       product_store_prices.price = pricePerUnit (R$/g, R$/ml, R$/un).
- *              For legacy products (unit=NULL), this is price-per-package.
- * packageSize: the package size that was on the shelf when this ref was last set.
- *              NULL for prices set before V10 or for legacy products.
+ * price:       price-per-package for this store/base (paid price for one package).
+ *              For unit-configured products, this must be interpreted together with
+ *              packageSize to derive per-unit price.
+ * packageSize: the package size that this store/base price applies to.
+ *              NULL for legacy rows created before units support.
  */
 export type RefPrice = {
   price: number;
@@ -1555,17 +1554,17 @@ export const updateProductUnit = async (
   }
 };
  
-// ─── Retroactive pricePerUnit calculation ───────────────────────────────────
+// ─── Retroactive reference reconstruction ───────────────────────────────────
  
 /**
  * Fetches the last invoice item for a product, used to drive the retroactive
- * pricePerUnit prompt when the user first sets unit + standardPackageSize.
+ * reference prompt when the user first sets unit + standardPackageSize.
  *
- * The caller computes: pricePerUnit = unitPrice / enteredPackageSize
- * then calls upsertProductStorePrice with the result.
+ * The caller stores: refPricePerPackage = unitPrice, packageSize = enteredPackageSize
+ * then calls upsertProductStorePrice/upsertProductBasePrice.
  *
  * Note: unitPrice here is the LEGACY invoiceItems.unitPrice column —
- * the actual price paid for the package, NOT the new pricePerUnit column.
+ * the actual price paid for the package.
  */
 export const getLastInvoiceItemForProduct = async (
   productId: number
@@ -1630,7 +1629,7 @@ export const computeInventoryIncrement = (
 /**
  * Replaces existing upsertProductStorePrice.
  *
- * price:       pricePerUnit (R$/g, R$/ml, R$/un). For legacy products, price per package.
+ * price:       price paid per package.
  * packageSize: the package size on the shelf when this price was set. Stored for
  *              display reconstruction and shrinkflation detection. NULL is valid
  *              (legacy callers or products without unit configured).
@@ -1703,17 +1702,21 @@ export const getReferencePriceForProduct = async (
         return { price: storeRef.price, packageSize: storeRef.packageSize ?? null };
       }
 
-      const storeInvoice = await db.getFirstAsync<{ pricePerUnit: number; packageSize: number | null }>(
-        `SELECT ii.pricePerUnit, ii.packageSize
+      const storeInvoice = await db.getFirstAsync<{ unit: string | null; unitPrice: number; packageSize: number | null }>(
+        `SELECT p.unit AS unit, ii.unitPrice, ii.packageSize
          FROM invoice_items ii
          INNER JOIN invoices i ON ii.invoiceId = i.id
-         WHERE ii.productId = ? AND i.storeId = ? AND ii.pricePerUnit IS NOT NULL
+         INNER JOIN products p ON ii.productId = p.id
+         WHERE ii.productId = ? AND i.storeId = ? AND ii.unitPrice IS NOT NULL
          ORDER BY ii.createdAt DESC
          LIMIT 1;`,
         [productId, storeId]
       );
-      if (storeInvoice?.pricePerUnit != null) {
-        return { price: storeInvoice.pricePerUnit, packageSize: storeInvoice.packageSize ?? null };
+      if (storeInvoice?.unitPrice != null) {
+        if (storeInvoice.unit != null && storeInvoice.packageSize == null) {
+          return null;
+        }
+        return { price: storeInvoice.unitPrice, packageSize: storeInvoice.packageSize ?? null };
       }
       return null;
     }
@@ -1732,16 +1735,20 @@ export const getReferencePriceForProduct = async (
       return { price: baseRef.price, packageSize: baseRef.packageSize ?? null };
     }
 
-    const anyInvoice = await db.getFirstAsync<{ pricePerUnit: number; packageSize: number | null }>(
-      `SELECT pricePerUnit, packageSize
-       FROM invoice_items
-       WHERE productId = ? AND pricePerUnit IS NOT NULL
-       ORDER BY createdAt DESC
+    const anyInvoice = await db.getFirstAsync<{ unit: string | null; unitPrice: number; packageSize: number | null }>(
+      `SELECT p.unit AS unit, ii.unitPrice, ii.packageSize
+       FROM invoice_items ii
+       INNER JOIN products p ON ii.productId = p.id
+       WHERE ii.productId = ? AND ii.unitPrice IS NOT NULL
+       ORDER BY ii.createdAt DESC
        LIMIT 1;`,
       [productId]
     );
-    if (anyInvoice?.pricePerUnit != null) {
-      return { price: anyInvoice.pricePerUnit, packageSize: anyInvoice.packageSize ?? null };
+    if (anyInvoice?.unitPrice != null) {
+      if (anyInvoice.unit != null && anyInvoice.packageSize == null) {
+        return null;
+      }
+      return { price: anyInvoice.unitPrice, packageSize: anyInvoice.packageSize ?? null };
     }
     return null;
  
@@ -1786,19 +1793,21 @@ export const getReferencePricesForProducts = async (
         const rem = [...remaining];
         const remPlaceholders = rem.map(() => '?').join(',');
         const invoiceStoreRows = await db.getAllAsync<{
-          productId: number; pricePerUnit: number; packageSize: number | null
+          productId: number; unit: string | null; unitPrice: number; packageSize: number | null
         }>(
-          `SELECT ii.productId, ii.pricePerUnit, ii.packageSize
+          `SELECT ii.productId, p.unit AS unit, ii.unitPrice, ii.packageSize
            FROM invoice_items ii
            INNER JOIN invoices i ON ii.invoiceId = i.id
-           WHERE ii.productId IN (${remPlaceholders}) AND i.storeId = ? AND ii.pricePerUnit IS NOT NULL
+           INNER JOIN products p ON ii.productId = p.id
+           WHERE ii.productId IN (${remPlaceholders}) AND i.storeId = ? AND ii.unitPrice IS NOT NULL
            ORDER BY ii.productId, i.createdAt DESC;`,
           [...rem, storeId]
         );
         const seen = new Set<number>();
         for (const row of invoiceStoreRows) {
           if (!seen.has(row.productId)) {
-            result.set(row.productId, { price: row.pricePerUnit, packageSize: row.packageSize ?? null });
+            if (row.unit != null && row.packageSize == null) continue;
+            result.set(row.productId, { price: row.unitPrice, packageSize: row.packageSize ?? null });
             remaining.delete(row.productId);
             seen.add(row.productId);
           }
@@ -1825,18 +1834,20 @@ export const getReferencePricesForProducts = async (
       const rem = [...remaining];
       const remPlaceholders = rem.map(() => '?').join(',');
       const invoiceAnyRows = await db.getAllAsync<{
-        productId: number; pricePerUnit: number; packageSize: number | null
+        productId: number; unit: string | null; unitPrice: number; packageSize: number | null
       }>(
-        `SELECT productId, pricePerUnit, packageSize
-         FROM invoice_items
-         WHERE productId IN (${remPlaceholders}) AND pricePerUnit IS NOT NULL
-         ORDER BY productId, createdAt DESC;`,
+        `SELECT ii.productId, p.unit AS unit, ii.unitPrice, ii.packageSize
+         FROM invoice_items ii
+         INNER JOIN products p ON ii.productId = p.id
+         WHERE ii.productId IN (${remPlaceholders}) AND ii.unitPrice IS NOT NULL
+         ORDER BY ii.productId, ii.createdAt DESC;`,
         rem
       );
       const seen = new Set<number>();
       for (const row of invoiceAnyRows) {
         if (!seen.has(row.productId)) {
-          result.set(row.productId, { price: row.pricePerUnit, packageSize: row.packageSize ?? null });
+          if (row.unit != null && row.packageSize == null) continue;
+          result.set(row.productId, { price: row.unitPrice, packageSize: row.packageSize ?? null });
           remaining.delete(row.productId);
           seen.add(row.productId);
         }
@@ -1859,9 +1870,7 @@ export const getReferencePricesForProducts = async (
  * itemOverrides: keyed by shoppingListItem.id, carries per-item unit data.
  * All fields optional — missing = legacy behaviour for that item.
  *
- * Note on invoice_items.unitPrice: legacy column, stores the actual price paid
- * per package (= sli.price). NOT the same as the new pricePerUnit column.
- * Both are stored: unitPrice for invoice display, pricePerUnit for analytics.
+ * Note on invoice_items.unitPrice: stores the actual price paid per package (= sli.price).
  */
 export const concludeShoppingForListWithInvoiceV2 = async (
   listId: number,
@@ -1869,7 +1878,6 @@ export const concludeShoppingForListWithInvoiceV2 = async (
   date?: Date,
   itemOverrides?: Map<number, {
     packageSize: number | null;
-    pricePerUnit: number | null;
     standardPackageSize: number | null;
     updateReferencePrice: boolean;
   }>
@@ -1909,19 +1917,18 @@ export const concludeShoppingForListWithInvoiceV2 = async (
     for (const row of checkedItems) {
       const overrides = itemOverrides?.get(row.id);
       const packageSize = overrides?.packageSize ?? null;
-      const pricePerUnit = overrides?.pricePerUnit ?? null;
       const standardPackageSize = overrides?.standardPackageSize ?? null;
  
-      // unitPrice = price paid per package (legacy column — NOT pricePerUnit)
+      // unitPrice = price paid per package
       const unitPrice = row.price ?? null;
       const lineTotal = (unitPrice ?? 0) * row.quantity;
       total += lineTotal;
  
       await db.runAsync(
         `INSERT INTO invoice_items
-           (invoiceId, productId, quantity, unitPrice, lineTotal, packageSize, pricePerUnit, createdAt)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?);`,
-        [invoiceId, row.productId, row.quantity, unitPrice, lineTotal, packageSize, pricePerUnit, now]
+           (invoiceId, productId, quantity, unitPrice, lineTotal, packageSize, createdAt)
+         VALUES (?, ?, ?, ?, ?, ?, ?);`,
+        [invoiceId, row.productId, row.quantity, unitPrice, lineTotal, packageSize, now]
       );
  
       const increment = computeInventoryIncrement(
@@ -1959,7 +1966,7 @@ export const concludeShoppingForListWithInvoiceV2 = async (
         }
       }
  
-      if (overrides?.updateReferencePrice && pricePerUnit !== null) {
+      if (overrides?.updateReferencePrice && unitPrice !== null) {
         await db.runAsync(
           `INSERT INTO product_store_prices (productId, storeId, price, packageSize, updatedAt)
            VALUES (?, ?, ?, ?, ?)
@@ -1967,7 +1974,7 @@ export const concludeShoppingForListWithInvoiceV2 = async (
              price        = excluded.price,
              packageSize = excluded.packageSize,
              updatedAt    = excluded.updatedAt;`,
-          [row.productId, storeId, pricePerUnit, packageSize, now]
+          [row.productId, storeId, unitPrice, packageSize, now]
         );
       }
  

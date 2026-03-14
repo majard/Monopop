@@ -58,7 +58,6 @@ export interface ShoppingListItem {
   productId?: number; // Added from JOIN
   currentInventoryQuantity?: number; // Added from JOIN
   packageSize?: number | null;
-  pricePerUnit?: number | null;
 }
 
 export interface Store {
