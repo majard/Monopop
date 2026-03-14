@@ -95,23 +95,33 @@ export default function ShoppingListScreen() {
   const styles = createHomeScreenStyles(theme);
 
   const isFirstLoad = useRef(true);
-  const manualOverridesRef = useRef<Map<string, Set<number>>>(new Map());
+  const manualOverridesRef = useRef<
+    Map<string, Map<number, { price: number; packageSize: number | null; pricePerUnit: number | null }>>
+  >(new Map());
 
   const getStoreKey = useCallback((storeId: number | null) => (storeId === null ? 'base' : String(storeId)), []);
 
-  const hasManualOverride = useCallback((storeId: number | null, productId: number) => {
-    const set = manualOverridesRef.current.get(getStoreKey(storeId));
-    return !!set?.has(productId);
+  const getManualOverride = useCallback((storeId: number | null, productId: number) => {
+    const map = manualOverridesRef.current.get(getStoreKey(storeId));
+    return map?.get(productId) ?? null;
   }, [getStoreKey]);
 
-  const markManualOverride = useCallback((storeId: number | null, productId: number) => {
+  const hasManualOverride = useCallback((storeId: number | null, productId: number) => {
+    return getManualOverride(storeId, productId) != null;
+  }, [getManualOverride]);
+
+  const setManualOverride = useCallback((
+    storeId: number | null,
+    productId: number,
+    override: { price: number; packageSize: number | null; pricePerUnit: number | null }
+  ) => {
     const key = getStoreKey(storeId);
     const existing = manualOverridesRef.current.get(key);
     if (existing) {
-      existing.add(productId);
+      existing.set(productId, override);
       return;
     }
-    manualOverridesRef.current.set(key, new Set([productId]));
+    manualOverridesRef.current.set(key, new Map([[productId, override]]));
   }, [getStoreKey]);
 
   const clearManualOverride = useCallback((storeId: number | null, productId: number) => {
@@ -119,9 +129,7 @@ export default function ShoppingListScreen() {
     const existing = manualOverridesRef.current.get(key);
     if (!existing) return;
     existing.delete(productId);
-    if (existing.size === 0) {
-      manualOverridesRef.current.delete(key);
-    }
+    if (existing.size === 0) manualOverridesRef.current.delete(key);
   }, [getStoreKey]);
 
   useEffect(() => {
@@ -221,11 +229,11 @@ export default function ShoppingListScreen() {
   const resolveDisplayPrice = (item: ShoppingListItemWithDetails, refPrice: RefPrice | null, unit: string | null, standardPackageSize: number | null): number | undefined => {
     if (!unit || !standardPackageSize) return item.price;
     if (!refPrice) return item.price;
-    const packageSize = item.packageSize ?? refPrice.packageSize ?? standardPackageSize;
+    const packageSize = refPrice.packageSize ?? standardPackageSize;
     return refPrice.price * packageSize;
   };
 
-  const updatePricesForStore = useCallback(async (storeId: number | null, items: ShoppingListItemWithDetails[]) => {
+  async function updatePricesForStore(storeId: number | null, items: ShoppingListItemWithDetails[]) {
     try {
       const productIds = items.map(item => item.productId).filter(id => id > 0);
       if (productIds.length === 0) return;
@@ -242,8 +250,15 @@ export default function ShoppingListScreen() {
         const refPrice = referencePriceMap.get(item.productId);
         if (!refPrice) return item;
 
-        if (hasManualOverride(storeId, item.productId)) {
-          return { ...item, price: item.price, refPrice };
+        const manual = getManualOverride(storeId, item.productId);
+        if (manual) {
+          return {
+            ...item,
+            price: manual.price,
+            packageSize: manual.packageSize,
+            pricePerUnit: manual.pricePerUnit,
+            refPrice,
+          };
         }
 
         const inv = findByProductId(item.productId);
@@ -259,6 +274,17 @@ export default function ShoppingListScreen() {
             displayPrice,
             itemPriceBefore: item.price,
           });
+        }
+
+        if (unit && standardPackageSize) {
+          const effectivePackageSize = refPrice.packageSize ?? standardPackageSize;
+          return {
+            ...item,
+            price: displayPrice,
+            packageSize: effectivePackageSize,
+            pricePerUnit: refPrice.price,
+            refPrice,
+          };
         }
 
         return { ...item, price: displayPrice, refPrice };
@@ -288,7 +314,7 @@ export default function ShoppingListScreen() {
     } catch (error) {
       console.error('Error updating prices for store:', error);
     }
-  }, [editingItem, findByProductId, hasManualOverride]);
+  }
 
   const handleStoreSelect = useCallback((storeId: number) => {
     setSelectedStoreId(storeId);
@@ -395,7 +421,13 @@ export default function ShoppingListScreen() {
           }
           clearManualOverride(selectedStoreId, editingItem.productId);
         } else {
-          markManualOverride(selectedStoreId, editingItem.productId);
+          if (price !== undefined && unitData.packageSize != null && unitData.pricePerUnit != null) {
+            setManualOverride(selectedStoreId, editingItem.productId, {
+              price,
+              packageSize: unitData.packageSize,
+              pricePerUnit: unitData.pricePerUnit,
+            });
+          }
         }
         if (unitData.updateStandardPackageSize && unitData.packageSize != null) {
           const inv = findByProductId(editingItem.productId);
@@ -441,7 +473,7 @@ export default function ShoppingListScreen() {
     } catch (error) {
       console.error('Erro ao atualizar item:', error);
     }
-  }, [editingItem, clearManualOverride, findByProductId, markManualOverride, promptForRetroPackageSize, selectedStoreId]);
+  }, [editingItem, clearManualOverride, findByProductId, promptForRetroPackageSize, selectedStoreId, setManualOverride]);
 
   const handleCategorySelect = useCallback(async (categoryId: number) => {
     if (!editingItem) return;
