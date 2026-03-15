@@ -521,6 +521,13 @@ export default function ShoppingListScreen() {
     [loadData],
   );
 
+  const handleEditItem = useCallback(
+    (item: ShoppingListItemWithDetails) => {
+      setEditingItem(item);
+    },
+    [],
+  );
+
   const handleSaveEdit = useCallback(
     async (
       quantity: number,
@@ -859,6 +866,7 @@ export default function ShoppingListScreen() {
 
   const renderRow = useCallback(
     ({ item: row }: { item: ListRow }) => {
+      
       if (row.type === "section-header") {
         if (row.sectionType === "cart") {
           return (
@@ -946,9 +954,9 @@ export default function ShoppingListScreen() {
       return (
         <ShoppingListItemCard
           item={row.item}
-          onToggleChecked={() => handleToggleChecked(row.item)}
-          onDelete={() => handleDeleteItem(row.item)}
-          onEdit={() => setEditingItem(row.item)}
+          onToggleChecked={handleToggleChecked}
+          onDelete={handleDeleteItem}
+          onEdit={handleEditItem}
         />
       );
     },
@@ -1144,9 +1152,10 @@ export default function ShoppingListScreen() {
           renderItem={renderRow}
           ListEmptyComponent={listEmptyComponent}
           contentContainerStyle={{ paddingBottom: bottomBarHeight + 96 }}
-          initialNumToRender={20}
+          initialNumToRender={10}
           maxToRenderPerBatch={20}
           windowSize={10}
+          removeClippedSubviews
         />
       )}
 

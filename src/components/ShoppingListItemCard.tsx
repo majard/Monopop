@@ -20,12 +20,16 @@ export interface ShoppingListItemCardItem {
 
 interface ShoppingListItemCardProps {
   item: ShoppingListItemCardItem;
-  onToggleChecked: () => void;
-  onDelete: () => void;
-  onEdit: () => void;
+  onToggleChecked: (item: ShoppingListItemCardItem) => void;
+  onDelete: (item: ShoppingListItemCardItem) => void;
+  onEdit: (item: ShoppingListItemCardItem) => void;
 }
 
-export function ShoppingListItemCard({
+const formatCurrency = (value: number) => {
+  return `R$ ${value ? value.toFixed(2).replace(".", ",") : "0,00"}`;
+};
+
+export const ShoppingListItemCard = React.memo(function ShoppingListItemCard({
   item,
   onToggleChecked,
   onDelete,
@@ -53,43 +57,39 @@ export function ShoppingListItemCard({
     if (!localChecked) {
       setLocalChecked(true);  // checkbox updates immediately
       progress.value = withSequence(
-        withTiming(1, { duration:  100 }),
-        withTiming(3, { duration: 100 }, () => runOnJS(onToggleChecked)())
+        withTiming(1, { duration: 100 }),
+        withTiming(3, { duration: 100 }, () => runOnJS(onToggleChecked)(item))
       );
     } else {
       setLocalChecked(false);
       progress.value = withSequence(
         withTiming(1, { duration: 60 }),
-        withTiming(3, { duration: 60 }, () => runOnJS(onToggleChecked)())
+        withTiming(3, { duration: 60 }, () => runOnJS(onToggleChecked)(item))
       );
     }
-  };
-
-  const formatCurrency = (value: number) => {
-    return `R$ ${value ? value.toFixed(2).replace(".", ",") : "0,00"}`;
   };
 
   const itemTotal = item.price ? formatCurrency(item.quantity * item.price) : null;
 
   return (
-      <Pressable onPress={onEdit}>
-        <Surface style={cardStyles.card}>
-          <Animated.View 
-            style={[StyleSheet.absoluteFillObject, animatedStyle]} 
-            pointerEvents="none" 
-          />
-          <View style={cardStyles.row}>
-            {/* Checkbox with large hitSlop */}
-            <Pressable
-              onPress={handleToggle}
-              hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
-            >
-              <MaterialCommunityIcons
-                name={localChecked ? 'checkbox-marked' : 'checkbox-blank-outline'}
-                size={24}
-                color={localChecked ? theme.colors.primary : theme.colors.onSurfaceVariant}
-              />
-            </Pressable>
+    <Pressable onPress={() => onEdit(item)}>
+      <Surface style={cardStyles.card}>
+        <Animated.View
+          style={[StyleSheet.absoluteFillObject, animatedStyle]}
+          pointerEvents="none"
+        />
+        <View style={cardStyles.row}>
+          {/* Checkbox with large hitSlop */}
+          <Pressable
+            onPress={handleToggle}
+            hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+          >
+            <MaterialCommunityIcons
+              name={localChecked ? 'checkbox-marked' : 'checkbox-blank-outline'}
+              size={24}
+              color={localChecked ? theme.colors.primary : theme.colors.onSurfaceVariant}
+            />
+          </Pressable>
 
           {/* Name — left, takes remaining space */}
           <Text
@@ -132,7 +132,7 @@ export function ShoppingListItemCard({
           <IconButton
             icon="delete"
             size={18}
-            onPress={onDelete}
+            onPress={() => onDelete(item)}
             iconColor={theme.colors.onSurfaceVariant}
             style={{ margin: 0 }}
           />
@@ -140,7 +140,7 @@ export function ShoppingListItemCard({
       </Surface>
     </Pressable>
   );
-}
+});
 
 const cardStyles = StyleSheet.create({
   card: {
