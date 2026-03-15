@@ -232,14 +232,11 @@ export default function ShoppingListScreen() {
   >(null);
 
   const loadData = useCallback(async () => {
-    const t0 = performance.now();
-
     try {
       // 1. Get data
       const [shopping] = await Promise.all([
         getShoppingListItemsByListId(listId),
       ]);
-      console.log('loadData:', performance.now() - t0, 'ms after DB');
 
       // 2. Build everything in plain JS (no setState!)
       const items: ShoppingListItemWithDetails[] = shopping.map(item => ({
@@ -255,24 +252,40 @@ export default function ShoppingListScreen() {
         packageSize: item.packageSize ?? null,
       }));
 
-      console.log('loadData:', performance.now() - t0, 'ms after processing');
 
       // 4. SINGLE STATE UPDATE - show UI immediately
       setShoppingListItems(items);
       setInitialLoading(false);
-      
 
-      // 5. DEFER prices - break out of current execution
+      // 5. Set default store on first load
+      let priceStoreId = selectedStoreId;
+
+      if (isFirstLoadRef.current) {
+        isFirstLoadRef.current = false;
+
+        if (defaultStoreMode === 'last') {
+          const lastStoreObj = stores.find(s => s.name === lastStoreName);
+          priceStoreId = lastStoreObj?.id ?? null;
+          setLastStoreId(priceStoreId);
+          setSelectedStoreId(priceStoreId);
+          setDefaultStoreName(lastStoreName ?? '');
+        } else if (defaultStoreMode === 'fixed' && defaultStoreId) {
+          const fixedStore = stores.find(s => s.id === parseInt(defaultStoreId));
+          priceStoreId = fixedStore?.id ?? null;
+          setSelectedStoreId(priceStoreId);
+          setDefaultStoreName(fixedStore?.name ?? '');
+        }
+      }
+
       setTimeout(() => {
-        loadPricesAsync(items, selectedStoreId);
+        loadPricesAsync(items, priceStoreId);
       }, 0);
 
-      console.log('loadData:', performance.now() - t0, 'ms total');
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
       setInitialLoading(false);
     }
-  }, [listId, selectedStoreId]);
+  }, [listId, selectedStoreId, stores, defaultStoreMode, defaultStoreId, lastStoreName]);
 
   const loadPricesAsync = useCallback(
     async (items: ShoppingListItemWithDetails[], storeId: number | null) => {
