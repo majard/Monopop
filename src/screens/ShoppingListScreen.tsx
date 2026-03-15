@@ -40,6 +40,7 @@ import {
   getLastInvoiceItemForProduct,
   clearReferencePricesForProduct,
   concludeShoppingForListWithInvoiceV2,
+  getLowestRefPricesPerUnit,
 } from "../database/database";
 import type { RefPrice } from "../database/database";
 import { RootStackParamList } from "../types/navigation";
@@ -105,6 +106,7 @@ interface ShoppingListItemWithDetails extends Omit<
   refPrice?: RefPrice | null;
   /** Set when user edits in expanded triangle view. Written to invoice_items on conclude. */
   packageSize?: number | null;
+  lowestRefPricePerUnit?: { pricePerUnit: number; storeName: string } | null;
 }
 
 export default function ShoppingListScreen() {
@@ -250,6 +252,9 @@ export default function ShoppingListScreen() {
         lowestPrice90d: null,
         refPrice: null,
         packageSize: item.packageSize ?? null,
+        productUnit: item.productUnit ?? null,
+        productStandardPackageSize: item.productStandardPackageSize ?? null,
+        lowestRefPricePerUnit: null,
       }));
 
 
@@ -297,20 +302,34 @@ export default function ShoppingListScreen() {
       if (productIds.length === 0) return;
 
       try {
+        const unitProductIds = items
+          .filter(i => i.productUnit != null)
+          .map(i => i.productId)
+          .filter(id => id > 0);
 
-        const [lowestMap, refMap] = await Promise.all([
-          getLowestPriceForProducts(productIds),
+        const legacyProductIds = items
+          .filter(i => i.productUnit == null)
+          .map(i => i.productId)
+          .filter(id => id > 0);
+
+        const [lowestMap, refMap, lowestRefMap] = await Promise.all([
+          getLowestPriceForProducts(legacyProductIds),
           getReferencePricesForProducts(productIds, storeId),
+          getLowestRefPricesPerUnit(unitProductIds),
         ]);
 
         setShoppingListItems(prev => {
-
           let changed = false;
           const next = prev.map(item => {
-            const lowest = lowestMap.get(item.productId);
+            const lowest = item.productUnit == null
+              ? lowestMap.get(item.productId)
+              : undefined;
             const ref = refMap.get(item.productId);
+            const lowestRef = item.productUnit != null
+              ? lowestRefMap.get(item.productId)
+              : undefined;
 
-            if (!lowest && !ref) return item;
+            if (!lowest && !ref && !lowestRef) return item;
 
             const manual = getManualOverride(storeId, item.productId);
 
@@ -325,34 +344,39 @@ export default function ShoppingListScreen() {
               packageSize = ref.packageSize;
             }
 
-            // Check if anything actually changed
-            const lowestChanged = lowest ?
-              JSON.stringify(lowest) !== JSON.stringify(item.lowestPrice90d) :
-              item.lowestPrice90d !== null;
-            const refChanged = ref ?
-              JSON.stringify(ref) !== JSON.stringify(item.refPrice) :
-              item.refPrice !== null;
+            const lowestChanged = lowest
+              ? JSON.stringify(lowest) !== JSON.stringify(item.lowestPrice90d)
+              : item.lowestPrice90d !== null && item.productUnit == null;
+            const refChanged = ref
+              ? JSON.stringify(ref) !== JSON.stringify(item.refPrice)
+              : item.refPrice !== null;
+            const lowestRefChanged = lowestRef
+              ? JSON.stringify(lowestRef) !== JSON.stringify(item.lowestRefPricePerUnit)
+              : item.lowestRefPricePerUnit !== null && item.productUnit != null;
             const priceChanged = price !== item.price;
             const packageSizeChanged = packageSize !== item.packageSize;
 
-            if (!lowestChanged && !refChanged && !priceChanged && !packageSizeChanged) {
+            if (!lowestChanged && !refChanged && !lowestRefChanged && !priceChanged && !packageSizeChanged) {
               return item;
             }
 
             changed = true;
             return {
               ...item,
-              lowestPrice90d: lowest ?? item.lowestPrice90d,
+              lowestPrice90d: item.productUnit == null
+                ? (lowest ?? item.lowestPrice90d)
+                : null,
               refPrice: ref ?? item.refPrice,
+              lowestRefPricePerUnit: item.productUnit != null
+                ? (lowestRef ?? item.lowestRefPricePerUnit)
+                : null,
               price,
-              packageSize
+              packageSize,
             };
           });
 
           return changed ? next : prev;
-
         });
-
       } catch (error) {
         console.error('Error loading prices:', error);
       }

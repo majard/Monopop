@@ -814,6 +814,8 @@ export const getShoppingListItemsByListId = async (listId: number): Promise<Shop
           sli.updatedAt,
           sli.packageSize,
           p.name AS productName,       -- Add product name for convenience
+          p.unit AS productUnit,
+          p.standardPackageSize AS productStandardPackageSize,
           ii.productId AS productId,    -- Add productId for convenience
           ii.quantity AS currentInventoryQuantity, -- Add current inventory quantity
           c.name AS categoryName        -- Add category name for convenience
@@ -1986,4 +1988,42 @@ export const concludeShoppingForListWithInvoiceV2 = async (
  
   if (!invoiceId) throw new Error('Failed to create invoice.');
   return { invoiceId };
+};
+
+export const getLowestRefPricesPerUnit = async (
+  productIds: number[]
+): Promise<Map<number, { pricePerUnit: number; storeName: string }>> => {
+  if (productIds.length === 0) return new Map();
+  const db = getDb();
+  const placeholders = productIds.map(() => '?').join(',');
+
+  // Only rows where unit is configured AND packageSize is non-null (valid unit-aware rows)
+  const rows = await db.getAllAsync<{
+    productId: number;
+    price: number;
+    packageSize: number;
+    storeName: string;
+  }>(
+    `SELECT psp.productId, psp.price, psp.packageSize, s.name as storeName
+     FROM product_store_prices psp
+     JOIN products p ON psp.productId = p.id
+     LEFT JOIN stores s ON psp.storeId = s.id
+     WHERE psp.productId IN (${placeholders})
+       AND p.unit IS NOT NULL
+       AND psp.packageSize IS NOT NULL
+       AND psp.packageSize > 0
+     ORDER BY psp.productId, (psp.price / psp.packageSize) ASC;`,
+    productIds
+  );
+
+  const result = new Map<number, { pricePerUnit: number; storeName: string }>();
+  for (const row of rows) {
+    if (!result.has(row.productId)) {
+      result.set(row.productId, {
+        pricePerUnit: row.price / row.packageSize,
+        storeName: row.storeName,
+      });
+    }
+  }
+  return result;
 };
