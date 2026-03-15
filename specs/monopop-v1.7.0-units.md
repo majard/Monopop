@@ -396,7 +396,7 @@ Input shelf price + price paid (didn't look at weight label):
 |---|---|---|
 | `unit` | products | yes, nullable |
 | `standard_package_size` | products | yes, nullable |
-| `price` (= price_per_unit) | product_store_prices / product_base_prices | yes, opt-in, semantics depend on `products.unit` |
+| `price` (= price paid) | product_store_prices / product_base_prices | yes, opt-in, semantics depend on `products.unit` |
 | `package_size` | shopping_list_items + invoice_items | yes |
 | `package_quantity` | shopping_list_items + invoice_items | yes |
 | `price_per_unit` | shopping_list_items + invoice_items | yes |
