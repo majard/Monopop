@@ -8,6 +8,7 @@ import {
   Button,
   Chip,
   useTheme,
+  Dialog,
 } from "react-native-paper";
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -103,6 +104,9 @@ interface EditShoppingItemModalProps {
   onCategoryChange: () => void;
   categories: { id: number; name: string }[];
   onCategorySelect: (categoryId: number) => void;
+  promptRef?: React.RefObject<
+    ((prefill: number, unit: string, invoiceInfo: { storeName: string; createdAt: string; unitPrice: number } | null) => Promise<number | null>) | null
+  >;
 }
 
 // ─── Display helpers ──────────────────────────────────────────────────────────
@@ -161,6 +165,7 @@ export function EditShoppingItemModal({
   onCategoryChange,
   categories,
   onCategorySelect,
+  promptRef
 }: EditShoppingItemModalProps) {
   const theme = useTheme();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
@@ -206,6 +211,28 @@ export function EditShoppingItemModal({
   const [pricePaidKey, setPricePaidKey] = useState(0);
   const [updateRefPrice, setUpdateRefPrice] = useState(true);
   const [updateStdSize, setUpdateStdSize] = useState(false);
+
+
+  // Retroactive package size input
+  const [retroVisible, setRetroVisible] = useState(false);
+  const [retroPackageSizeText, setRetroPackageSizeText] = useState('');
+  const [retroUnit, setRetroUnit] = useState<string | null>(null);
+  const [retroInvoiceInfo, setRetroInvoiceInfo] = useState<{
+    storeName: string; createdAt: string; unitPrice: number;
+  } | null>(null);
+  const retroResolveRef = useRef<((value: number | null) => void) | null>(null);
+
+  const promptForRetroPackageSize = useCallback(async (
+    prefill: number,
+    unit: string,
+    invoiceInfo: { storeName: string; createdAt: string; unitPrice: number } | null,
+  ): Promise<number | null> => {
+    setRetroInvoiceInfo(invoiceInfo);
+    setRetroUnit(unit);
+    setRetroPackageSizeText(String(prefill));
+    setRetroVisible(true);
+    return new Promise(resolve => { retroResolveRef.current = resolve; });
+  }, []);
 
   const pricePerPkgRef = useRef(0);
   const pricePaidRef = useRef(0);
@@ -427,6 +454,10 @@ export function EditShoppingItemModal({
     prevHasUnit.current = hasUnit;
   }, [hasUnit]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (promptRef) promptRef.current = promptForRetroPackageSize;
+  }, [promptRef, promptForRetroPackageSize]);
+
   // ─── Triangle handlers ──────────────────────────────────────────────────────
   const handlePricePerPkgChange = useCallback((cents: number) => {
     pricePerPkgRef.current = cents;
@@ -494,303 +525,399 @@ export function EditShoppingItemModal({
 
   // ─── Render ─────────────────────────────────────────────────────────────────
   return (
-    <Portal>
-      <Modal
-        visible={visible}
-        onDismiss={handleSave}
-        contentContainerStyle={styles.modalContainer}
-      >
-        <Surface style={styles.surface}>
+    <>
+      <Portal>
+        <Modal
+          visible={visible}
+          onDismiss={handleSave}
+          contentContainerStyle={styles.modalContainer}
+        >
+          <Surface style={styles.surface}>
 
-          {/* HEADER */}
-          <View style={styles.headerRow}>
-            <Pressable
-              onPress={() => {
-                if (inventoryItem) { onDismiss(); navigation.navigate('EditInventoryItem', { inventoryItem }); }
-              }}
-              style={{ flex: 1, flexDirection: 'row', alignItems: 'flex-start', gap: 4 }}
-            >
-              <Text style={styles.productName} numberOfLines={1}>{item?.productName}</Text>
-              {inventoryItem && (
-                <MaterialCommunityIcons name="chevron-right" size={20} color={theme.colors.onSurfaceVariant} style={{ marginTop: 2 }} />
-              )}
-            </Pressable>
-            <Chip icon="tag-outline" mode="outlined" onPress={() => setCategoryModalVisible(true)} compact textStyle={styles.categoryChipText}>
-              {item?.categoryName ?? 'Sem categoria'}
-            </Chip>
-          </View>
-
-          {/* CONTEXT ROW */}
-          <View style={styles.contextRow}>
-            <View style={styles.contextLeft}>
-              <MaterialCommunityIcons name="package-variant" size={13} color={theme.colors.onSurfaceVariant} />
-              <Text style={styles.contextText}>Estoque: {item?.currentInventoryQuantity} un.</Text>
+            {/* HEADER */}
+            <View style={styles.headerRow}>
+              <Pressable
+                onPress={() => {
+                  if (inventoryItem) { onDismiss(); navigation.navigate('EditInventoryItem', { inventoryItem }); }
+                }}
+                style={{ flex: 1, flexDirection: 'row', alignItems: 'flex-start', gap: 4 }}
+              >
+                <Text style={styles.productName} numberOfLines={1}>{item?.productName}</Text>
+                {inventoryItem && (
+                  <MaterialCommunityIcons name="chevron-right" size={20} color={theme.colors.onSurfaceVariant} style={{ marginTop: 2 }} />
+                )}
+              </Pressable>
+              <Chip icon="tag-outline" mode="outlined" onPress={() => setCategoryModalVisible(true)} compact textStyle={styles.categoryChipText}>
+                {item?.categoryName ?? 'Sem categoria'}
+              </Chip>
             </View>
-            {item?.lowestPrice90d && item.price && item.price > item.lowestPrice90d.price && (
-              <View style={styles.contextRight}>
-                <MaterialCommunityIcons name="alert-circle-outline" size={13} color="orange" />
-                <Text style={styles.warningText}>Preço acima do menor (90d)</Text>
+
+            {/* CONTEXT ROW */}
+            <View style={styles.contextRow}>
+              <View style={styles.contextLeft}>
+                <MaterialCommunityIcons name="package-variant" size={13} color={theme.colors.onSurfaceVariant} />
+                <Text style={styles.contextText}>Estoque: {item?.currentInventoryQuantity} un.</Text>
+              </View>
+              {item?.lowestPrice90d && item.price && item.price > item.lowestPrice90d.price && (
+                <View style={styles.contextRight}>
+                  <MaterialCommunityIcons name="alert-circle-outline" size={13} color="orange" />
+                  <Text style={styles.warningText}>Preço acima do menor (90d)</Text>
+                </View>
+              )}
+            </View>
+
+            <View style={[styles.divider, { backgroundColor: theme.colors.outlineVariant }]} />
+
+            {/* COLLAPSED CONTROLS */}
+            {!expanded && (
+              <View style={styles.controlsRow}>
+                <View style={styles.controlHalf}>
+                  <Text style={[styles.label, { color: theme.colors.onSurfaceVariant }]}>QUANTIDADE</Text>
+                  <View style={styles.quantityRow}>
+                    <Pressable style={[styles.quantityButton, { borderColor: theme.colors.outline }]} onPress={() => setQuantity(Math.max(1, quantity - 1))}>
+                      <MaterialCommunityIcons name="minus" size={18} color={theme.colors.primary} />
+                    </Pressable>
+                    <RNTextInput
+                      style={[styles.quantityInput, { color: theme.colors.onSurface }]}
+                      value={quantity.toString()}
+                      onChangeText={(v) => { const n = parseInt(v, 10); setQuantity(isNaN(n) ? 1 : Math.max(1, n)); }}
+                      keyboardType="numeric" selectTextOnFocus returnKeyType="done"
+                      onBlur={() => { if (isNaN(quantity) || quantity < 1) setQuantity(1); }}
+                    />
+                    <Pressable style={[styles.quantityButton, { borderColor: theme.colors.outline }]} onPress={() => setQuantity(quantity + 1)}>
+                      <MaterialCommunityIcons name="plus" size={18} color={theme.colors.primary} />
+                    </Pressable>
+                  </View>
+                </View>
+
+                <View style={styles.controlHalf}>
+                  <Text style={[styles.label, { color: theme.colors.onSurfaceVariant }]}>PREÇO PAGO</Text>
+                  <View style={styles.priceRow}>
+                    <Text style={[styles.priceSymbol, { color: theme.colors.onSurface }]}>R$</Text>
+                    <PriceInput onChangeCents={handlePriceChange} borderColor={theme.colors.outline} textColor={theme.colors.onSurface} placeholderColor={theme.colors.onSurfaceVariant} initialCents={priceCents} />
+                  </View>
+                  {item?.lowestPrice90d && item.price && item.price > item.lowestPrice90d.price && (
+                    <Text style={styles.lowestPriceInfo}>Mín. 90d: R$ {item.lowestPrice90d.price.toFixed(2).replace('.', ',')} em {item.lowestPrice90d.storeName}</Text>
+                  )}
+                </View>
               </View>
             )}
-          </View>
 
-          <View style={[styles.divider, { backgroundColor: theme.colors.outlineVariant }]} />
+            {/* Unit summary line (collapsed + unit configured) */}
+            {!expanded && hasUnit && refPrice && refPrice.packageSize != null && refPrice.packageSize > 0 && (
+              <Text style={[styles.unitSummary, { color: theme.colors.onSurfaceVariant }]}>
+                {formatPricePerUnitDisplay(refPrice.price / refPrice.packageSize, effectiveUnit!)} · {formatPerStdPkg(refPrice.price / refPrice.packageSize, effectiveUnit!, effectiveStdSize!)}
+              </Text>
+            )}
 
-          {/* COLLAPSED CONTROLS */}
-          {!expanded && (
-            <View style={styles.controlsRow}>
-              <View style={styles.controlHalf}>
-                <Text style={[styles.label, { color: theme.colors.onSurfaceVariant }]}>QUANTIDADE</Text>
-                <View style={styles.quantityRow}>
-                  <Pressable style={[styles.quantityButton, { borderColor: theme.colors.outline }]} onPress={() => setQuantity(Math.max(1, quantity - 1))}>
-                    <MaterialCommunityIcons name="minus" size={18} color={theme.colors.primary} />
-                  </Pressable>
-                  <RNTextInput
-                    style={[styles.quantityInput, { color: theme.colors.onSurface }]}
-                    value={quantity.toString()}
-                    onChangeText={(v) => { const n = parseInt(v, 10); setQuantity(isNaN(n) ? 1 : Math.max(1, n)); }}
-                    keyboardType="numeric" selectTextOnFocus returnKeyType="done"
-                    onBlur={() => { if (isNaN(quantity) || quantity < 1) setQuantity(1); }}
-                  />
-                  <Pressable style={[styles.quantityButton, { borderColor: theme.colors.outline }]} onPress={() => setQuantity(quantity + 1)}>
-                    <MaterialCommunityIcons name="plus" size={18} color={theme.colors.primary} />
-                  </Pressable>
-                </View>
-              </View>
+            {/* MOSTRAR MAIS — always visible */}
+            <Pressable onPress={() => setExpanded(e => !e)} style={[styles.expandToggle, { borderColor: theme.colors.outlineVariant }]}>
+              <Text style={[styles.expandToggleText, { color: theme.colors.primary }]}>
+                {expanded ? 'Ocultar detalhes' : 'Mostrar mais'}
+              </Text>
+              <MaterialCommunityIcons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={theme.colors.primary} />
+            </Pressable>
 
-              <View style={styles.controlHalf}>
-                <Text style={[styles.label, { color: theme.colors.onSurfaceVariant }]}>PREÇO PAGO</Text>
-                <View style={styles.priceRow}>
-                  <Text style={[styles.priceSymbol, { color: theme.colors.onSurface }]}>R$</Text>
-                  <PriceInput onChangeCents={handlePriceChange} borderColor={theme.colors.outline} textColor={theme.colors.onSurface} placeholderColor={theme.colors.onSurfaceVariant} initialCents={priceCents} />
-                </View>
-                {item?.lowestPrice90d && item.price && item.price > item.lowestPrice90d.price && (
-                  <Text style={styles.lowestPriceInfo}>Mín. 90d: R$ {item.lowestPrice90d.price.toFixed(2).replace('.', ',')} em {item.lowestPrice90d.storeName}</Text>
-                )}
-              </View>
-            </View>
-          )}
+            {/* EXPANDED */}
+            {expanded && (
+              <View>
 
-          {/* Unit summary line (collapsed + unit configured) */}
-          {!expanded && hasUnit && refPrice && refPrice.packageSize != null && refPrice.packageSize > 0 && (
-            <Text style={[styles.unitSummary, { color: theme.colors.onSurfaceVariant }]}>
-              {formatPricePerUnitDisplay(refPrice.price / refPrice.packageSize, effectiveUnit!)} · {formatPerStdPkg(refPrice.price / refPrice.packageSize, effectiveUnit!, effectiveStdSize!)}
-            </Text>
-          )}
+                {/* ── Unit picker (no unit configured yet) ── */}
+                {!hasUnit && (
+                  <View style={styles.unitConfigSection}>
+                    <Text style={[styles.unitConfigHint, { color: theme.colors.onSurfaceVariant }]}>
+                      Configure a unidade para comparar preços por quantidade.
+                    </Text>
 
-          {/* MOSTRAR MAIS — always visible */}
-          <Pressable onPress={() => setExpanded(e => !e)} style={[styles.expandToggle, { borderColor: theme.colors.outlineVariant }]}>
-            <Text style={[styles.expandToggleText, { color: theme.colors.primary }]}>
-              {expanded ? 'Ocultar detalhes' : 'Mostrar mais'}
-            </Text>
-            <MaterialCommunityIcons name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={theme.colors.primary} />
-          </Pressable>
+                    <Text style={[styles.label, { color: theme.colors.onSurfaceVariant }]}>TIPO</Text>
+                    <View style={[styles.chipRow, { marginBottom: 12 }]}>
+                      {FAMILIES.map(f => (
+                        <Chip key={f.key} selected={selectedFamily === f.key}
+                          onPress={() => { setSelectedFamily(f.key); setLocalUnit(null); }}
+                          compact style={styles.chip}
+                        >{f.label}</Chip>
+                      ))}
+                    </View>
 
-          {/* EXPANDED */}
-          {expanded && (
-            <View>
+                    {selectedFamily && (
+                      <>
+                        <Text style={[styles.label, { color: theme.colors.onSurfaceVariant }]}>UNIDADE</Text>
+                        <View style={[styles.chipRow, { marginBottom: 12 }]}>
+                          {unitsForFamily.map(u => (
+                            <Chip key={u.symbol} selected={localUnit === u.symbol}
+                              onPress={() => setLocalUnit(u.symbol)}
+                              compact style={styles.chip}
+                            >{u.label} ({u.symbol})</Chip>
+                          ))}
+                        </View>
+                      </>
+                    )}
 
-              {/* ── Unit picker (no unit configured yet) ── */}
-              {!hasUnit && (
-                <View style={styles.unitConfigSection}>
-                  <Text style={[styles.unitConfigHint, { color: theme.colors.onSurfaceVariant }]}>
-                    Configure a unidade para comparar preços por quantidade.
-                  </Text>
-
-                  <Text style={[styles.label, { color: theme.colors.onSurfaceVariant }]}>TIPO</Text>
-                  <View style={[styles.chipRow, { marginBottom: 12 }]}>
-                    {FAMILIES.map(f => (
-                      <Chip key={f.key} selected={selectedFamily === f.key}
-                        onPress={() => { setSelectedFamily(f.key); setLocalUnit(null); }}
-                        compact style={styles.chip}
-                      >{f.label}</Chip>
-                    ))}
-                  </View>
-
-                  {selectedFamily && (
-                    <>
-                      <Text style={[styles.label, { color: theme.colors.onSurfaceVariant }]}>UNIDADE</Text>
-                      <View style={[styles.chipRow, { marginBottom: 12 }]}>
-                        {unitsForFamily.map(u => (
-                          <Chip key={u.symbol} selected={localUnit === u.symbol}
-                            onPress={() => setLocalUnit(u.symbol)}
-                            compact style={styles.chip}
-                          >{u.label} ({u.symbol})</Chip>
-                        ))}
+                    {localUnit && (
+                      <View>
+                        <Text style={[styles.label, { color: theme.colors.onSurfaceVariant }]}>
+                          EMBALAGEM PADRÃO ({localUnit.toUpperCase()})
+                        </Text>
+                        <View style={styles.stdSizeRow}>
+                          <RNTextInput
+                            style={[styles.expandedTextInput, { borderColor: theme.colors.outline, color: theme.colors.onSurface, flex: 1 }]}
+                            value={localStdSizeStr}
+                            onChangeText={setLocalStdSizeStr}
+                            keyboardType="decimal-pad"
+                            selectTextOnFocus
+                            returnKeyType="done"
+                            placeholder={stdSizePlaceholder(localUnit)}
+                            placeholderTextColor={theme.colors.onSurfaceVariant}
+                            onSubmitEditing={() => setConfirmedStdSizeStr(localStdSizeStr)}
+                          />
+                          <Text style={[styles.unitSuffix, { color: theme.colors.onSurfaceVariant }]}>{localUnit}</Text>
+                          <Pressable
+                            onPress={() => setConfirmedStdSizeStr(localStdSizeStr)}
+                            style={[styles.confirmSizeButton, { backgroundColor: theme.colors.primary }]}
+                            disabled={!localStdSizeStr || parseFloat(localStdSizeStr) <= 0}
+                          >
+                            <MaterialCommunityIcons name="check" size={16} color={theme.colors.onPrimary} />
+                          </Pressable>
+                        </View>
                       </View>
-                    </>
-                  )}
+                    )}
+                  </View>
+                )}
 
-                  {localUnit && (
-                    <View>
+                {/* ── Triangle ── */}
+                {hasUnit && effectiveStdSize && (
+                  <View>
+                    {unitConfiguredInline && (
+                      <View style={[styles.inlineConfigBadge, { backgroundColor: theme.colors.primaryContainer }]}>
+                        <MaterialCommunityIcons name="check-circle-outline" size={14} color={theme.colors.onPrimaryContainer} />
+                        <Text style={[styles.inlineConfigBadgeText, { color: theme.colors.onPrimaryContainer }]}>
+                          {effectiveUnit} · emb. padrão {effectiveStdSize}{effectiveUnit}
+                        </Text>
+                      </View>
+                    )}
+
+                    <View style={styles.expandedField}>
                       <Text style={[styles.label, { color: theme.colors.onSurfaceVariant }]}>
-                        EMBALAGEM PADRÃO ({localUnit.toUpperCase()})
+                        {getPricePerPackageLabel(effectiveUnit, effectiveStdSize).toUpperCase()}
+                      </Text>
+                      <View style={styles.priceRow}>
+                        <Text style={[styles.priceSymbol, { color: theme.colors.onSurface }]}>R$</Text>
+                        <PriceInput key={pricePerPkgKey} initialCents={pricePerPkgCents} onChangeCents={handlePricePerPkgChange}
+                          borderColor={theme.colors.outline} textColor={theme.colors.onSurface} placeholderColor={theme.colors.onSurfaceVariant} />
+                      </View>
+                    </View>
+
+                    <View style={styles.expandedField}>
+                      <Text style={[styles.label, { color: theme.colors.onSurfaceVariant }]}>
+                        QUANTIDADE ({effectiveUnit!.toUpperCase()})
                       </Text>
                       <View style={styles.stdSizeRow}>
                         <RNTextInput
                           style={[styles.expandedTextInput, { borderColor: theme.colors.outline, color: theme.colors.onSurface, flex: 1 }]}
-                          value={localStdSizeStr}
-                          onChangeText={setLocalStdSizeStr}
-                          keyboardType="decimal-pad"
-                          selectTextOnFocus
-                          returnKeyType="done"
-                          placeholder={stdSizePlaceholder(localUnit)}
-                          placeholderTextColor={theme.colors.onSurfaceVariant}
-                          onSubmitEditing={() => setConfirmedStdSizeStr(localStdSizeStr)}
+                          value={packageSizeStr}
+                          onChangeText={handlePackageSizeChange}
+                          keyboardType="decimal-pad" selectTextOnFocus returnKeyType="done"
                         />
-                        <Text style={[styles.unitSuffix, { color: theme.colors.onSurfaceVariant }]}>{localUnit}</Text>
-                        <Pressable
-                          onPress={() => setConfirmedStdSizeStr(localStdSizeStr)}
-                          style={[styles.confirmSizeButton, { backgroundColor: theme.colors.primary }]}
-                          disabled={!localStdSizeStr || parseFloat(localStdSizeStr) <= 0}
-                        >
-                          <MaterialCommunityIcons name="check" size={16} color={theme.colors.onPrimary} />
+                        <Text style={[styles.unitSuffix, { color: theme.colors.onSurfaceVariant }]}>{effectiveUnit}</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.expandedField}>
+                      <Text style={[styles.label, { color: theme.colors.onSurfaceVariant }]}>PREÇO PAGO</Text>
+                      <View style={styles.priceRow}>
+                        <Text style={[styles.priceSymbol, { color: theme.colors.onSurface }]}>R$</Text>
+                        <PriceInput key={pricePaidKey} initialCents={pricePaidCents} onChangeCents={handlePricePaidChange}
+                          borderColor={theme.colors.outline} textColor={theme.colors.onSurface} placeholderColor={theme.colors.onSurfaceVariant} />
+                      </View>
+                    </View>
+
+                    {derivedPricePerUnit !== null && (
+                      <View style={[styles.derivedBox, { backgroundColor: theme.colors.surfaceVariant }]}>
+                        <View style={styles.derivedRow}>
+                          <Text style={[styles.derivedLabel, { color: theme.colors.onSurfaceVariant }]}>Preço por unidade</Text>
+                          <Text style={[styles.derivedValue, { color: theme.colors.primary }]}>{formatPricePerUnitDisplay(derivedPricePerUnit, effectiveUnit!)}</Text>
+                        </View>
+                        <View style={styles.derivedRow}>
+                          <Text style={[styles.derivedLabel, { color: theme.colors.onSurfaceVariant }]}>Por emb. padrão</Text>
+                          <Text style={[styles.derivedValue, { color: theme.colors.primary }]}>{formatPerStdPkg(derivedPricePerUnit, effectiveUnit!, effectiveStdSize)}</Text>
+                        </View>
+                        {pricePaidCents > 0 && (
+                          <View style={styles.derivedRow}>
+                            <Text style={[styles.derivedLabel, { color: theme.colors.onSurfaceVariant }]}>Total</Text>
+                            <Text style={[styles.derivedValue, { color: theme.colors.primary }]}>{formatCurrency((pricePaidCents / 100) * quantity)}</Text>
+                          </View>
+                        )}
+                      </View>
+                    )}
+
+                    <View style={[styles.expandedField, { marginTop: 4 }]}>
+                      <Text style={[styles.label, { color: theme.colors.onSurfaceVariant }]}>QTD. DE EMBALAGENS</Text>
+                      <View style={styles.quantityRow}>
+                        <Pressable style={[styles.quantityButton, { borderColor: theme.colors.outline }]} onPress={() => setQuantity(Math.max(1, quantity - 1))}>
+                          <MaterialCommunityIcons name="minus" size={18} color={theme.colors.primary} />
+                        </Pressable>
+                        <RNTextInput
+                          style={[styles.quantityInput, { color: theme.colors.onSurface }]}
+                          value={quantity.toString()}
+                          onChangeText={(v) => { const n = parseInt(v, 10); setQuantity(isNaN(n) ? 1 : Math.max(1, n)); }}
+                          keyboardType="numeric" selectTextOnFocus returnKeyType="done"
+                          onBlur={() => { if (isNaN(quantity) || quantity < 1) setQuantity(1); }}
+                        />
+                        <Pressable style={[styles.quantityButton, { borderColor: theme.colors.outline }]} onPress={() => setQuantity(quantity + 1)}>
+                          <MaterialCommunityIcons name="plus" size={18} color={theme.colors.primary} />
                         </Pressable>
                       </View>
                     </View>
-                  )}
-                </View>
-              )}
 
-              {/* ── Triangle ── */}
-              {hasUnit && effectiveStdSize && (
-                <View>
-                  {unitConfiguredInline && (
-                    <View style={[styles.inlineConfigBadge, { backgroundColor: theme.colors.primaryContainer }]}>
-                      <MaterialCommunityIcons name="check-circle-outline" size={14} color={theme.colors.onPrimaryContainer} />
-                      <Text style={[styles.inlineConfigBadgeText, { color: theme.colors.onPrimaryContainer }]}>
-                        {effectiveUnit} · emb. padrão {effectiveStdSize}{effectiveUnit}
-                      </Text>
-                    </View>
-                  )}
-
-                  <View style={styles.expandedField}>
-                    <Text style={[styles.label, { color: theme.colors.onSurfaceVariant }]}>
-                      {getPricePerPackageLabel(effectiveUnit, effectiveStdSize).toUpperCase()}
-                    </Text>
-                    <View style={styles.priceRow}>
-                      <Text style={[styles.priceSymbol, { color: theme.colors.onSurface }]}>R$</Text>
-                      <PriceInput key={pricePerPkgKey} initialCents={pricePerPkgCents} onChangeCents={handlePricePerPkgChange}
-                        borderColor={theme.colors.outline} textColor={theme.colors.onSurface} placeholderColor={theme.colors.onSurfaceVariant} />
-                    </View>
-                  </View>
-
-                  <View style={styles.expandedField}>
-                    <Text style={[styles.label, { color: theme.colors.onSurfaceVariant }]}>
-                      QUANTIDADE ({effectiveUnit!.toUpperCase()})
-                    </Text>
-                    <View style={styles.stdSizeRow}>
-                      <RNTextInput
-                        style={[styles.expandedTextInput, { borderColor: theme.colors.outline, color: theme.colors.onSurface, flex: 1 }]}
-                        value={packageSizeStr}
-                        onChangeText={handlePackageSizeChange}
-                        keyboardType="decimal-pad" selectTextOnFocus returnKeyType="done"
-                      />
-                      <Text style={[styles.unitSuffix, { color: theme.colors.onSurfaceVariant }]}>{effectiveUnit}</Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.expandedField}>
-                    <Text style={[styles.label, { color: theme.colors.onSurfaceVariant }]}>PREÇO PAGO</Text>
-                    <View style={styles.priceRow}>
-                      <Text style={[styles.priceSymbol, { color: theme.colors.onSurface }]}>R$</Text>
-                      <PriceInput key={pricePaidKey} initialCents={pricePaidCents} onChangeCents={handlePricePaidChange}
-                        borderColor={theme.colors.outline} textColor={theme.colors.onSurface} placeholderColor={theme.colors.onSurfaceVariant} />
-                    </View>
-                  </View>
-
-                  {derivedPricePerUnit !== null && (
-                    <View style={[styles.derivedBox, { backgroundColor: theme.colors.surfaceVariant }]}>
-                      <View style={styles.derivedRow}>
-                        <Text style={[styles.derivedLabel, { color: theme.colors.onSurfaceVariant }]}>Preço por unidade</Text>
-                        <Text style={[styles.derivedValue, { color: theme.colors.primary }]}>{formatPricePerUnitDisplay(derivedPricePerUnit, effectiveUnit!)}</Text>
-                      </View>
-                      <View style={styles.derivedRow}>
-                        <Text style={[styles.derivedLabel, { color: theme.colors.onSurfaceVariant }]}>Por emb. padrão</Text>
-                        <Text style={[styles.derivedValue, { color: theme.colors.primary }]}>{formatPerStdPkg(derivedPricePerUnit, effectiveUnit!, effectiveStdSize)}</Text>
-                      </View>
-                      {pricePaidCents > 0 && (
-                        <View style={styles.derivedRow}>
-                          <Text style={[styles.derivedLabel, { color: theme.colors.onSurfaceVariant }]}>Total</Text>
-                          <Text style={[styles.derivedValue, { color: theme.colors.primary }]}>{formatCurrency((pricePaidCents / 100) * quantity)}</Text>
-                        </View>
-                      )}
-                    </View>
-                  )}
-
-                  <View style={[styles.expandedField, { marginTop: 4 }]}>
-                    <Text style={[styles.label, { color: theme.colors.onSurfaceVariant }]}>QTD. DE EMBALAGENS</Text>
-                    <View style={styles.quantityRow}>
-                      <Pressable style={[styles.quantityButton, { borderColor: theme.colors.outline }]} onPress={() => setQuantity(Math.max(1, quantity - 1))}>
-                        <MaterialCommunityIcons name="minus" size={18} color={theme.colors.primary} />
-                      </Pressable>
-                      <RNTextInput
-                        style={[styles.quantityInput, { color: theme.colors.onSurface }]}
-                        value={quantity.toString()}
-                        onChangeText={(v) => { const n = parseInt(v, 10); setQuantity(isNaN(n) ? 1 : Math.max(1, n)); }}
-                        keyboardType="numeric" selectTextOnFocus returnKeyType="done"
-                        onBlur={() => { if (isNaN(quantity) || quantity < 1) setQuantity(1); }}
-                      />
-                      <Pressable style={[styles.quantityButton, { borderColor: theme.colors.outline }]} onPress={() => setQuantity(quantity + 1)}>
-                        <MaterialCommunityIcons name="plus" size={18} color={theme.colors.primary} />
-                      </Pressable>
-                    </View>
-                  </View>
-
-                  <Pressable onPress={() => setUpdateRefPrice(v => !v)} style={styles.checkboxRow}>
-                    <MaterialCommunityIcons name={updateRefPrice ? 'checkbox-marked' : 'checkbox-blank-outline'} size={20} color={theme.colors.primary} />
-                    <Text style={[styles.checkboxLabel, { color: theme.colors.onSurface }]}>Atualizar preço de referência</Text>
-                  </Pressable>
-
-                  {currentPackageSize > 0 && currentPackageSize !== effectiveStdSize && !unitConfiguredInline && (
-                    <Pressable onPress={() => setUpdateStdSize(v => !v)} style={styles.checkboxRow}>
-                      <MaterialCommunityIcons name={updateStdSize ? 'checkbox-marked' : 'checkbox-blank-outline'} size={20} color={theme.colors.primary} />
-                      <Text style={[styles.checkboxLabel, { color: theme.colors.onSurface }]}>
-                        Atualizar embalagem padrão para {packageSizeStr}{effectiveUnit}
-                      </Text>
+                    <Pressable onPress={() => setUpdateRefPrice(v => !v)} style={styles.checkboxRow}>
+                      <MaterialCommunityIcons name={updateRefPrice ? 'checkbox-marked' : 'checkbox-blank-outline'} size={20} color={theme.colors.primary} />
+                      <Text style={[styles.checkboxLabel, { color: theme.colors.onSurface }]}>Atualizar preço de referência</Text>
                     </Pressable>
-                  )}
-                </View>
-              )}
+
+                    {currentPackageSize > 0 && currentPackageSize !== effectiveStdSize && !unitConfiguredInline && (
+                      <Pressable onPress={() => setUpdateStdSize(v => !v)} style={styles.checkboxRow}>
+                        <MaterialCommunityIcons name={updateStdSize ? 'checkbox-marked' : 'checkbox-blank-outline'} size={20} color={theme.colors.primary} />
+                        <Text style={[styles.checkboxLabel, { color: theme.colors.onSurface }]}>
+                          Atualizar embalagem padrão para {packageSizeStr}{effectiveUnit}
+                        </Text>
+                      </Pressable>
+                    )}
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* TOTAL PREVIEW (collapsed only) */}
+            {!expanded && totalPreview && (
+              <View style={[styles.totalPreview, { backgroundColor: theme.colors.surfaceVariant }]}>
+                <Text style={[styles.totalLabel, { color: theme.colors.onSurfaceVariant }]}>Total</Text>
+                <Text style={[styles.totalValue, { color: theme.colors.primary }]}>{totalPreview}</Text>
+              </View>
+            )}
+
+            <View style={[styles.divider, { backgroundColor: theme.colors.outlineVariant }]} />
+
+            <Button mode="outlined" icon={checked ? "cart-minus" : "cart-plus"} onPress={() => setChecked(prev => !prev)} style={styles.cartButton}>
+              {checked ? "Remover do carrinho" : "Mover pro carrinho"}
+            </Button>
+
+            <View style={styles.actionRow}>
+              <Button mode="contained" onPress={handleSave} style={styles.actionButton}>Salvar</Button>
+              <Button mode="contained-tonal" onPress={onDismiss} style={styles.actionButton}>Cancelar</Button>
             </View>
-          )}
 
-          {/* TOTAL PREVIEW (collapsed only) */}
-          {!expanded && totalPreview && (
-            <View style={[styles.totalPreview, { backgroundColor: theme.colors.surfaceVariant }]}>
-              <Text style={[styles.totalLabel, { color: theme.colors.onSurfaceVariant }]}>Total</Text>
-              <Text style={[styles.totalValue, { color: theme.colors.primary }]}>{totalPreview}</Text>
+            <Pressable onPress={onDelete} style={styles.deleteLink}>
+              <Text style={[styles.deleteText, { color: theme.colors.error }]}>Remover da lista</Text>
+            </Pressable>
+          </Surface>
+        </Modal>
+
+        <SearchablePickerDialog
+          visible={categoryModalVisible}
+          items={categories}
+          selectedId={selectedCategoryId}
+          onSelect={(id) => { onCategorySelect(id); setCategoryModalVisible(false); }}
+          onDismiss={() => setCategoryModalVisible(false)}
+          title="Categoria"
+          placeholder="Buscar categoria..."
+          onCreateNew={() => { }}
+        />
+      </Portal>
+      <Portal>
+
+        <Dialog
+          visible={retroVisible}
+          onDismiss={() => {
+            setRetroVisible(false);
+            retroResolveRef.current?.(null);
+            retroResolveRef.current = null;
+          }}
+        >
+          <Dialog.Title>Qual era o tamanho da embalagem?</Dialog.Title>
+          <Dialog.Content>
+            <Text
+              style={{
+                fontSize: 12,
+                color: theme.colors.onSurfaceVariant,
+                textAlign: "center",
+                marginBottom: 10,
+              }}
+            >
+              Confirme o tamanho da embalagem da compra abaixo para criar uma
+              referência.
+            </Text>
+            {retroInvoiceInfo && (
+              <Text
+                style={{
+                  fontSize: 12,
+                  color: theme.colors.onSurfaceVariant,
+                  textAlign: "center",
+                  marginBottom: 12,
+                }}
+              >
+                {retroInvoiceInfo.storeName} •{" "}
+                {new Date(retroInvoiceInfo.createdAt).toLocaleDateString(
+                  "pt-BR",
+                )}{" "}
+                • R$ {retroInvoiceInfo.unitPrice.toFixed(2).replace(".", ",")}
+              </Text>
+            )}
+
+            <View
+              style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+            >
+              <RNTextInput
+                value={retroPackageSizeText}
+                onChangeText={setRetroPackageSizeText}
+                keyboardType="decimal-pad"
+                style={{ flex: 1 }}
+                autoFocus
+              />
+              <Text
+                style={{
+                  color: theme.colors.onSurfaceVariant,
+                  fontSize: 14,
+                  minWidth: 28,
+                }}
+              >
+                {retroUnit ?? ""}
+              </Text>
             </View>
-          )}
-
-          <View style={[styles.divider, { backgroundColor: theme.colors.outlineVariant }]} />
-
-          <Button mode="outlined" icon={checked ? "cart-minus" : "cart-plus"} onPress={() => setChecked(prev => !prev)} style={styles.cartButton}>
-            {checked ? "Remover do carrinho" : "Mover pro carrinho"}
-          </Button>
-
-          <View style={styles.actionRow}>
-            <Button mode="contained" onPress={handleSave} style={styles.actionButton}>Salvar</Button>
-            <Button mode="contained-tonal" onPress={onDismiss} style={styles.actionButton}>Cancelar</Button>
-          </View>
-
-          <Pressable onPress={onDelete} style={styles.deleteLink}>
-            <Text style={[styles.deleteText, { color: theme.colors.error }]}>Remover da lista</Text>
-          </Pressable>
-        </Surface>
-      </Modal>
-
-      <SearchablePickerDialog
-        visible={categoryModalVisible}
-        items={categories}
-        selectedId={selectedCategoryId}
-        onSelect={(id) => { onCategorySelect(id); setCategoryModalVisible(false); }}
-        onDismiss={() => setCategoryModalVisible(false)}
-        title="Categoria"
-        placeholder="Buscar categoria..."
-        onCreateNew={() => { }}
-      />
-    </Portal>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button
+              onPress={() => {
+                setRetroVisible(false);
+                retroResolveRef.current?.(null);
+                retroResolveRef.current = null;
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              mode="contained"
+              onPress={() => {
+                const v = parseFloat(
+                  (retroPackageSizeText ?? "").replace(",", "."),
+                );
+                if (!isFinite(v) || v <= 0) return;
+                setRetroVisible(false);
+                retroResolveRef.current?.(v);
+                retroResolveRef.current = null;
+              }}
+              disabled={
+                !isFinite(
+                  parseFloat((retroPackageSizeText ?? "").replace(",", ".")),
+                ) ||
+                parseFloat((retroPackageSizeText ?? "").replace(",", ".")) <= 0
+              }
+            >
+              Confirmar
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+    </>
   );
 }
 
