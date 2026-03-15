@@ -58,11 +58,11 @@ Note: DB column names use camelCase in SQLite for this project (`standardPackage
 |---|---|---|---|
 | Unit of measure | `unit` | "Unidade" | Atomic base: `g`, `ml`, `un`. Nullable — if null, price is treated as legacy price-per-package |
 | Reference package size | `standardPackageSize` | "Embalagem padrão" | What the product is understood in. 400g for powder milk, 12 for eggs, 1000g for meat. Nullable — if null, treat price as legacy price-per-package |
-| This purchase's package size | `packageSize` | "Quantidade adquirida" | Actual size of the package bought this time, in the product’s `unit`. Nullable — if null, assume the store’s ref `packageSize`, else `standardPackageSize` |
+| This purchase's package size | `packageSize` | "Quantidade adquirida" | Actual size of the package bought this time, in the product's `unit`. Nullable — if null, assume the store's ref `packageSize`, else `standardPackageSize` |
 | How many packages bought | `package_quantity` | "Quantidade" | Integer always. This is how many packages the user is buying, not the quantity inside each package |
 | Shelf label price | `price_per_package` | "Preço por [emb. padrão]" | What the shelf implies for the standard package. Derived, never stored. Label uses `standardPackageSize` + `unit` display formatting |
 | Actual price paid | `price` | "Preço pago" | Paid price for one package of size `packageSize`. One of the three editable triangle fields |
-| Price per unit of measure | *(derived)* | "Preço por unidade" | `price / packageSize` (e.g. R$/g, R$/ml, R$/un). Derived, not stored |
+| Price per unit of measure | *(derived, not stored)* | "Preço por unidade" | `price / packageSize` (e.g. R$/g, R$/ml, R$/un). Derived on the fly |
 | Total paid | *(derived)* | "Total" | `price × package_quantity`. Computed live, never stored |
 
 **Note on `product_store_prices.price` and `product_base_prices.price`:** column name stays `price` for minimal disruption.
@@ -250,22 +250,22 @@ The UI tracks which fields have been touched and auto-fills the untouched one li
 ### Store pre-selected
 
 - `price_per_package`, `package_size`, `price` editable in EditSLI modal
-- `price_per_unit` derived and displayed live — not editable
+- `price_per_unit` derived and displayed live — not stored
 - Saved on "Salvar" / back navigation (current behaviour)
 - Cancelled on "Cancelar" (current behaviour)
-- ☑ "Atualizar preço de referência?" — defaults ON → upserts `product_store_prices.price` with `price_per_unit`
+- ☑ "Atualizar preço de referência?" — defaults ON → upserts `product_store_prices.price` with the paid price per package
 - ☐ "Atualizar embalagem padrão para X?" — defaults OFF → if checked, updates `products.standard_package_size`
 - Toggle OFF on ref price: still saves SLI and invoice, only skips the `product_store_prices` upsert
 
 ### No store pre-selected
 
-- Same flow but upserts `product_base_prices.price` with `price_per_unit`
+- Same flow but upserts `product_base_prices.price` with the paid price per package
 - On checkout (ConfirmInvoiceModal): existing checkbox opts-in to update per-store prices
 - Current behaviour maintained
 
 ### Changing standard_package_size
 
-Because reference prices are stored as `price_per_unit`, changing `standard_package_size` only affects how the price is displayed. No cascade migration needed.
+Because reference prices are stored as paid price per package, changing `standard_package_size` only affects how the price is displayed. No cascade migration needed.
 
 ---
 

@@ -143,6 +143,8 @@ export default function ShoppingListScreen() {
   const theme = useTheme();
   const styles = createHomeScreenStyles(theme);
 
+  const isFirstLoadRef = useRef(true);
+
   const loadDataRef = useRef<(() => Promise<void>) | null>(null);
   const manualOverridesRef = useRef<
     Map<string, Map<number, { price: number; packageSize: number | null }>>
@@ -258,6 +260,7 @@ export default function ShoppingListScreen() {
       // 4. SINGLE STATE UPDATE - show UI immediately
       setShoppingListItems(items);
       setInitialLoading(false);
+      
 
       // 5. DEFER prices - break out of current execution
       setTimeout(() => {
