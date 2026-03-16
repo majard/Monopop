@@ -68,61 +68,61 @@ interface PriceTriangleProps {
 // ─── PriceInput ───────────────────────────────────────────────────────────────
 
 const PriceInput = React.memo(forwardRef<RNTextInput, {
-  onChangeCents: (cents: number) => void;
-  borderColor: string;
-  textColor: string;
-  initialCents: number;
-  fontSize?: number;
-  autoFocus?: boolean;
-  clearOnFocus?: boolean;
+    onChangeCents: (cents: number) => void;
+    borderColor: string;
+    textColor: string;
+    initialCents: number;
+    fontSize?: number;
+    autoFocus?: boolean;
+    clearOnFocus?: boolean;
 }>(({ onChangeCents, borderColor, textColor, initialCents, fontSize = 15, autoFocus, clearOnFocus = true }, ref) => {
-  const [cents, setCents] = useState(initialCents);
-  const centsRef = useRef(initialCents);
+    const [cents, setCents] = useState(initialCents);
+    const centsRef = useRef(initialCents);
 
-  const formatted = useMemo(() => {
-    const int = Math.floor(cents / 100);
-    const dec = cents % 100;
-    return `${int},${dec.toString().padStart(2, '0')}`;
-  }, [cents]);
+    const formatted = useMemo(() => {
+        const int = Math.floor(cents / 100);
+        const dec = cents % 100;
+        return `${int},${dec.toString().padStart(2, '0')}`;
+    }, [cents]);
 
-  const handleKeyPress = useCallback((e: any) => {
-    const key = e.nativeEvent.key;
-    let next = centsRef.current;
+    const handleKeyPress = useCallback((e: any) => {
+        const key = e.nativeEvent.key;
+        let next = centsRef.current;
 
-    if (key >= '0' && key <= '9') {
-      next = centsRef.current * 10 + (key.charCodeAt(0) - 48);
-      if (next > 999999999) return;
-    } else if (key === 'Backspace') {
-      next = Math.floor(centsRef.current / 10);
-    } else {
-      return;
-    }
+        if (key >= '0' && key <= '9') {
+            next = centsRef.current * 10 + (key.charCodeAt(0) - 48);
+            if (next > 999999999) return;
+        } else if (key === 'Backspace') {
+            next = Math.floor(centsRef.current / 10);
+        } else {
+            return;
+        }
 
-    centsRef.current = next;
-    setCents(next);
-    onChangeCents(next);
-  }, [onChangeCents]);
+        centsRef.current = next;
+        setCents(next);
+        onChangeCents(next);
+    }, [onChangeCents]);
 
-  return (
-    <RNTextInput
-      ref={ref}
-      value={formatted}
-      keyboardType="number-pad"
-      onKeyPress={handleKeyPress}
-      selection={{ start: formatted.length, end: formatted.length }}
-      onFocus={() => {
-        if (!clearOnFocus) return;
-        centsRef.current = 0;
-        setCents(0);
-        onChangeCents(0);
-      }}
-      contextMenuHidden
-      selectTextOnFocus={false}
-      caretHidden
-      autoFocus={autoFocus}
-      style={[styles.priceInput, { borderColor, color: textColor, fontSize }]}
-    />
-  );
+    return (
+        <RNTextInput
+            ref={ref}
+            value={formatted}
+            keyboardType="number-pad"
+            onKeyPress={handleKeyPress}
+            selection={{ start: formatted.length, end: formatted.length }}
+            onFocus={() => {
+                if (!clearOnFocus) return;
+                centsRef.current = 0;
+                setCents(0);
+                onChangeCents(0);
+            }}
+            contextMenuHidden
+            selectTextOnFocus={false}
+            caretHidden
+            autoFocus={autoFocus}
+            style={[styles.priceInput, { borderColor, color: textColor, fontSize }]}
+        />
+    );
 }));
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -188,29 +188,41 @@ export const PriceTriangle = forwardRef<PriceTriangleHandle, PriceTriangleProps>
 
         useEffect(() => {
             if (!productUnit || !productStandardPackageSize) return;
+            if (pricePerPkgRef.current !== 0 || pricePaidRef.current !== 0) return;
 
-            // Already handled by parent seed() call — but as fallback if seed wasn't called:
-            if (pricePerPkgRef.current === 0 && pricePaidRef.current === 0) {
-                if (refPrice && refPrice.packageSize && refPrice.packageSize > 0) {
-                    const f = getUnitFactor(productUnit);
-                    const refPPU = refPrice.price / refPrice.packageSize;
-                    const pricePerPkg = refPPU * productStandardPackageSize;
-                    const initPkgSize = initialPackageSize ?? refPrice.packageSize;
-                    const initPaid = initPkgSize === refPrice.packageSize
-                        ? refPrice.price
-                        : refPPU * initPkgSize;
+            const f = getUnitFactor(productUnit);
 
-                    pricePerPkgRef.current = Math.round(pricePerPkg * 100);
-                    packageSizeRef.current = initPkgSize / f;
-                    pricePaidRef.current = Math.round(initPaid * 100);
+            if (refPrice && refPrice.packageSize && refPrice.packageSize > 0) {
+                const refPPU = refPrice.price / refPrice.packageSize;
+                const pricePerPkg = refPPU * productStandardPackageSize;
+                const initAtomicPkgSize = initialPackageSize ?? refPrice.packageSize;
+                const initPaid = initAtomicPkgSize === refPrice.packageSize
+                    ? refPrice.price
+                    : refPPU * initAtomicPkgSize;
 
-                    setPricePerPkgCents(pricePerPkgRef.current);
-                    setPricePerPkgKey(k => k + 1);
-                    setPackageSizeStr(String(initPkgSize / f));
-                    setPricePaidCents(pricePaidRef.current);
-                    setPricePaidKey(k => k + 1);
-                }
+                pricePerPkgRef.current = Math.round(pricePerPkg * 100);
+                packageSizeRef.current = initAtomicPkgSize / f;
+                pricePaidRef.current = Math.round(initPaid * 100);
+            } else if (initialPrice && initialPrice > 0) {
+                // No refPrice but item has a price — seed from item.price directly
+                const initAtomicPkgSize = initialPackageSize ?? productStandardPackageSize;
+                const atomicPPU = initialPrice / initAtomicPkgSize;
+                const pricePerPkg = atomicPPU * productStandardPackageSize;
+
+                pricePerPkgRef.current = Math.round(pricePerPkg * 100);
+                packageSizeRef.current = initAtomicPkgSize / f;
+                pricePaidRef.current = Math.round(initialPrice * 100);
+            } else {
+                // No price data — pre-fill packageSize with stdSize so user only needs to enter price
+                packageSizeRef.current = productStandardPackageSize / f;
+                setPackageSizeStr(String(packageSizeRef.current));
             }
+
+            setPricePerPkgCents(pricePerPkgRef.current);
+            setPricePerPkgKey(k => k + 1);
+            setPackageSizeStr(String(packageSizeRef.current));
+            setPricePaidCents(pricePaidRef.current);
+            setPricePaidKey(k => k + 1);
         }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
         // Which field is currently derived
