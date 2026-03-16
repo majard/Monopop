@@ -1048,3 +1048,4 @@ const s = StyleSheet.create({
   statLabel: { fontSize: 12 },
   statValue: { fontSize: 12, fontWeight: '500', flex: 1 },
 });
+
