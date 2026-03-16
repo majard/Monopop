@@ -68,54 +68,62 @@ interface PriceTriangleProps {
 // ─── PriceInput ───────────────────────────────────────────────────────────────
 
 const PriceInput = React.memo(forwardRef<RNTextInput, {
-    onChangeCents: (cents: number) => void;
-    borderColor: string;
-    textColor: string;
-    initialCents: number;
-    fontSize?: number;
-    autoFocus?: boolean;
-    clearOnFocus?: boolean;
+  onChangeCents: (cents: number) => void;
+  borderColor: string;
+  textColor: string;
+  initialCents: number;
+  fontSize?: number;
+  autoFocus?: boolean;
+  clearOnFocus?: boolean;
 }>(({ onChangeCents, borderColor, textColor, initialCents, fontSize = 15, autoFocus, clearOnFocus = true }, ref) => {
-    const [cents, setCents] = useState(initialCents);
+  const [cents, setCents] = useState(initialCents);
+  const centsRef = useRef(initialCents);
 
-    const formatted = useMemo(() => {
-        const int = Math.floor(cents / 100);
-        const dec = cents % 100;
-        return `${int},${dec.toString().padStart(2, '0')}`;
-    }, [cents]);
+  const formatted = useMemo(() => {
+    const int = Math.floor(cents / 100);
+    const dec = cents % 100;
+    return `${int},${dec.toString().padStart(2, '0')}`;
+  }, [cents]);
 
-    const handleKeyPress = useCallback((e: any) => {
-        const key = e.nativeEvent.key;
-        setCents(prev => {
-            let next = prev;
-            if (key >= '0' && key <= '9') {
-                next = prev * 10 + (key.charCodeAt(0) - 48);
-                if (next > 999999999) return prev;
-            } else if (key === 'Backspace') {
-                next = Math.floor(prev / 10);
-            }
-            onChangeCents(next);
-            return next;
-        });
-    }, [onChangeCents]);
+  const handleKeyPress = useCallback((e: any) => {
+    const key = e.nativeEvent.key;
+    let next = centsRef.current;
 
-    return (
-        <RNTextInput
-            ref={ref}
-            value={formatted}
-            keyboardType="number-pad"
-            onKeyPress={handleKeyPress}
-            selection={{ start: formatted.length, end: formatted.length }}
-            onFocus={() => { if (!clearOnFocus) return; setCents(0); onChangeCents(0); }}
-            contextMenuHidden
-            selectTextOnFocus={false}
-            caretHidden
-            autoFocus={autoFocus}
-            style={[styles.priceInput, { borderColor, color: textColor, fontSize }]}
-        />
-    );
+    if (key >= '0' && key <= '9') {
+      next = centsRef.current * 10 + (key.charCodeAt(0) - 48);
+      if (next > 999999999) return;
+    } else if (key === 'Backspace') {
+      next = Math.floor(centsRef.current / 10);
+    } else {
+      return;
+    }
+
+    centsRef.current = next;
+    setCents(next);
+    onChangeCents(next);
+  }, [onChangeCents]);
+
+  return (
+    <RNTextInput
+      ref={ref}
+      value={formatted}
+      keyboardType="number-pad"
+      onKeyPress={handleKeyPress}
+      selection={{ start: formatted.length, end: formatted.length }}
+      onFocus={() => {
+        if (!clearOnFocus) return;
+        centsRef.current = 0;
+        setCents(0);
+        onChangeCents(0);
+      }}
+      contextMenuHidden
+      selectTextOnFocus={false}
+      caretHidden
+      autoFocus={autoFocus}
+      style={[styles.priceInput, { borderColor, color: textColor, fontSize }]}
+    />
+  );
 }));
-
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export const PriceTriangle = forwardRef<PriceTriangleHandle, PriceTriangleProps>(
