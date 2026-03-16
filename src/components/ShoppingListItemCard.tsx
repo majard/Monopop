@@ -15,7 +15,7 @@ export interface ShoppingListItemCardItem {
   productName: string;
   currentInventoryQuantity: number;
   price?: number;
-  lowestPrice90d: { price: number; storeName: string } | null;
+  showWarning: boolean;  // replaces lowestPrice90d
 }
 
 interface ShoppingListItemCardProps {
@@ -109,7 +109,7 @@ export const ShoppingListItemCard = React.memo(function ShoppingListItemCard({
               <Text style={[cardStyles.detail, { color: theme.colors.onSurfaceVariant }]}>
                 {item.quantity}× {item.price ? formatCurrency(item.price) : '—'}
               </Text>
-              {item.price && item.lowestPrice90d && item.price > item.lowestPrice90d.price && (
+              {item.showWarning && (
                 <MaterialCommunityIcons
                   name="alert-circle-outline"
                   size={14}

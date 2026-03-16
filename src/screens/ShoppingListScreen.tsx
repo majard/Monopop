@@ -107,6 +107,7 @@ interface ShoppingListItemWithDetails extends Omit<
   /** Set when user edits in expanded triangle view. Written to invoice_items on conclude. */
   packageSize?: number | null;
   lowestRefPricePerUnit?: { pricePerUnit: number; storeName: string } | null;
+  showWarning: boolean;
 }
 
 export default function ShoppingListScreen() {
@@ -355,8 +356,14 @@ export default function ShoppingListScreen() {
               : item.lowestRefPricePerUnit !== null && item.productUnit != null;
             const priceChanged = price !== item.price;
             const packageSizeChanged = packageSize !== item.packageSize;
+            const showWarning = item.productUnit != null
+              ? !!(lowestRef && ref?.packageSize && ref.packageSize > 0 &&
+                (ref.price / ref.packageSize) > lowestRef.pricePerUnit)
+              : !!(price && lowest && price > lowest.price);
 
-            if (!lowestChanged && !refChanged && !lowestRefChanged && !priceChanged && !packageSizeChanged) {
+            const warningChanged = showWarning !== item.showWarning;
+
+            if (!lowestChanged && !refChanged && !lowestRefChanged && !priceChanged && !packageSizeChanged && !warningChanged) {
               return item;
             }
 
@@ -372,6 +379,7 @@ export default function ShoppingListScreen() {
                 : null,
               price,
               packageSize,
+              showWarning,
             };
           });
 
@@ -1044,9 +1052,8 @@ export default function ShoppingListScreen() {
   const editingInventoryItem = editingItem
     ? findByProductId(editingItem.productId)
     : undefined;
-  const editingProductUnit = editingInventoryItem?.unit ?? null;
-  const editingProductStdSize =
-    editingInventoryItem?.standardPackageSize ?? null;
+  const editingProductUnit = editingItem?.productUnit ?? null;
+  const editingProductStdSize = editingItem?.productStandardPackageSize ?? null;
 
   const bottomBarHeight = checkedItems.length > 0 ? 64 : 0;
 
