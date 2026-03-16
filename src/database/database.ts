@@ -1386,13 +1386,14 @@ export const getProductConsumptionStats = async (
   avgWeeklyConsumption: number | null;
   avgPrice90d: number | null;
   lowestPrice90d: { price: number; storeName: string } | null;
+  avgPricePerUnit90d: number | null;
+  lowestPricePerUnit90d: { pricePerUnit: number; storeName: string } | null;
 }> => {
   const db = getDb();
   const now = new Date();
   const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
   const ninetyDaysAgoStr = ninetyDaysAgo.toISOString().split('T')[0];
 
-  // Get history entries ordered by date ASC, last 90 days
   const history = await db.getAllAsync<{ date: string; quantity: number }>(
     `SELECT date, quantity FROM inventory_history 
      WHERE inventoryItemId = ? AND date >= ?
@@ -1403,25 +1404,19 @@ export const getProductConsumptionStats = async (
   let avgWeeklyConsumption: number | null = null;
 
   if (history.length >= 2) {
-    // Sum all drops between consecutive snapshots
     let totalConsumed = 0;
     for (let i = 1; i < history.length; i++) {
       const drop = history[i - 1].quantity - history[i].quantity;
       if (drop > 0) totalConsumed += drop;
     }
-    // Days in interval
     const firstDateStr = history[0].date.includes('T') ? history[0].date : history[0].date + 'T00:00:00';
     const lastDateStr = history[history.length - 1].date.includes('T') ? history[history.length - 1].date : history[history.length - 1].date + 'T00:00:00';
     const firstDate = new Date(firstDateStr);
     const lastDate = new Date(lastDateStr);
     const days = Math.max(1, (lastDate.getTime() - firstDate.getTime()) / (1000 * 60 * 60 * 24));
     avgWeeklyConsumption = (totalConsumed / days) * 7;
-  } else if (history.length === 1) {
-    // Only one point — can't calculate consumption
-    avgWeeklyConsumption = null;
   }
 
-  // Price stats from invoice_items last 90 days
   const priceRows = await db.getAllAsync<{ unitPrice: number; storeName: string }>(
     `SELECT ii.unitPrice, s.name as storeName
      FROM invoice_items ii
@@ -1443,7 +1438,44 @@ export const getProductConsumptionStats = async (
     ? { price: priceRows[0].unitPrice, storeName: priceRows[0].storeName }
     : null;
 
-  return { avgWeeklyConsumption, avgPrice90d, lowestPrice90d };
+  // PPU stats — only rows where packageSize is recorded (v1.7+ invoices)
+  const avgPPURow = await db.getFirstAsync<{ avgPPU: number | null }>(
+    `SELECT AVG(ii.unitPrice / ii.packageSize) as avgPPU
+     FROM invoice_items ii
+     JOIN invoices inv ON ii.invoiceId = inv.id
+     WHERE ii.productId = ?
+       AND ii.unitPrice IS NOT NULL AND ii.unitPrice > 0
+       AND ii.packageSize IS NOT NULL AND ii.packageSize > 0
+       AND inv.createdAt >= ?`,
+    [productId, ninetyDaysAgo.toISOString()]
+  );
+
+  const lowestPPURow = await db.getFirstAsync<{ ppu: number; storeName: string } | null>(
+    `SELECT ii.unitPrice / ii.packageSize as ppu, s.name as storeName
+     FROM invoice_items ii
+     JOIN invoices inv ON ii.invoiceId = inv.id
+     LEFT JOIN stores s ON inv.storeId = s.id
+     WHERE ii.productId = ?
+       AND ii.unitPrice IS NOT NULL AND ii.unitPrice > 0
+       AND ii.packageSize IS NOT NULL AND ii.packageSize > 0
+       AND inv.createdAt >= ?
+     ORDER BY ppu ASC
+     LIMIT 1`,
+    [productId, ninetyDaysAgo.toISOString()]
+  );
+
+  const avgPricePerUnit90d = avgPPURow?.avgPPU ?? null;
+  const lowestPricePerUnit90d = lowestPPURow
+    ? { pricePerUnit: lowestPPURow.ppu, storeName: lowestPPURow.storeName }
+    : null;
+
+  return {
+    avgWeeklyConsumption,
+    avgPrice90d,
+    lowestPrice90d,
+    avgPricePerUnit90d,
+    lowestPricePerUnit90d,
+  };
 };
 
 export const getShoppingListItemForInventoryItem = async (
@@ -1511,9 +1543,9 @@ export const getLowestPriceForProducts = async (
 // will need updating to destructure { price, packageSize } instead of using the
 // return value directly as a number.
 // ─────────────────────────────────────────────────────────────────────────────
- 
+
 // ─── Shared return type ───────────────────────────────────────────────────────
- 
+
 /**
  * A resolved reference price with the package context it was set in.
  *
@@ -1527,9 +1559,9 @@ export type RefPrice = {
   price: number;
   packageSize: number | null;
 };
- 
+
 // ─── Product unit configuration ───────────────────────────────────────────────
- 
+
 /**
  * Sets the unit and standardPackageSize for a product.
  * Called when the user configures units for the first time, or edits them.
@@ -1555,9 +1587,9 @@ export const updateProductUnit = async (
     throw error;
   }
 };
- 
+
 // ─── Retroactive reference reconstruction ───────────────────────────────────
- 
+
 /**
  * Fetches the last invoice item for a product, used to drive the retroactive
  * reference prompt when the user first sets unit + standardPackageSize.
@@ -1599,9 +1631,9 @@ export const getLastInvoiceItemForProduct = async (
     throw error;
   }
 };
- 
+
 // ─── Inventory increment helper ───────────────────────────────────────────────
- 
+
 /**
  * Computes the inventoryIncrement for a purchase.
  *
@@ -1625,9 +1657,9 @@ export const computeInventoryIncrement = (
   }
   return Math.max(1, Math.round((packageSize * packageQuantity) / standardPackageSize));
 };
- 
+
 // ─── Reference price upserts (revised — adds packageSize param) ───────────────
- 
+
 /**
  * Replaces existing upsertProductStorePrice.
  *
@@ -1753,13 +1785,13 @@ export const getReferencePriceForProduct = async (
       return { price: anyInvoice.unitPrice, packageSize: anyInvoice.packageSize ?? null };
     }
     return null;
- 
+
   } catch (error) {
     console.error('Error getting reference price for product:', error);
     return null;
   }
 };
- 
+
 /**
  * Replaces existing getReferencePricesForProducts.
  * Now returns Map<number, RefPrice> instead of Map<number, number>.
@@ -1770,12 +1802,12 @@ export const getReferencePricesForProducts = async (
   storeId: number | null
 ): Promise<Map<number, RefPrice>> => {
   if (productIds.length === 0) return new Map();
- 
+
   const db = getDb();
   const result = new Map<number, RefPrice>();
   const remaining = new Set(productIds);
   const placeholders = productIds.map(() => '?').join(',');
- 
+
   try {
     if (storeId !== null) {
       const rows = await db.getAllAsync<{ productId: number; unit: string | null; price: number; packageSize: number | null }>(
@@ -1790,7 +1822,7 @@ export const getReferencePricesForProducts = async (
         result.set(row.productId, { price: row.price, packageSize: row.packageSize ?? null });
         remaining.delete(row.productId);
       }
- 
+
       if (remaining.size > 0) {
         const rem = [...remaining];
         const remPlaceholders = rem.map(() => '?').join(',');
@@ -1817,7 +1849,7 @@ export const getReferencePricesForProducts = async (
       }
       return result;
     }
- 
+
     // storeId === null
     const baseRows = await db.getAllAsync<{ productId: number; unit: string | null; price: number; packageSize: number | null }>(
       `SELECT pbp.productId, p.unit AS unit, pbp.price, pbp.packageSize
@@ -1831,7 +1863,7 @@ export const getReferencePricesForProducts = async (
       result.set(row.productId, { price: row.price, packageSize: row.packageSize ?? null });
       remaining.delete(row.productId);
     }
- 
+
     if (remaining.size > 0) {
       const rem = [...remaining];
       const remPlaceholders = rem.map(() => '?').join(',');
@@ -1855,17 +1887,17 @@ export const getReferencePricesForProducts = async (
         }
       }
     }
- 
+
     return result;
- 
+
   } catch (error) {
     console.error('Error getting reference prices for products:', error);
     throw error;
   }
 };
- 
+
 // ─── Updated conclude with units support ─────────────────────────────────────
- 
+
 /**
  * Replaces concludeShoppingForListWithInvoice once units are wired in ShoppingListScreen.
  *
@@ -1887,7 +1919,7 @@ export const concludeShoppingForListWithInvoiceV2 = async (
   const db = getDb();
   const now = (date ?? new Date()).toISOString();
   const dateToSave = now.split('T')[0];
- 
+
   let invoiceId = 0;
   await db.withTransactionAsync(async () => {
     const checkedItems = await db.getAllAsync<{
@@ -1903,47 +1935,47 @@ export const concludeShoppingForListWithInvoiceV2 = async (
        WHERE ii.listId = ? AND sli.checked = 1;`,
       [listId]
     );
- 
+
     if (checkedItems.length === 0) throw new Error('No checked items to conclude.');
- 
+
     const storeId = await ensureStoreExists(db, storeName);
- 
+
     const invoiceResult = await db.runAsync(
       `INSERT INTO invoices (storeId, listId, total, createdAt) VALUES (?, ?, ?, ?);`,
       [storeId, listId, 0, now]
     );
     if (!invoiceResult.lastInsertRowId) throw new Error('Failed to create invoice.');
     invoiceId = invoiceResult.lastInsertRowId;
- 
+
     let total = 0;
     for (const row of checkedItems) {
       const overrides = itemOverrides?.get(row.id);
       const packageSize = overrides?.packageSize ?? null;
       const standardPackageSize = overrides?.standardPackageSize ?? null;
- 
+
       // unitPrice = price paid per package
       const unitPrice = row.price ?? null;
       const lineTotal = (unitPrice ?? 0) * row.quantity;
       total += lineTotal;
- 
+
       await db.runAsync(
         `INSERT INTO invoice_items
            (invoiceId, productId, quantity, unitPrice, lineTotal, packageSize, createdAt)
          VALUES (?, ?, ?, ?, ?, ?, ?);`,
         [invoiceId, row.productId, row.quantity, unitPrice, lineTotal, packageSize, now]
       );
- 
+
       const increment = computeInventoryIncrement(
         packageSize ?? standardPackageSize ?? 1,
         row.quantity,
         standardPackageSize
       );
- 
+
       await db.runAsync(
         `UPDATE inventory_items SET quantity = quantity + ?, updatedAt = ? WHERE id = ?;`,
         [increment, now, row.inventoryItemId]
       );
- 
+
       const updatedItem = await db.getFirstAsync<{ quantity: number }>(
         `SELECT quantity FROM inventory_items WHERE id = ?;`,
         [row.inventoryItemId]
@@ -1967,7 +1999,7 @@ export const concludeShoppingForListWithInvoiceV2 = async (
           );
         }
       }
- 
+
       if (overrides?.updateReferencePrice && unitPrice !== null) {
         await db.runAsync(
           `INSERT INTO product_store_prices (productId, storeId, price, packageSize, updatedAt)
@@ -1979,13 +2011,13 @@ export const concludeShoppingForListWithInvoiceV2 = async (
           [row.productId, storeId, unitPrice, packageSize, now]
         );
       }
- 
+
       await db.runAsync(`DELETE FROM shopping_list_items WHERE id = ?;`, [row.id]);
     }
- 
+
     await db.runAsync(`UPDATE invoices SET total = ? WHERE id = ?;`, [total, invoiceId]);
   });
- 
+
   if (!invoiceId) throw new Error('Failed to create invoice.');
   return { invoiceId };
 };
