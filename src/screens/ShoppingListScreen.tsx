@@ -70,6 +70,7 @@ import { generateShoppingListText } from "../utils/stringUtils";
 import * as Clipboard from "expo-clipboard";
 import { ActionMenuButton } from "../components/ActionMenuButton";
 import { preprocessName, calculateSimilarity } from '../utils/similarityUtils';
+import { UnitSymbol } from "../utils/units";
 
 
 type ListRow =
@@ -253,9 +254,10 @@ export default function ShoppingListScreen() {
         lowestPrice90d: null,
         refPrice: null,
         packageSize: item.packageSize ?? null,
-        productUnit: item.productUnit ?? null,
+        productUnit: item.productUnit as UnitSymbol | null,
         productStandardPackageSize: item.productStandardPackageSize ?? null,
         lowestRefPricePerUnit: null,
+        showWarning: false,
       }));
 
 
@@ -975,13 +977,12 @@ export default function ShoppingListScreen() {
           }
         >();
         for (const item of checkedItems) {
-          const inv = findByProductId(item.productId);
           overrides.set(item.id, {
             packageSize: item.packageSize ?? null,
-            standardPackageSize: inv?.standardPackageSize ?? null,
+            standardPackageSize: item.productStandardPackageSize ?? null,  // ← from item
             updateReferencePrice:
               updateReferencePrices &&
-              !!inv?.unit &&
+              !!item.productUnit &&                                          // ← from item
               item.price != null &&
               item.price > 0,
           });
@@ -1004,8 +1005,7 @@ export default function ShoppingListScreen() {
         // Legacy fallback: products without unit configured still get ref price updated per package.
         if (updateReferencePrices && store) {
           for (const item of checkedItems) {
-            const inv = findByProductId(item.productId);
-            if (!inv?.unit && item.productId && item.price && item.price > 0) {
+            if (!item.productUnit && item.productId && item.price && item.price > 0) {
               await upsertProductStorePrice(
                 item.productId,
                 store.id,
@@ -1028,7 +1028,6 @@ export default function ShoppingListScreen() {
       checkedItems,
       listId,
       stores,
-      findByProductId,
       loadData,
       refreshStoreSettings,
     ],
@@ -1144,6 +1143,8 @@ export default function ShoppingListScreen() {
             ? hasManualOverride(selectedStoreId, editingItem.productId)
             : false
         }
+        selectedStoreName={defaultStoreName || null}
+        lowestRefPricePerUnit={editingItem?.lowestRefPricePerUnit ?? null}
         onSave={handleSaveEdit}
         onToggleChecked={async () => {
           if (!editingItem) return;
