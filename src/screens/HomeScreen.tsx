@@ -31,6 +31,7 @@ import ContextualHeader from "../components/ContextualHeader";
 import { deleteInventoryItem, getSetting } from "../database/database";
 import { useListContext } from "../context/ListContext";
 import { ActionMenuButton } from "../components/ActionMenuButton";
+import InventoryListSkeleton from "../components/InventoryListSkeleton";
 
 type HomeScreenNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
@@ -50,6 +51,7 @@ export default function HomeScreen() {
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [actionsVisible, setActionsVisible] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
 
   const {
     inventoryItems,
@@ -142,7 +144,7 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      loadInventoryItems();
+      loadInventoryItems().finally(() => setInitialLoading(false));
     }, [sortOrder, loadInventoryItems])
   );
 
@@ -189,17 +191,21 @@ export default function HomeScreen() {
           </View>
         </View>
       )}
+      {initialLoading ? (
+        <InventoryListSkeleton />
+      ) : (
+        <InventoryList
+          inventoryItems={filteredInventoryItems}
+          handleInventoryItemOrderChange={handleProductOrderChange}
+          onInventoryItemUpdated={loadInventoryItems}
+          isSelectionMode={isSelectionMode}
+          selectedIds={selectedIds}
+          onToggleSelect={handleToggleSelect}
+          onLongPressStart={handleEnterSelectionMode}
+          sortOrder={sortOrder}
+        />
 
-      <InventoryList
-        inventoryItems={filteredInventoryItems}
-        handleInventoryItemOrderChange={handleProductOrderChange}
-        onInventoryItemUpdated={loadInventoryItems}
-        isSelectionMode={isSelectionMode}
-        selectedIds={selectedIds}
-        onToggleSelect={handleToggleSelect}
-        onLongPressStart={handleEnterSelectionMode}
-        sortOrder={sortOrder}
-      />
+      )}
       <AddItemButton
         onPress={() => navigation.navigate("AddInventoryItem", { listId })}
         label="Adicionar ao Inventário"

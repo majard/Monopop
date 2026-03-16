@@ -17,6 +17,7 @@ import { useListContext } from "../context/ListContext";
 import { EmojiAvatar } from "../components/EmojiAvatar";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import ListsScreenSkeleton from "../components/ListsScreenSkeleton";
 
 type ListItem = {
   id: number;
@@ -33,9 +34,12 @@ export default function ListsScreen() {
   const { setListId } = useListContext();
   const theme = useTheme();
 
+  const [initialLoading, setInitialLoading] = useState(true);
+
   const loadLists = useCallback(async () => {
     const result = await getLists();
     setLists(result);
+    setInitialLoading(false);
   }, []);
 
   useFocusEffect(
@@ -110,7 +114,7 @@ export default function ListsScreen() {
         <Appbar.Action icon="cog" onPress={() => navigation.navigate('Config')} />
       </Appbar.Header>
 
-      {lists.length === 0 ? (
+      {initialLoading ? <ListsScreenSkeleton /> : (lists.length === 0 ? (
         <View style={styles.emptyState}>
           <Text variant="titleLarge" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 8, textAlign: "center" }}>
             Nenhuma lista encontrada
@@ -139,7 +143,7 @@ export default function ListsScreen() {
               onLongPress={() => handleLongPress(item)}
             />
           )}
-        />
+        />)
       )}
 
       <FAB
