@@ -82,6 +82,7 @@ export function ConfirmInvoiceModal({
             visible={visible}
             items={stores}
             selectedId={stores.find(s => s.name === storeName)?.id ?? null}
+            selectedName={storeName || null}
             onSelect={handleStoreSelect}
             onCreateNew={handleCreateNew}
             title="Selecionar loja"
