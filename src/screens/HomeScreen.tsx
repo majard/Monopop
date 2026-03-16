@@ -28,7 +28,7 @@ import { SortMenu } from "../components/SortMenu";
 import { AddItemButton } from "../components/AddItemButton";
 import InventoryList from "../components/InventoryList";
 import ContextualHeader from "../components/ContextualHeader";
-import { deleteInventoryItem } from "../database/database";
+import { deleteInventoryItem, getSetting } from "../database/database";
 import { useListContext } from "../context/ListContext";
 import { ActionMenuButton } from "../components/ActionMenuButton";
 
@@ -99,7 +99,8 @@ export default function HomeScreen() {
 
   const copyStockList = useCallback(async () => {
     try {
-      const text = generateStockListText(inventoryItems);
+      const copyMessage = await getSetting('copyMessage');
+      const text = generateStockListText(inventoryItems, copyMessage);
       await Clipboard.setStringAsync(text);
       Alert.alert(
         "Lista copiada!",
@@ -148,12 +149,12 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ContextualHeader 
-        listName={listName} 
+      <ContextualHeader
+        listName={listName}
         onListNameSave={handleListNameSave}
         onListDelete={handleListDelete}
       />
-      
+
       <View style={[homeStyles.topRow, { borderBottomColor: theme.colors.outlineVariant }]}>
         <View style={homeStyles.searchWrapper}>
           <SearchBar searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
@@ -229,7 +230,7 @@ export default function HomeScreen() {
               paddingTop: 12,
               elevation: 8,
             }}
-            onPress={() => {}}
+            onPress={() => { }}
           >
             <View style={{
               width: 40, height: 4, borderRadius: 2,

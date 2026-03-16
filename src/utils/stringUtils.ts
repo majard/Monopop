@@ -117,18 +117,22 @@ export const getEmojiForList = (name: string): string => {
   return "📝";
 };
 
-export const generateStockListText = (inventoryItems: InventoryItem[]): string => {
+export const generateStockListText = (
+  inventoryItems: InventoryItem[],
+  messagePrefix?: string | null
+): string => {
   const today = new Date();
-  const dateStr = today.toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-  });
-  let text = `Boa noite! ${dateStr}\n\n`;
-  text += "Aqui está a lista de produção do dia:\n\n";
-  inventoryItems.forEach((inventoryItem) => {
-    const emoji = getEmojiForProduct(inventoryItem.productName);
-    text += `- ${inventoryItem.productName}: ${inventoryItem.quantity} ${emoji}\n`;
-    text += inventoryItem.notes ? `  obs:   ${inventoryItem.notes}\n` : "";
+  const dateStr = today.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+
+  const prefix = messagePrefix == null
+    ? `Boa noite! ${dateStr}\n\nAqui está a lista de produção do dia:`
+    : messagePrefix.replace('{data}', dateStr);
+
+  let text = prefix ? `${prefix}\n\n` : '';
+  inventoryItems.forEach((item) => {
+    const emoji = getEmojiForProduct(item.productName);
+    text += `- ${item.productName}: ${item.quantity} ${emoji}\n`;
+    text += item.notes ? `  obs: ${item.notes}\n` : "";
   });
   return text;
 };
