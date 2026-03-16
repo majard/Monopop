@@ -383,7 +383,6 @@ export function EditShoppingItemModal({
                       </Pressable>
                     </View>
                   </View>
-
                   {/* Price paid */}
                   <View style={styles.controlHalf}>
                     <Text style={[styles.label, { color: theme.colors.onSurfaceVariant }]}>
@@ -398,6 +397,11 @@ export function EditShoppingItemModal({
                         initialCents={priceCents}
                       />
                     </View>
+                    {item?.showWarning && item?.lowestPrice90d && (
+                      <Text style={[styles.lowestPriceHint, { color: 'orange' }]}>
+                        Mín. 90d: R$ {item.lowestPrice90d.price.toFixed(2).replace('.', ',')} em {item.lowestPrice90d.storeName}
+                      </Text>
+                    )}
                   </View>
                 </View>
 
@@ -609,6 +613,7 @@ const styles = StyleSheet.create({
   priceRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   priceSymbol: { fontSize: 15 },
   priceInput: { borderWidth: 1, borderRadius: 8, padding: 8, fontSize: 15, flex: 1 },
+  lowestPriceHint: { fontSize: 10, fontStyle: 'italic', marginTop: 3 },
 
   // Total preview
   totalPreview: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8, marginTop: 14 },
