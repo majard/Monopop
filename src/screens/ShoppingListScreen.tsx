@@ -17,10 +17,7 @@ import {
 import {
   Button,
   Surface,
-  TextInput,
   useTheme,
-  Portal,
-  Dialog,
 } from "react-native-paper";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -52,7 +49,6 @@ import { EditShoppingItemModal } from "../components/EditShoppingItemModal";
 import type { UnitSaveData } from "../components/EditShoppingItemModal";
 import {
   ConfirmInvoiceModal,
-  StoreOption,
 } from "../components/ConfirmInvoiceModal";
 import ContextualHeader from "../components/ContextualHeader";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -70,7 +66,7 @@ import { generateShoppingListText } from "../utils/stringUtils";
 import * as Clipboard from "expo-clipboard";
 import { ActionMenuButton } from "../components/ActionMenuButton";
 import { preprocessName, calculateSimilarity } from '../utils/similarityUtils';
-import { UnitSymbol } from "../utils/units";
+import { UnitSymbol, getUnitFactor } from "../utils/units";
 
 
 type ListRow =
@@ -561,9 +557,11 @@ export default function ShoppingListScreen() {
                   last.unitPrice,
                   enteredSize,
                 );
+                const displaySize = enteredSize / getUnitFactor(unitData.unit as UnitSymbol);
+
                 Alert.alert(
                   "Referência criada",
-                  `${last.storeName} • ${formatDateTime(last.createdAt)}\nPreço: ${formatCurrency(last.unitPrice)}\nTamanho: ${String(enteredSize).replace(".", ",")} ${unitData.unit}`,
+                  `${last.storeName} • ${formatDateTime(last.createdAt)}\nPreço: ${formatCurrency(last.unitPrice)}\nTamanho: ${String(displaySize).replace(".", ",")} ${unitData.unit}`,
                 );
               }
             }

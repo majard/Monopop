@@ -74,7 +74,8 @@ const PriceInput = React.memo(forwardRef<RNTextInput, {
     initialCents: number;
     fontSize?: number;
     autoFocus?: boolean;
-}>(({ onChangeCents, borderColor, textColor, initialCents, fontSize = 15, autoFocus }, ref) => {
+    clearOnFocus?: boolean;
+}>(({ onChangeCents, borderColor, textColor, initialCents, fontSize = 15, autoFocus, clearOnFocus = true }, ref) => {
     const [cents, setCents] = useState(initialCents);
 
     const formatted = useMemo(() => {
@@ -105,7 +106,7 @@ const PriceInput = React.memo(forwardRef<RNTextInput, {
             keyboardType="number-pad"
             onKeyPress={handleKeyPress}
             selection={{ start: formatted.length, end: formatted.length }}
-            onFocus={() => { setCents(0); onChangeCents(0); }}
+            onFocus={() => { if (!clearOnFocus) return; setCents(0); onChangeCents(0); }}
             contextMenuHidden
             selectTextOnFocus={false}
             caretHidden
@@ -176,6 +177,33 @@ export const PriceTriangle = forwardRef<PriceTriangleHandle, PriceTriangleProps>
         // Effective stdSize for triangle math (in display units)
         const effectiveAtomicStdSize = productStandardPackageSize ?? confirmedConfig?.newStandardPackageSize ?? null;
         const displayStdSize = effectiveAtomicStdSize != null ? effectiveAtomicStdSize / factor : null;
+
+        useEffect(() => {
+            if (!productUnit || !productStandardPackageSize) return;
+
+            // Already handled by parent seed() call — but as fallback if seed wasn't called:
+            if (pricePerPkgRef.current === 0 && pricePaidRef.current === 0) {
+                if (refPrice && refPrice.packageSize && refPrice.packageSize > 0) {
+                    const f = getUnitFactor(productUnit);
+                    const refPPU = refPrice.price / refPrice.packageSize;
+                    const pricePerPkg = refPPU * productStandardPackageSize;
+                    const initPkgSize = initialPackageSize ?? refPrice.packageSize;
+                    const initPaid = initPkgSize === refPrice.packageSize
+                        ? refPrice.price
+                        : refPPU * initPkgSize;
+
+                    pricePerPkgRef.current = Math.round(pricePerPkg * 100);
+                    packageSizeRef.current = initPkgSize / f;
+                    pricePaidRef.current = Math.round(initPaid * 100);
+
+                    setPricePerPkgCents(pricePerPkgRef.current);
+                    setPricePerPkgKey(k => k + 1);
+                    setPackageSizeStr(String(initPkgSize / f));
+                    setPricePaidCents(pricePaidRef.current);
+                    setPricePaidKey(k => k + 1);
+                }
+            }
+        }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
         // Which field is currently derived
         const derivedField: 'pkg' | 'size' | 'paid' | null = useMemo(() => {
@@ -385,7 +413,7 @@ export const PriceTriangle = forwardRef<PriceTriangleHandle, PriceTriangleProps>
                 setPricePaidCents(0);
                 setPricePaidKey(k => k + 1);
                 lastTouchedRef.current = [];
-                setLastTouchedState([]); 
+                setLastTouchedState([]);
             },
         }), [factor, updateRefPrice, updateStdSize, confirmedConfig]);
 
@@ -629,7 +657,7 @@ export const PriceTriangle = forwardRef<PriceTriangleHandle, PriceTriangleProps>
                 {/* Bottom row: pricePaid + quantity */}
                 <View style={[styles.bottomRow, { marginTop: 12 }]}>
                     {/* Price paid — primary field */}
-                    <View style={[styles.fieldThreeQuarters, fieldStyle('paid')]}>
+                    <View style={[styles.fieldThreeFifths, fieldStyle('paid')]}>
                         <Text style={[styles.fieldLabel, { color: theme.colors.onSurfaceVariant }]}>
                             {fieldLabelPrefix('paid')}PREÇO PAGO
                         </Text>
@@ -643,12 +671,13 @@ export const PriceTriangle = forwardRef<PriceTriangleHandle, PriceTriangleProps>
                                 textColor={theme.colors.onSurface}
                                 fontSize={18}
                                 autoFocus={!!productUnit && !confirmedConfig}
+                                clearOnFocus={false}
                             />
                         </View>
                     </View>
 
                     {/* Quantity stepper */}
-                    <View style={styles.fieldQuarter}>
+                    <View style={styles.fieldTwoFifths}>
                         <Text style={[styles.fieldLabel, { color: theme.colors.onSurfaceVariant }]}>
                             QTD
                         </Text>
@@ -716,7 +745,7 @@ export const PriceTriangle = forwardRef<PriceTriangleHandle, PriceTriangleProps>
                                     color="orange"
                                 />
                                 <Text style={[styles.warningText, { color: 'orange' }]}>
-                                    {' '}Mín. ref: {formatPricePerUnitDisplay(lowestRefPricePerUnit.pricePerUnit, unitSym)} em {lowestRefPricePerUnit.storeName}
+                                    {' '}Mín. ref: {formatPerStdPkg(lowestRefPricePerUnit.pricePerUnit, unitSym, atomicPackageSizeForCheck)} em {lowestRefPricePerUnit.storeName}
                                 </Text>
                             </View>
                         )}
@@ -794,8 +823,8 @@ const styles = StyleSheet.create({
     topRow: { flexDirection: 'row', gap: 12 },
     bottomRow: { flexDirection: 'row', gap: 12, alignItems: 'flex-end' },
     fieldHalf: { flex: 1 },
-    fieldThreeQuarters: { flex: 3 },
-    fieldQuarter: { flex: 1 },
+    fieldThreeFifths: { flex: 1.5 },
+    fieldTwoFifths: { flex: 1 },
 
     // Field internals
     fieldLabel: { fontSize: 10, letterSpacing: 0.6, marginBottom: 6 },
@@ -816,19 +845,19 @@ const styles = StyleSheet.create({
     // Quantity stepper
     quantityRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
     qtyButton: {
-        width: 28,
-        height: 28,
-        borderRadius: 14,
+        width: 32,
+        height: 32,
+        borderRadius: 16,
         borderWidth: 1,
         justifyContent: 'center',
         alignItems: 'center',
     },
     qtyInput: {
-        height: 28,
-        minWidth: 28,
+        height: 48,
+        minWidth: 32,
         textAlign: 'center',
         fontSize: 14,
-        paddingHorizontal: 2,
+        paddingHorizontal: 4,
     },
 
     // Derived box

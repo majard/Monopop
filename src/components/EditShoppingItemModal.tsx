@@ -434,24 +434,7 @@ export function EditShoppingItemModal({
               </>
             )}
 
-            {/* STATE C — first-time setup */}
-            {showSetup && (
-              <PriceTriangle
-                ref={triangleRef}
-                productUnit={null}
-                productStandardPackageSize={null}
-                initialPrice={item?.price}
-                initialPackageSize={item?.packageSize}
-                quantity={quantity}
-                onQuantityChange={setQuantity}
-                selectedStoreName={selectedStoreName}
-                lowestRefPricePerUnit={lowestRefPricePerUnit}
-                onUnitConfigured={() => setInlineSetupDone(true)}
-              />
-            )}
-
-            {/* STATE B — unit configured */}
-            {showTriangle && (
+            {(showSetup || showTriangle) && (
               <PriceTriangle
                 ref={triangleRef}
                 productUnit={productUnit ?? null}
