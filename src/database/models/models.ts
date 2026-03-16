@@ -1,3 +1,5 @@
+import { UnitSymbol } from "../../utils/units";
+
 export interface Product {
   id: number;
   name: string; // "Rice", "Coffee", "Shampoo"
@@ -5,6 +7,8 @@ export interface Product {
   categoryName?: string | null;
   createdAt: string;
   updatedAt: string;
+  unit?: UnitSymbol | null;
+  standardPackageSize?: number | null;
 }
 
 export interface Category {
@@ -24,7 +28,7 @@ export interface InventoryItem {
   productName: string;
   categoryId?: number | null;
   categoryName?: string | null;
-  unit?: string | null;
+  unit: UnitSymbol | null;
   standardPackageSize?: number | null;
 }
 
@@ -58,7 +62,7 @@ export interface ShoppingListItem {
   productId?: number; // Added from JOIN
   currentInventoryQuantity?: number; // Added from JOIN
   packageSize?: number | null;
-  productUnit: string | null;
+  productUnit: UnitSymbol | null;
   productStandardPackageSize: number | null;
 }
 

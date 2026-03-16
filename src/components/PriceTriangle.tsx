@@ -156,7 +156,7 @@ export const PriceTriangle = forwardRef<PriceTriangleHandle, PriceTriangleProps>
         const [stdSizeInputStr, setStdSizeInputStr] = useState('');
         const [confirmedConfig, setConfirmedConfig] = useState<{
             unit: UnitSymbol;
-            atomicStdSize: number;
+            newStandardPackageSize: number;
         } | null>(null);
 
         // ─── Options ──────────────────────────────────────────────────────────────
@@ -174,7 +174,7 @@ export const PriceTriangle = forwardRef<PriceTriangleHandle, PriceTriangleProps>
         const factor = activeUnit?.factor ?? 1;
 
         // Effective stdSize for triangle math (in display units)
-        const effectiveAtomicStdSize = productStandardPackageSize ?? confirmedConfig?.atomicStdSize ?? null;
+        const effectiveAtomicStdSize = productStandardPackageSize ?? confirmedConfig?.newStandardPackageSize ?? null;
         const displayStdSize = effectiveAtomicStdSize != null ? effectiveAtomicStdSize / factor : null;
 
         // Which field is currently derived
@@ -407,7 +407,7 @@ export const PriceTriangle = forwardRef<PriceTriangleHandle, PriceTriangleProps>
             const unit = UNITS.find(u => u.symbol === selectedUnitSymbol)!;
             const displayVal = parseFloat(stdSizeInputStr.replace(',', '.')) || unit.defaultStdSize;
             const atomicStdSize = displayVal * unit.factor;
-            setConfirmedConfig({ unit: selectedUnitSymbol, atomicStdSize });
+            setConfirmedConfig({ unit: selectedUnitSymbol, newStandardPackageSize: atomicStdSize });
 
             // Seed triangle from initialPrice if available
             if (initialPrice && initialPrice > 0) {

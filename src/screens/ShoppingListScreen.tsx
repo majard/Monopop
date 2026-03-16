@@ -254,7 +254,7 @@ export default function ShoppingListScreen() {
         lowestPrice90d: null,
         refPrice: null,
         packageSize: item.packageSize ?? null,
-        productUnit: item.productUnit as UnitSymbol | null,
+        productUnit: item.productUnit ?? null,
         productStandardPackageSize: item.productStandardPackageSize ?? null,
         lowestRefPricePerUnit: null,
         showWarning: false,
