@@ -141,9 +141,9 @@ export default function EditInventoryItem() {
   const [history, setHistory] = useState<InventoryHistory[]>([]);
   const [priceHistory, setPriceHistory] = useState<PriceHistory[]>([]);
   const [stats, setStats] = useState<ConsumptionStats | null>(null);
-  const [statsCollapsed, setStatsCollapsed] = useState(true);
-  const [qtyHistoryCollapsed, setQtyHistoryCollapsed] = useState(true);
-  const [priceHistoryCollapsed, setPriceHistoryCollapsed] = useState(true);
+  const [statsCollapsed, setStatsCollapsed] = useState(false);
+  const [qtyHistoryCollapsed, setQtyHistoryCollapsed] = useState(false);
+  const [priceHistoryCollapsed, setPriceHistoryCollapsed] = useState(false);
 
   // ─── Quantity (useInventoryItem hook) ────────────────────────────────────────
   const {
@@ -469,6 +469,7 @@ export default function EditInventoryItem() {
 
   const handleSaveAndGoBack = useCallback(async () => {
     await handleSave();
+    savedRef.current = true;
     navigation.goBack();
   }, [handleSave, navigation]);
 
@@ -476,7 +477,8 @@ export default function EditInventoryItem() {
   useEffect(() => {
     const unsubscribe = navigation.addListener('beforeRemove', e => {
       if (!isDirtyRef.current || savedRef.current) return;
-      e.preventDefault();
+      // @ts-ignore - preventDefault exists on the event object
+      (e as any).preventDefault();
       Alert.alert('Sair sem salvar?', 'Você tem alterações não salvas.', [
         {
           text: 'Descartar', style: 'destructive', onPress: () => {
@@ -494,6 +496,37 @@ export default function EditInventoryItem() {
     });
     return unsubscribe;
   }, [navigation, handleSave]);
+
+  // ─── Triangle seed effect ────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!localUnit || !effectiveAtomicStdSize) return;
+
+    if (currentRefPrice && currentRefPrice.packageSize && currentRefPrice.packageSize > 0) {
+      const refPPU = currentRefPrice.price / currentRefPrice.packageSize;
+      const pricePerPkg = refPPU * effectiveAtomicStdSize;
+
+      triangleRef.current?.seed({
+        pricePerPkg,
+        packageSize: currentRefPrice.packageSize,
+        pricePaid: currentRefPrice.price,
+        unit: localUnit,
+        standardPackageSize: effectiveAtomicStdSize,
+      });
+    } else if (currentRefPrice && currentRefPrice.price > 0) {
+      // Ref price exists but no packageSize — seed pricePaid only, use stdSize as default
+      const pricePerPkg = currentRefPrice.price;
+      triangleRef.current?.seed({
+        pricePerPkg,
+        packageSize: effectiveAtomicStdSize,
+        pricePaid: currentRefPrice.price,
+        unit: localUnit,
+        standardPackageSize: effectiveAtomicStdSize,
+      });
+    } else {
+      triangleRef.current?.reset();
+    }
+  }, [currentRefPrice]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Category / list handlers ────────────────────────────────────────────────
   const handleChangeList = useCallback((newListId: number) => {
@@ -721,10 +754,7 @@ export default function EditInventoryItem() {
           style={[s.notes, { color: theme.colors.onSurface, borderColor: theme.colors.outlineVariant }]}
         />
 
-        <Divider style={s.divider} />
-
         {/* ── Produto: category + list ──────────────────────────────────── */}
-        <Text style={[s.sectionLabel, { color: theme.colors.onSurfaceVariant }]}>PRODUTO</Text>
         <View style={s.chipsRow}>
           {/* Category chip with label on border */}
           <View style={s.labeledChipWrap}>
@@ -923,6 +953,8 @@ export default function EditInventoryItem() {
           }}
         />
 
+        <Divider style={s.divider} />
+
         <PriceHistorySection
           priceHistory={priceHistory}
           collapsed={priceHistoryCollapsed}
@@ -994,7 +1026,7 @@ const s = StyleSheet.create({
   qtyUnitRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 10 },
   stepperGroup: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   stepBtn: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, justifyContent: 'center', alignItems: 'center' },
-  qtyInput: { width: 52, height: 36, borderWidth: 1, borderRadius: 8, textAlign: 'center', fontSize: 16 },
+  qtyInput: { width: 52, height: 36, borderWidth: 1, borderRadius: 8, textAlign: 'center', fontSize: 16, includeFontPadding: false, },
   unitChip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16, borderWidth: 1 },
   unitChipText: { fontSize: 13, fontWeight: '500' },
   configureUnitBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16, borderWidth: 1, borderStyle: 'dashed' },

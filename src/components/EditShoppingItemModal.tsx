@@ -18,6 +18,7 @@ import { SearchablePickerDialog } from './SearchablePickerDialog';
 import type { RefPrice } from '../database/database';
 import { PriceTriangle, PriceTriangleHandle, TriangleValue } from './PriceTriangle';
 import { UnitSymbol, getUnitFactor } from '../utils/units';
+import { useRetroPrompt } from '../hooks/useRetroPrompt';
 
 // ─── PriceInput (legacy path only) ───────────────────────────────────────────
 
@@ -167,27 +168,7 @@ export function EditShoppingItemModal({
   const showLegacy = !showTriangle && !showSetup;
 
   // ─── Retro dialog ─────────────────────────────────────────────────────────
-  const [retroVisible, setRetroVisible] = useState(false);
-  const [retroPackageSizeText, setRetroPackageSizeText] = useState('');
-  const [retroUnit, setRetroUnit] = useState<string | null>(null);
-  const [retroInvoiceInfo, setRetroInvoiceInfo] = useState<{
-    storeName: string; createdAt: string; unitPrice: number;
-  } | null>(null);
-  const retroResolveRef = useRef<((value: number | null) => void) | null>(null);
-
-  const promptForRetroPackageSize = useCallback(async (
-    prefill: number,
-    unit: string,
-    invoiceInfo: { storeName: string; createdAt: string; unitPrice: number } | null,
-  ): Promise<number | null> => {
-    setRetroInvoiceInfo(invoiceInfo);
-    setRetroUnit(unit);
-    // Convert atomic prefill to display value for the input
-    const factor = getUnitFactor(unit as UnitSymbol);
-    setRetroPackageSizeText(String(prefill / factor));
-    setRetroVisible(true);
-    return new Promise(resolve => { retroResolveRef.current = resolve; });
-  }, []);
+  const { promptForRetroPackageSize, retroDialogElement } = useRetroPrompt();
 
   // Wire promptRef so parent can call this
   useEffect(() => {
@@ -499,86 +480,7 @@ export function EditShoppingItemModal({
 
       {/* Retro dialog — separate Portal so it renders above the modal */}
       <Portal>
-        <Dialog
-          visible={retroVisible}
-          onDismiss={() => {
-            setRetroVisible(false);
-            retroResolveRef.current?.(null);
-            retroResolveRef.current = null;
-          }}
-        >
-          <Dialog.Title>Qual era o tamanho da embalagem?</Dialog.Title>
-          <Dialog.Content>
-            <Text style={[styles.retroSubtitle, { color: theme.colors.onSurfaceVariant }]}>
-              Confirme o tamanho da embalagem para criar uma referência.
-            </Text>
-
-            {retroInvoiceInfo && (
-              <View style={[styles.invoiceCard, { backgroundColor: theme.colors.surfaceVariant }]}>
-                <View style={styles.invoiceRow}>
-                  <MaterialCommunityIcons name="store-outline" size={14} color={theme.colors.onSurfaceVariant} />
-                  <Text style={[styles.invoiceText, { color: theme.colors.onSurfaceVariant }]}>
-                    {retroInvoiceInfo.storeName}
-                  </Text>
-                  <MaterialCommunityIcons name="calendar-outline" size={14} color={theme.colors.onSurfaceVariant} />
-                  <Text style={[styles.invoiceText, { color: theme.colors.onSurfaceVariant }]}>
-                    {new Date(retroInvoiceInfo.createdAt).toLocaleDateString('pt-BR')}
-                  </Text>
-                </View>
-                <Text style={[styles.invoicePrice, { color: theme.colors.onSurface }]}>
-                  R$ {retroInvoiceInfo.unitPrice.toFixed(2).replace('.', ',')}
-                </Text>
-              </View>
-            )}
-
-            <View style={styles.retroInputRow}>
-              <RNTextInput
-                value={retroPackageSizeText}
-                onChangeText={setRetroPackageSizeText}
-                keyboardType="decimal-pad"
-                style={[
-                  styles.retroInput,
-                  {
-                    borderColor: theme.colors.outline,
-                    color: theme.colors.onSurface,
-                  }
-                ]}
-                autoFocus
-              />
-              <Text style={[styles.retroUnit, { color: theme.colors.onSurfaceVariant }]}>
-                {retroUnit ?? ''}
-              </Text>
-            </View>
-          </Dialog.Content>
-
-          <Dialog.Actions>
-            <Button onPress={() => {
-              setRetroVisible(false);
-              retroResolveRef.current?.(null);
-              retroResolveRef.current = null;
-            }}>
-              Cancelar
-            </Button>
-            <Button
-              mode="contained"
-              onPress={() => {
-                const v = parseFloat((retroPackageSizeText ?? '').replace(',', '.'));
-                if (!isFinite(v) || v <= 0) return;
-                // Convert display value back to atomic before resolving
-                const factor = getUnitFactor((retroUnit ?? 'g') as UnitSymbol);
-                setRetroVisible(false);
-                retroResolveRef.current?.(v * factor);
-                retroResolveRef.current = null;
-              }}
-              disabled={
-                !isFinite(parseFloat((retroPackageSizeText ?? '').replace(',', '.'))) ||
-                parseFloat((retroPackageSizeText ?? '').replace(',', '.')) <= 0
-              }
-            >
-              Confirmar
-            </Button>
-          </Dialog.Actions>
-        </Dialog>
+        {retroDialogElement}
       </Portal>
     </>
   );
