@@ -126,8 +126,9 @@ export const generateStockListText = (
 
   const prefix = messagePrefix == null
     ? `Boa noite! ${dateStr}\n\nAqui está a lista de produção do dia:`
-    : messagePrefix.replace('{data}', dateStr);
-
+    : messagePrefix === '__blank__'
+      ? ''
+      : messagePrefix.replace(/\{data\}/g, dateStr);
   let text = prefix ? `${prefix}\n\n` : '';
   inventoryItems.forEach((item) => {
     const emoji = getEmojiForProduct(item.productName);

@@ -55,6 +55,9 @@ export default function PreferencesScreen() {
     loadData();
   }, []);
 
+  const effectiveMessage = copyMessage === '__blank__' ? '' : copyMessage;
+
+
   const loadData = async () => {
     try {
       // Load settings
@@ -76,7 +79,7 @@ export default function PreferencesScreen() {
       setDefaultListId(listId ? parseInt(listId) : null);
       setDefaultStoreMode((storeMode as 'ask' | 'last' | 'fixed') || 'ask');
       setDefaultStoreId(storeId ? parseInt(storeId) : null);
-      setCopyMessage(msg ?? '');
+      setCopyMessage(msg); // null stays null, '__blank__' stays '__blank__'
 
       // Load lists and stores
       const [listsData, storesData] = await Promise.all([
@@ -282,21 +285,20 @@ export default function PreferencesScreen() {
           </Text>
           <TextInput
             mode="outlined"
-            value={copyMessage ?? ''}
+            value={effectiveMessage ?? ''}
             onChangeText={setCopyMessage}
-            onBlur={() => setSetting('copyMessage', copyMessage?.trim() ?? null)}
-            multiline
+            onBlur={() => setSetting('copyMessage', copyMessage?.trim() === '' ? '__blank__' : copyMessage?.trim() ?? null)} multiline
             numberOfLines={3}
             placeholder={`Boa noite! {data}\n\nAqui está a lista de produção do dia:`}
             style={{ marginHorizontal: 8 }}
           />
           <View style={{ flexDirection: 'row', alignItems: 'center', marginHorizontal: 8, marginTop: 4 }}>
             <Text style={{ flex: 1, color: theme.colors.onSurfaceVariant, fontSize: 12 }}>
-              {copyMessage === null
+              {effectiveMessage === null
                 ? 'Usando mensagem padrão.'
-                : copyMessage.trim() === ''
+                : effectiveMessage.trim() === ''
                   ? 'Nenhuma mensagem será adicionada antes da lista.'
-                  : `Prévia: ${copyMessage.replace(/\{data\}/g, new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }))}`
+                  : `Prévia: ${effectiveMessage.replace(/\{data\}/g, new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }))}`
               }
             </Text>
             {copyMessage !== null && (
