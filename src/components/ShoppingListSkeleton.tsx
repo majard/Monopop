@@ -1,48 +1,21 @@
-import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet } from 'react-native';
+import React from 'react';
+import { View, StyleSheet, Animated } from 'react-native';
 import { useTheme, Surface } from 'react-native-paper';
-import { Animated } from 'react-native';
+import { useSkeletonOpacity } from '../hooks/useSkeletonOpacity';
 
 export default function ShoppingListSkeleton() {
   const theme = useTheme();
-  const opacityAnim = useRef(new Animated.Value(0.4)).current;
-
-  useEffect(() => {
-    const pulseAnimation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(opacityAnim, {
-          toValue: 1,
-          duration: 1000,
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacityAnim, {
-          toValue: 0.4,
-          duration: 1000,
-          useNativeDriver: true,
-        }),
-      ])
-    );
-    pulseAnimation.start();
-    
-    return () => pulseAnimation.stop();
-  }, [opacityAnim]);
+  const opacity = useSkeletonOpacity();
 
   const renderSkeletonRow = (index: number) => (
     <Surface key={index} style={[skeletonStyles.card, { backgroundColor: theme.colors.surface }]}>
       <View style={skeletonStyles.row}>
-        {/* Checkbox placeholder */}
         <View style={[skeletonStyles.checkbox, { backgroundColor: theme.colors.surfaceVariant }]} />
-        
-        {/* Name placeholder */}
         <View style={[skeletonStyles.name, { backgroundColor: theme.colors.surfaceVariant }]} />
-        
-        {/* Right column with two stacked bars */}
         <View style={skeletonStyles.rightCol}>
           <View style={[skeletonStyles.priceBar, { backgroundColor: theme.colors.surfaceVariant }]} />
           <View style={[skeletonStyles.stockBar, { backgroundColor: theme.colors.surfaceVariant }]} />
         </View>
-        
-        {/* Delete icon placeholder */}
         <View style={[skeletonStyles.deleteIcon, { backgroundColor: theme.colors.surfaceVariant }]} />
       </View>
     </Surface>
@@ -53,21 +26,14 @@ export default function ShoppingListSkeleton() {
   );
 
   return (
-    <Animated.View style={{ opacity: opacityAnim }}>
-      {/* First section header */}
+    <Animated.View style={{ opacity }}>
       <View style={skeletonStyles.sectionHeaderContainer}>
         {renderSectionHeader()}
       </View>
-      
-      {/* First 3 rows */}
       {Array.from({ length: 3 }, (_, index) => renderSkeletonRow(index))}
-      
-      {/* Second section header */}
       <View style={skeletonStyles.sectionHeaderContainer}>
         {renderSectionHeader()}
       </View>
-      
-      {/* Last 3 rows */}
       {Array.from({ length: 3 }, (_, index) => renderSkeletonRow(index + 3))}
     </Animated.View>
   );
