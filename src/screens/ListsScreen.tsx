@@ -18,6 +18,7 @@ import { EmojiAvatar } from "../components/EmojiAvatar";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import ListsScreenSkeleton from "../components/ListsScreenSkeleton";
+import { ScreenContainer } from "../components/ScreenContainer";
 
 type ListItem = {
   id: number;
@@ -108,7 +109,7 @@ export default function ListsScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+    <ScreenContainer style={[styles.container]} withBottomInset>
       <Appbar.Header>
         <Appbar.Content title="Suas Listas" />
         <Appbar.Action icon="cog" onPress={() => navigation.navigate('Config')} />
@@ -276,7 +277,7 @@ export default function ListsScreen() {
           </Pressable>
         </Pressable>
       </Modal>
-    </SafeAreaView>
+    </ScreenContainer>
   );
 }
 
@@ -295,6 +296,6 @@ const styles = StyleSheet.create({
     position: "absolute",
     margin: 16,
     right: 0,
-    bottom: 0,
+    bottom: 42,
   },
 });
