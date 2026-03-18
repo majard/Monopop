@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { View, Alert, Modal, Pressable, StyleSheet } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import {
@@ -28,10 +28,12 @@ import { SortMenu } from "../components/SortMenu";
 import { AddItemButton } from "../components/AddItemButton";
 import InventoryList from "../components/InventoryList";
 import ContextualHeader from "../components/ContextualHeader";
-import { deleteInventoryItem, getSetting } from "../database/database";
+import { deleteInventoryItem, getLists, getSetting } from "../database/database";
 import { useListContext } from "../context/ListContext";
 import { ActionMenuButton } from "../components/ActionMenuButton";
 import InventoryListSkeleton from "../components/InventoryListSkeleton";
+import { useMoveToList } from "../hooks/useMoveToList";
+import { ItemPickerDialog } from "../components/ItemPickerDialog";
 
 type HomeScreenNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
@@ -52,6 +54,9 @@ export default function HomeScreen() {
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [actionsVisible, setActionsVisible] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
+  const [moveListPickerVisible, setMoveListPickerVisible] = useState(false);
+  const [lists, setLists] = useState<{ id: number; name: string }[]>([]);
+
 
   const {
     inventoryItems,
@@ -63,6 +68,7 @@ export default function HomeScreen() {
 
   const { listName, handleListNameSave, handleListDelete } = useList(listId);
 
+  const { moveItems } = useMoveToList(loadInventoryItems);
   const handleImportButtonClick = useCallback(() => {
     setIsImportModalVisible(true);
   }, []);
@@ -86,6 +92,32 @@ export default function HomeScreen() {
     setIsSelectionMode(false);
     setSelectedIds([]);
   }, []);
+
+
+  // load lists on mount
+  useEffect(() => {
+    getLists().then(setLists);
+  }, []);
+
+  const handleMoveSelected = useCallback(() => {
+    if (selectedIds.length === 0) return;
+    setMoveListPickerVisible(true);
+  }, [selectedIds]);
+
+  const handleMoveConfirm = useCallback(async (targetListId: number) => {
+    setMoveListPickerVisible(false);
+    const targetList = lists.find(l => l.id === targetListId);
+    if (!targetList) return;
+    const itemsToMove = filteredInventoryItems.filter(i => selectedIds.includes(i.id));
+    await moveItems(
+      itemsToMove.map(i => ({ id: i.id, productId: i.productId, productName: i.productName })),
+      targetList,
+    );
+    handleExitSelectionMode();
+  }, [selectedIds, lists, filteredInventoryItems, moveItems, handleExitSelectionMode]);
+
+
+
 
   const saveStockList = useCallback(async () => {
     try {
@@ -179,6 +211,11 @@ export default function HomeScreen() {
           </Text>
           <View style={{ flexDirection: 'row' }}>
             <IconButton
+              icon="swap-horizontal"
+              onPress={handleMoveSelected}
+              disabled={selectedIds.length === 0}
+            />
+            <IconButton
               icon="delete"
               iconColor={theme.colors.error}
               onPress={handleDeleteSelected}
@@ -191,21 +228,25 @@ export default function HomeScreen() {
           </View>
         </View>
       )}
-      {initialLoading ? (
-        <InventoryListSkeleton />
-      ) : (
-        <InventoryList
-          inventoryItems={filteredInventoryItems}
-          handleInventoryItemOrderChange={handleProductOrderChange}
-          onInventoryItemUpdated={loadInventoryItems}
-          isSelectionMode={isSelectionMode}
-          selectedIds={selectedIds}
-          onToggleSelect={handleToggleSelect}
-          onLongPressStart={handleEnterSelectionMode}
-          sortOrder={sortOrder}
-        />
 
-      )}
+
+      {
+        initialLoading ? (
+          <InventoryListSkeleton />
+        ) : (
+          <InventoryList
+            inventoryItems={filteredInventoryItems}
+            handleInventoryItemOrderChange={handleProductOrderChange}
+            onInventoryItemUpdated={loadInventoryItems}
+            isSelectionMode={isSelectionMode}
+            selectedIds={selectedIds}
+            onToggleSelect={handleToggleSelect}
+            onLongPressStart={handleEnterSelectionMode}
+            sortOrder={sortOrder}
+          />
+
+        )
+      }
       <AddItemButton
         onPress={() => navigation.navigate("AddInventoryItem", { listId })}
         label="Adicionar ao Inventário"
@@ -215,6 +256,14 @@ export default function HomeScreen() {
         setIsImportModalVisible={setIsImportModalVisible}
         loadItems={loadInventoryItems}
         listId={listId}
+      />
+      <ItemPickerDialog
+        visible={moveListPickerVisible}
+        onDismiss={() => setMoveListPickerVisible(false)}
+        items={lists.filter(l => l.id !== listId)} // exclude current list
+        selectedId={null}
+        onSelect={handleMoveConfirm}
+        title="Mover para lista"
       />
       <Modal
         visible={actionsVisible}
@@ -285,7 +334,7 @@ export default function HomeScreen() {
           </Pressable>
         </Pressable>
       </Modal>
-    </SafeAreaView>
+    </SafeAreaView >
   );
 }
 

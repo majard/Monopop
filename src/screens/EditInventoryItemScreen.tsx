@@ -18,7 +18,6 @@ import {
   updateProductName,
   deleteInventoryItem,
   getLists,
-  updateInventoryItemList,
   getCategories,
   addCategory,
   updateProductCategory,
@@ -55,6 +54,7 @@ import {
   formatStandardPackageDisplay, formatPerStdPkg,
   UnitSymbol, UnitFamily,
 } from '../utils/units';
+import { useMoveToList } from '../hooks/useMoveToList';
 
 type EditInventoryItemProps = NativeStackScreenProps<RootStackParamList, 'EditInventoryItem'>;
 
@@ -241,6 +241,9 @@ export default function EditInventoryItem() {
     setTimeout(() => { loadingRef.current = false; }, 0);
   }, [inventoryItem]);
 
+  const { moveItems } = useMoveToList(loadAll);
+
+
   useFocusEffect(useCallback(() => { loadAll(); }, [loadAll]));
 
   // ─── Store select ─────────────────────────────────────────────────────────────
@@ -318,8 +321,13 @@ export default function EditInventoryItem() {
       if (selectedCategoryId !== (inventoryItem.categoryId ?? null)) {
         await updateProductCategory(inventoryItem.productId, selectedCategoryId!);
       }
+
       if (selectedListId !== inventoryItem.listId) {
-        await updateInventoryItemList(inventoryItem.id, selectedListId);
+        const targetList = lists.find(l => l.id === selectedListId)!;
+        await moveItems(
+          [{ id: inventoryItem.id, productId: inventoryItem.productId, productName: name }],
+          targetList,
+        );
       }
 
       // ── Unit changes — all DB writes deferred until after alerts ──────────────

@@ -532,19 +532,35 @@ export const deleteInventoryItem = async (id: number): Promise<void> => {
   }
 };
 
-export const updateInventoryItemList = async (
+export const moveInventoryItemToList = async (
   inventoryItemId: number,
   newListId: number
 ): Promise<void> => {
   const db = getDb();
   const now = new Date().toISOString();
   try {
-    await db.runAsync(
-      `UPDATE inventory_items SET listId = ?, updatedAt = ? WHERE id = ?;`,
-      [newListId, now, inventoryItemId]
-    );
+    await db.withTransactionAsync(async () => {
+      // Get the product id of the item we're moving
+      const item = await db.getFirstAsync<{ productId: number }>(
+        `SELECT productId FROM inventory_items WHERE id = ?;`,
+        [inventoryItemId]
+      );
+      if (!item) throw new Error('Inventory item not found');
+
+      // Delete conflicting item in target list if exists
+      await db.runAsync(
+        `DELETE FROM inventory_items WHERE listId = ? AND productId = ? AND id != ?;`,
+        [newListId, item.productId, inventoryItemId]
+      );
+
+      // Move the item
+      await db.runAsync(
+        `UPDATE inventory_items SET listId = ?, updatedAt = ? WHERE id = ?;`,
+        [newListId, now, inventoryItemId]
+      );
+    });
   } catch (error) {
-    console.error("Error updating inventory item's listId:", error);
+    console.error("Error moving inventory item to list:", error);
     throw error;
   }
 };
