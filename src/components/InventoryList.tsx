@@ -22,9 +22,9 @@ interface InventoryListProps {
     sortOrder?: SortOrder;
 }
 
-export default function InventoryList({  
-    inventoryItems, 
-    handleInventoryItemOrderChange, 
+export default function InventoryList({
+    inventoryItems,
+    handleInventoryItemOrderChange,
     onInventoryItemUpdated,
     isSelectionMode = false,
     selectedIds = [],
@@ -34,7 +34,7 @@ export default function InventoryList({
 }: InventoryListProps) {
     const theme = useTheme();
     const styles = createHomeScreenStyles(theme);
-    
+
     const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
 
     const toggleCategory = useCallback((category: string) => {
@@ -60,7 +60,7 @@ export default function InventoryList({
     const renderInventoryItem = useCallback(({ item }: { item: InventoryItem }) => (
         <InventoryItemCard
             inventoryItem={item}
-            drag={() => {}}
+            drag={() => { }}
             isActive={false}
             onInventoryItemUpdated={onInventoryItemUpdated}
             isSelectionMode={isSelectionMode}
@@ -75,7 +75,7 @@ export default function InventoryList({
             <ScaleDecorator>
                 <InventoryItemCard
                     inventoryItem={item}
-                    drag={drag}
+                    drag={sortOrder === 'custom' ? drag : () => { }}
                     isActive={isActive}
                     onInventoryItemUpdated={onInventoryItemUpdated}
                     isSelectionMode={isSelectionMode}
@@ -85,7 +85,7 @@ export default function InventoryList({
                 />
             </ScaleDecorator>
         ),
-        [isSelectionMode, selectedIds, onToggleSelect, onLongPressStart, onInventoryItemUpdated]
+        [isSelectionMode, selectedIds, onToggleSelect, onLongPressStart, onInventoryItemUpdated, sortOrder]
     );
 
     if (sortOrder === 'category') {
@@ -140,7 +140,7 @@ export default function InventoryList({
     return (
         <DraggableFlatList
             data={inventoryItems}
-            onDragEnd={({data}) => handleInventoryItemOrderChange(data)}
+            onDragEnd={sortOrder === 'custom' ? ({ data }) => handleInventoryItemOrderChange(data) : undefined}
             keyExtractor={(item) => item.id.toString()}
             renderItem={renderItem}
             contentContainerStyle={styles.list}
