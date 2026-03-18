@@ -78,6 +78,7 @@ const PriceInput = React.memo(forwardRef<RNTextInput, {
 }>(({ onChangeCents, borderColor, textColor, initialCents, fontSize = 15, autoFocus, clearOnFocus = true }, ref) => {
     const [cents, setCents] = useState(initialCents);
     const centsRef = useRef(initialCents);
+    const theme = useTheme();
 
     const formatted = useMemo(() => {
         const int = Math.floor(cents / 100);
@@ -103,27 +104,49 @@ const PriceInput = React.memo(forwardRef<RNTextInput, {
         onChangeCents(next);
     }, [onChangeCents]);
 
+    const handleClear = useCallback(() => {
+        centsRef.current = 0;
+        setCents(0);
+        onChangeCents(0);
+    }, [onChangeCents]);
+
     return (
-        <RNTextInput
-            ref={ref}
-            value={formatted}
-            keyboardType="number-pad"
-            onKeyPress={handleKeyPress}
-            selection={{ start: formatted.length, end: formatted.length }}
-            onFocus={() => {
-                if (!clearOnFocus) return;
-                centsRef.current = 0;
-                setCents(0);
-                onChangeCents(0);
-            }}
-            contextMenuHidden
-            selectTextOnFocus={false}
-            caretHidden
-            autoFocus={autoFocus}
-            style={[styles.priceInput, { borderColor, color: textColor, fontSize }]}
-        />
+        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+            <RNTextInput
+                ref={ref}
+                value={formatted}
+                keyboardType="number-pad"
+                onKeyPress={handleKeyPress}
+                selection={{ start: formatted.length, end: formatted.length }}
+                onFocus={() => {
+                    if (!clearOnFocus) return;
+                    centsRef.current = 0;
+                    setCents(0);
+                    onChangeCents(0);
+                }}
+                contextMenuHidden
+                selectTextOnFocus={false}
+                caretHidden
+                autoFocus={autoFocus}
+                style={[styles.priceInput, { borderColor, color: textColor, fontSize }]}
+            />
+            {cents > 0 && (
+                <Pressable
+                    onPress={handleClear}
+                    style={{ position: 'absolute', right: 6 }}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                    <MaterialCommunityIcons
+                        name="close"
+                        size={16}
+                        color={theme.colors.outline}
+                    />
+                </Pressable>
+            )}
+        </View>
     );
 }));
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export const PriceTriangle = forwardRef<PriceTriangleHandle, PriceTriangleProps>(
