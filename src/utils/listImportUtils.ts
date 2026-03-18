@@ -34,6 +34,7 @@ export const applyListImport = async (
   let storesCreated = 0;
   let productsMatched = 0;
   let productsCreated = 0;
+  let listName = '';
 
   await db.withTransactionAsync(async () => {
     // ─── Step 1: Categories ───────────────────────────────────────────────────
@@ -92,7 +93,7 @@ export const applyListImport = async (
     }
 
     // ─── Step 4: Create list ──────────────────────────────────────────────────
-    let listName = data.listName;
+    listName = data.listName;
     const existingList = await db.getFirstAsync<{ id: number }>(
       'SELECT id FROM lists WHERE name = ?', [listName]
     );

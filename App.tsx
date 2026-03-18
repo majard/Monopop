@@ -52,7 +52,19 @@ function AppContent({ navigationRef }: AppContentProps) {
   const handleIncomingFile = async (url: string) => {
     if (!url) return;
     try {
-      const content = await FileSystem.readAsStringAsync(url);
+      let content: string;
+
+      if (url.startsWith('content://')) {
+        // Copy to cache first, then read
+        const cacheUri = `${FileSystem.cacheDirectory}incoming.json`;
+        await FileSystem.copyAsync({ from: url, to: cacheUri });
+        content = await FileSystem.readAsStringAsync(cacheUri);
+        // Clean up
+        await FileSystem.deleteAsync(cacheUri, { idempotent: true });
+      } else {
+        content = await FileSystem.readAsStringAsync(url);
+      }
+
       const data = JSON.parse(content);
       const type = detectImportType(data);
 
@@ -60,15 +72,12 @@ function AppContent({ navigationRef }: AppContentProps) {
         Alert.alert('Arquivo inválido', 'Este arquivo não é um backup ou lista Monopop.');
         return;
       }
-      if (type === 'list_export') {
-        navigationRef.current?.navigate('Backup', {
-          pendingListImport: data as ListExportData,
-        });
-      } else {
-        navigationRef.current?.navigate('Backup', {
-          pendingBackupImport: data,
-        });
-      }
+
+      navigationRef.current?.navigate('Backup', (
+        type === 'list_export'
+          ? { pendingListImport: data as ListExportData }
+          : { pendingBackupImport: data }
+      ));
     } catch (e) {
       console.error('Error handling incoming file:', e);
       Alert.alert('Erro', 'Não foi possível ler o arquivo.');
