@@ -507,10 +507,14 @@ export default function HistoryScreen() {
         <View style={localStyles.emptyState}>
           <MaterialCommunityIcons name="history" size={48} color={theme.colors.onSurfaceVariant} />
           <Text style={[localStyles.emptyTitle, { color: theme.colors.onSurfaceVariant }]}>
-            Nenhum histórico encontrado
+            {events.length === 0
+              ? 'Nenhum histórico ainda'
+              : 'Nenhum resultado para este período'}
           </Text>
           <Text style={[localStyles.emptySubtitle, { color: theme.colors.outline }]}>
-            Suas compras e atualizações de estoque aparecerão aqui
+            {events.length === 0
+              ? 'Suas compras e atualizações de estoque aparecerão aqui'
+              : 'Tente ajustar o período ou a busca'}
           </Text>
         </View>
       ) : (
