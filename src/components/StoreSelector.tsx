@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Text, useTheme } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ItemPickerDialog } from './ItemPickerDialog';
+import { SearchablePickerDialog } from './SearchablePickerDialog';
 
 interface Store {
     id: number;
@@ -17,6 +18,7 @@ interface StoreSelectorProps {
     nullOptionLabel?: string;         // defaults to 'Sem loja'
     style?: object;
     iconOnly?: boolean;                // default false
+    onCreateStore?: (name: string) => Promise<void>;
 }
 
 export function StoreSelector({
@@ -27,6 +29,7 @@ export function StoreSelector({
     nullOptionLabel = 'Sem loja',
     style,
     iconOnly = false,
+    onCreateStore,
 }: StoreSelectorProps) {
     const theme = useTheme();
     const [pickerVisible, setPickerVisible] = React.useState(false);
@@ -81,19 +84,39 @@ export function StoreSelector({
                 )}
             </View>
 
-            <ItemPickerDialog
-                visible={pickerVisible}
-                onDismiss={() => setPickerVisible(false)}
-                items={stores}
-                selectedId={selectedStoreId}
-                onSelect={(id) => {
-                    onStoreChange(id);
-                    setPickerVisible(false);
-                }}
-                title="Escolher loja"
-                withNullOption
-                nullOptionLabel={nullOptionLabel}
-            />
+            {onCreateStore ? (
+                <SearchablePickerDialog
+                    visible={pickerVisible}
+                    onDismiss={() => setPickerVisible(false)}
+                    items={stores}
+                    selectedId={selectedStoreId}
+                    onSelect={(id) => {
+                        onStoreChange(id);
+                        setPickerVisible(false);
+                    }}
+                    onCreateNew={async (name) => {
+                        await onCreateStore(name);
+                        setPickerVisible(false);
+                    }}
+                    title="Escolher loja"
+                    placeholder="Buscar ou criar loja..."
+                />
+            ) : (
+                <ItemPickerDialog
+                    visible={pickerVisible}
+                    onDismiss={() => setPickerVisible(false)}
+                    items={stores}
+                    selectedId={selectedStoreId}
+                    onSelect={(id) => {
+                        onStoreChange(id);
+                        setPickerVisible(false);
+                    }}
+                    title="Escolher loja"
+                    withNullOption
+                    nullOptionLabel={nullOptionLabel}
+                />
+            )}
+
         </>
     );
 }

@@ -38,6 +38,7 @@ import {
   clearReferencePricesForProduct,
   concludeShoppingForListWithInvoiceV2,
   getLowestRefPricesPerUnit,
+  addStore,
 } from "../database/database";
 import type { RefPrice } from "../database/database";
 import { RootStackParamList } from "../types/navigation";
@@ -113,6 +114,7 @@ export default function ShoppingListScreen() {
   const {
     categories,
     stores,
+    loadStores,
     defaultStoreMode,
     defaultStoreId,
     lastStoreName,
@@ -412,6 +414,11 @@ export default function ShoppingListScreen() {
     });
   }, [stores, loadPricesAsync]);
 
+  const handleCreateStore = useCallback(async (name: string) => {
+    const id = await addStore(name);
+    await loadStores(); 
+    handleStoreSelect(id);
+  }, [loadStores, handleStoreSelect]);
 
   const handleToggleChecked = useCallback(
     async (item: ShoppingListItemWithDetails) => {
@@ -1080,9 +1087,9 @@ export default function ShoppingListScreen() {
               handleStoreSelect(id);
             }
           }}
+          onCreateStore={handleCreateStore}
           nullOptionLabel="Sem loja"
         />
-
         <View style={localStyles.searchWrapper}>
           <SearchBar
             searchQuery={searchQuery}
