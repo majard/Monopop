@@ -1,4 +1,5 @@
 import { InventoryItem, Product } from '../database/models';
+import { ListExportData } from '../utils/backupUtils';
 
 export type RootStackParamList = {
   Lists: undefined;
@@ -16,7 +17,10 @@ export type RootStackParamList = {
   Categories: undefined;
   Invoices: undefined;
   InvoiceDetail: { invoiceId: number };
-  Backup: undefined;
+  Backup: {
+    pendingListImport?: ListExportData;
+    pendingBackupImport?: any;
+  } | undefined;
   About: undefined;
   Preferences: undefined;
 };
@@ -31,4 +35,4 @@ declare global {
   namespace ReactNavigation {
     interface RootParamList extends RootStackParamList {}
   }
-} 
+}
