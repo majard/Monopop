@@ -15,10 +15,12 @@ import { RootStackParamList } from "../types/navigation";
 import { getEmojiForList } from "../utils/stringUtils";
 import { useListContext } from "../context/ListContext";
 import { EmojiAvatar } from "../components/EmojiAvatar";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import ListsScreenSkeleton from "../components/ListsScreenSkeleton";
 import { ScreenContainer } from "../components/ScreenContainer";
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
+import { buildListExport, shareJsonFile, detectImportType, ListExportData } from '../utils/backupUtils';
 
 type ListItem = {
   id: number;
@@ -108,10 +110,45 @@ export default function ListsScreen() {
     );
   };
 
+  const handleShareList = async (item: ListItem) => {
+    setActionTarget(null);
+    try {
+      const { jsonString, fileName } = await buildListExport(item.id);
+      await shareJsonFile(jsonString, fileName);
+    } catch (e) {
+      Alert.alert('Erro', 'Não foi possível exportar a lista.');
+    }
+  };
+
+  const handleImportList = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'application/json',
+        copyToCacheDirectory: true,
+      });
+      if (!result.canceled && result.assets?.length > 0) {
+        const content = await FileSystem.readAsStringAsync(result.assets[0].uri);
+        const data = JSON.parse(content);
+        const type = detectImportType(data);
+        if (type !== 'list_export') {
+          Alert.alert(
+            'Arquivo inválido',
+            'Este arquivo não é uma lista Monopop exportada. Para importar um backup completo vá em Configurações → Backup.'
+          );
+          return;
+        }
+        navigation.navigate('Backup', { pendingListImport: data as ListExportData });
+      }
+    } catch (e) {
+      Alert.alert('Erro', 'Não foi possível ler o arquivo.');
+    }
+  };
+
   return (
     <ScreenContainer style={[styles.container]} withBottomInset>
       <Appbar.Header>
         <Appbar.Content title="Suas Listas" />
+        <Appbar.Action icon="import" onPress={handleImportList} />
         <Appbar.Action icon="cog" onPress={() => navigation.navigate('Config')} />
       </Appbar.Header>
 
@@ -191,7 +228,8 @@ export default function ListsScreen() {
               {actionTarget?.name}
             </Text>
             {[
-              { icon: "pencil-outline", label: "Renomear", onPress: handleRename },
+              { icon: "share-variant", label: "Compartilhar lista", onPress: () => handleShareList(actionTarget!), destructive: false },
+              { icon: "pencil-outline", label: "Renomear", onPress: handleRename, destructive: false },
               { icon: "delete-outline", label: "Excluir", onPress: handleDelete, destructive: true },
             ].map((action) => (
               <Pressable
