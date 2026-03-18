@@ -47,7 +47,7 @@ export default function HomeScreen() {
   const theme = useTheme();
   const styles = createHomeScreenStyles(theme);
 
-  const [sortOrder, setSortOrder] = useState<SortOrder>("custom");
+  const [sortOrder, setSortOrder] = useState<SortOrder>('category');
   const [isImportModalVisible, setIsImportModalVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isSelectionMode, setIsSelectionMode] = useState(false);
