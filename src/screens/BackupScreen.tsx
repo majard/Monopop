@@ -303,22 +303,23 @@ export default function BackupScreen() {
 
   // ─── List import summary modal adapter ────────────────────────────────────
   const listImportSummaryResults = engine.summaryResult ? [
-    ...(Array(engine.summaryResult.productsMatched).fill(null).map((_, i) => ({
-      originalName: `produto ${i + 1}`,
+    ...engine.summaryResult.productsMatched.map(p => ({
+      originalName: p.oldName,
       quantity: 1,
       outcome: 'exact' as const,
+      matchedName: p.newName === p.oldName ? undefined : p.newName,
       quantityExtracted: true,
       importDate: null,
-    }))),
-    ...(Array(engine.summaryResult.productsCreated).fill(null).map((_, i) => ({
-      originalName: `produto novo ${i + 1}`,
+    })),
+    ...engine.summaryResult.productsCreated.map(name => ({
+      originalName: name,
       quantity: 1,
       outcome: 'created' as const,
       quantityExtracted: true,
       importDate: null,
-    }))),
+    })),
   ] : [];
-
+  
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Appbar.Header>
