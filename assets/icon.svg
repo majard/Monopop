@@ -1,15 +1,60 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <!-- Background circle -->
-    <circle cx="512" cy="512" r="512" fill="#4CAF50"/>
-    
-    <!-- List items -->
-    <rect x="256" y="256" width="512" height="64" rx="32" fill="white"/>
-    <rect x="256" y="384" width="512" height="64" rx="32" fill="white"/>
-    <rect x="256" y="512" width="512" height="64" rx="32" fill="white"/>
-    
-    <!-- Bullet points -->
-    <circle cx="192" cy="288" r="24" fill="white"/>
-    <circle cx="192" cy="416" r="24" fill="white"/>
-    <circle cx="192" cy="544" r="24" fill="white"/>
-</svg> 
+<svg viewBox="0 0 500 500" xmlns="http://www.w3.org/2000/svg">
+  <rect width="500" height="500" rx="90" fill="#388E3C"/>
+
+  <g transform="translate(272,262) scale(0.75) translate(-250,-255)">
+
+    <!-- Cart gold fill -->
+    <path d="M 108,148 L 392,148 L 370,295 L 130,295 Z" fill="#FFB300"/>
+
+    <!-- Cart red outline — full perimeter including bottom -->
+    <path d="M 108,148 L 392,148 L 370,295 L 130,295 Z" fill="none" stroke="#C62828" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>
+
+    <!-- List lines: uniform white -->
+    <circle cx="137" cy="185" r="5" fill="white" opacity="0.85"/>
+    <line x1="151" y1="185" x2="363" y2="185" stroke="white" stroke-width="8" stroke-linecap="round" opacity="0.85"/>
+
+    <circle cx="140" cy="215" r="5" fill="white" opacity="0.85"/>
+    <line x1="154" y1="215" x2="360" y2="215" stroke="white" stroke-width="8" stroke-linecap="round" opacity="0.85"/>
+
+    <circle cx="144" cy="245" r="5" fill="white" opacity="0.85"/>
+    <line x1="158" y1="245" x2="285" y2="245" stroke="white" stroke-width="8" stroke-linecap="round" opacity="0.85"/>
+
+    <circle cx="147" cy="275" r="5" fill="white" opacity="0.85"/>
+    <line x1="161" y1="275" x2="228" y2="275" stroke="white" stroke-width="8" stroke-linecap="round" opacity="0.85"/>
+
+    <!-- Axle -->
+    <rect x="168" y="291" width="164" height="7" rx="3" fill="#FFB300"/>
+
+    <!-- Bottom edge drawn after axle so it shows on top -->
+    <line x1="130" y1="295" x2="370" y2="295" stroke="#C62828" stroke-width="5" stroke-linecap="round"/>
+
+    <!-- Left coin: gold fill, red ring, white $ -->
+    <circle cx="183" cy="327" r="34" fill="#FFB300"/>
+    <circle cx="183" cy="327" r="34" fill="none" stroke="#C62828" stroke-width="5"/>
+    <text x="183" y="340" text-anchor="middle" font-size="36" font-weight="900" font-family="Arial, sans-serif" fill="white">$</text>
+
+    <!-- Right coin -->
+    <circle cx="317" cy="327" r="34" fill="#FFB300"/>
+    <circle cx="317" cy="327" r="34" fill="none" stroke="#C62828" stroke-width="5"/>
+    <text x="317" y="340" text-anchor="middle" font-size="36" font-weight="900" font-family="Arial, sans-serif" fill="white">$</text>
+
+    <!-- Handle -->
+    <polyline
+      points="78,180 105,130 108,148"
+      fill="none"
+      stroke="#C62828"
+      stroke-width="8"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+
+    <!-- Fist -->
+    <rect x="48" y="170" width="30" height="22" rx="5" fill="#C62828"/>
+    <circle cx="53" cy="170" r="3" fill="#9B1B1B"/>
+    <circle cx="60" cy="168" r="3" fill="#9B1B1B"/>
+    <circle cx="67" cy="168" r="3" fill="#9B1B1B"/>
+    <circle cx="74" cy="170" r="3" fill="#9B1B1B"/>
+    <rect x="74" y="188" width="9" height="7" rx="2.5" fill="#C62828"/>
+
+  </g>
+</svg>
