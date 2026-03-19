@@ -295,7 +295,6 @@ export default function ShoppingListScreen() {
 
   const loadPricesAsync = useCallback(
     async (items: ShoppingListItemWithDetails[], storeId: number | null) => {
-      console.log('loadPricesAsync', storeId)
       const productIds = items
         .map(i => i.productId)
         .filter(id => id > 0);
@@ -476,13 +475,6 @@ export default function ShoppingListScreen() {
       price: number | undefined,
       unitData?: UnitSaveData,
     ) => {
-      console.log("[DIAG:handleSaveEdit] called", {
-        editingItemId: editingItem?.id,
-        editingItemProductId: editingItem?.productId,
-        quantity,
-        price,
-        unitData,
-      });
       if (!editingItem) return;
 
       // Store needed data before closing modal
@@ -633,12 +625,6 @@ export default function ShoppingListScreen() {
               );
             }
           }
-          console.log("[DIAG] handleSaveEdit", {
-            productId: itemProductId,
-            selectedStoreId,
-            packageSize: unitData?.packageSize,
-            updateReferencePrice: unitData?.updateReferencePrice,
-          });
         } else if (price && price > 0) {
           const inv = findByProductId(itemProductId);
           const isUnitConfigured =
@@ -677,9 +663,6 @@ export default function ShoppingListScreen() {
           }
         }
 
-        console.log("[DIAG:handleSaveEdit] about to loadData", {
-          selectedStoreId,
-        });
         await loadData();
         setEditingItem(null);
       } catch (error) {

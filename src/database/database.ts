@@ -777,7 +777,6 @@ export const addShoppingListItem = async (
 
     if (!price) {
       price = await getLastUnitPriceForProduct(productId);
-      console.log("Last unit price for product:", price);
     }
     // Check if a shopping list item for this specific inventoryItemId already exists
     // (There should only be one shopping list item for a unique inventory item due to UNIQUE constraint)
