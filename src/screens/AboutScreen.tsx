@@ -8,7 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
-const version = Constants.expoConfig?.version ?? 'deu ruim';
+const version = Constants.expoConfig?.version ?? '1.7.0';
 
 type AboutScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'About'>;
 
