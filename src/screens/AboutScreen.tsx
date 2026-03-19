@@ -8,7 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
-const version = Constants.expoConfig?.version ?? '1.5';
+const version = Constants.expoConfig?.version ?? 'deu ruim';
 
 type AboutScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'About'>;
 
@@ -57,9 +57,14 @@ export default function AboutScreen() {
             {[
               'Múltiplas listas com estoques independentes',
               'Lista de compras com preço sugerido por loja',
+              'Comparação de preços por unidade (g, ml, un) entre embalagens diferentes',
+              'Aviso quando o preço atual supera sua melhor referência conhecida',
               'Menor preço dos últimos 90 dias por produto',
               'Consumo médio semanal calculado automaticamente',
               'Importação de lista via texto colado',
+              'Compartilhamento e importação de listas via WhatsApp, Telegram ou qualquer app',
+              'Mover itens entre listas com resolução de conflito',
+              'Mensagem personalizada ao copiar o estoque',
               'Histórico de compras com nota por loja',
               'Análise de gastos e tendência vs período anterior',
               'Histórico de quantidade em estoque ao longo do tempo',
@@ -105,7 +110,7 @@ export default function AboutScreen() {
 
         <Card
           style={styles.card}
-          onPress={() => Linking.openURL('https://github.com/majard/Listai/issues')}
+          onPress={() => Linking.openURL('https://github.com/majard/listai/issues')}
         >
           <Card.Content style={styles.linkContent}>
             <MaterialCommunityIcons
@@ -126,7 +131,7 @@ export default function AboutScreen() {
 
         <Card
           style={styles.card}
-          onPress={() => Linking.openURL('https://github.com/majard/Listai')}
+          onPress={() => Linking.openURL('https://github.com/majard/listai')}
         >
           <Card.Content style={styles.linkContent}>
             <MaterialCommunityIcons
