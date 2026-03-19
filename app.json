@@ -1,9 +1,9 @@
 {
   "expo": {
-    "name": "Listai",
-    "slug": "listai",
-    "version": "1.5.2",
-    "scheme": "listai",
+    "name": "Monopop",
+    "slug": "monopop",
+    "version": "1.7.0",
+    "scheme": "monopop",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -24,8 +24,8 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#4CAF50"
       },
-      "package": "com.mahjard.listai",
-      "versionCode": 20
+      "package": "com.mahjard.monopop",
+      "versionCode": 23
     },
     "extra": {
       "eas": {

@@ -6,7 +6,7 @@ let db: SQLite.SQLiteDatabase | null = null;
 let initPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
 export const initializeDatabase = async (
-  databaseName: string = "listai.db"
+  databaseName: string = "monopop.db"
 ): Promise<SQLite.SQLiteDatabase> => {
   if (db) return db;
   if (initPromise) return initPromise;

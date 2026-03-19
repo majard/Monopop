@@ -92,9 +92,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'com.mahjard.listai'
+    namespace 'com.mahjard.monopop'
     defaultConfig {
-        applicationId 'com.mahjard.listai'
+        applicationId 'com.mahjard.monopop'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 23

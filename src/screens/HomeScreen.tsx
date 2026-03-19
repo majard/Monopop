@@ -182,7 +182,10 @@ export default function HomeScreen() {
 
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView
+      style={styles.container}
+      edges={['top', 'left', 'right']} // exclui bottom — tab navigator já cuida
+    >
       <ContextualHeader
         listName={listName}
         onListNameSave={handleListNameSave}

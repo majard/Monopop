@@ -1,4 +1,4 @@
-package com.mahjard.listai
+package com.mahjard.monopop
 
 import android.app.Application
 import android.content.res.Configuration
