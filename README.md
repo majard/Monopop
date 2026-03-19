@@ -15,7 +15,7 @@ that idea made functional.
 
 ![Demo](docs/demo.gif)
 
-[⬇️ Download APK](https://github.com/majard/listai/releases)
+[⬇️ Download APK](https://github.com/majard/listai/releases) — requires Android. Enable "Install unknown apps" for your browser or file manager if prompted.
 
 ---
 
@@ -64,6 +64,7 @@ that idea made functional.
   locked in
 - **100% offline** — no account, no internet, no network latency. Data 
   belongs to the user by architecture, not by policy.
+- **List sharing** — export any list as JSON; share via WhatsApp, Telegram, or any app. Importing opens automatically via Android intent filter — no manual file picking.
 
 ---
 
@@ -372,11 +373,10 @@ Built by [Mah Jardim](https://github.com/majard). Active development,
 production use, open source.
 
 **Package name** — the app was originally called ListaÍ, renamed to Monopop 
-as a product decision. The package name `com.mahjard.listai` is kept to 
-avoid invalidating existing installs.
+as a product decision.
 
-Two APKs coexist on the user's device: `com.mahjard.listai` (release, 
-daily use) and `com.mahjard.listai.dev` (debug, development). The `.dev` 
+Two APKs coexist on the user's device: `com.mahjard.monopop` (release, 
+daily use) and `com.mahjard.monopop.dev` (debug, development). The `.dev` 
 suffix via `applicationIdSuffix` avoids overwriting the production app 
 during development.
 
@@ -422,6 +422,10 @@ src/
 ```bash
 cd android
 ./gradlew assembleRelease
+
+# Output:
+# android/app/build/outputs/apk/release/monopop-1.7.0.apk         (arm64, modern devices)
+# android/app/build/outputs/apk/release/monopop-1.7.0-legacy.apk  (armeabi-v7a)
 ```
 
 APK at `android/app/build/outputs/apk/release/`. Requires JDK 17+ and 
