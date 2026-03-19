@@ -252,6 +252,15 @@ Android 13+. The backup screen uses SAF via StorageAccessFramework
 to any user-chosen directory. Falls back to `Sharing.shareAsync` if 
 permission is denied. Both paths share the same `buildExportData()` helper.
 
+**Granular change detection in price loading** — `loadPricesAsync` 
+updates prices via a single functional setState. Each item is compared 
+field-by-field (price, packageSize, refPrice, lowestPrice90d, 
+lowestRefPricePerUnit, showWarning) and the original object reference 
+is returned unchanged if nothing changed. Combined with `React.memo` 
+on `ShoppingListItemCard`, this means only cards whose data actually 
+changed re-render when background price loading completes — regardless 
+of list size.
+
 **Spec-driven AI-assisted development** — complex features are specced 
 before implementation (see `specs/`). Each change goes through explicit 
 diff review before commit. The workflow treats AI as a senior pairing 
