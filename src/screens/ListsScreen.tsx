@@ -9,8 +9,9 @@ import {
 import { getLists } from "../database/database";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { RootStackParamList } from "../types/navigation";
+import { BottomTabParamList } from "../types/navigation";
 import { getEmojiForList } from "../utils/stringUtils";
+import { useListContext } from "../context/ListContext";
 
 type ListItem = {
   id: number;
@@ -20,7 +21,8 @@ type ListItem = {
 export default function ListsScreen() {
   const [lists, setLists] = useState<ListItem[]>([]);
   const navigation =
-    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+    useNavigation<NativeStackNavigationProp<BottomTabParamList>>();
+  const { setListId } = useListContext();
   const theme = useTheme();
 
   const loadLists = async () => {
@@ -33,6 +35,12 @@ export default function ListsScreen() {
       loadLists();
     }, [])
   );
+
+  const handleListSelect = (listId: number) => {
+    console.log('ListsScreen: selecting list', listId);
+    setListId(listId);
+    navigation.navigate("Inventory", { listId });
+  };
 
   return (
     <View
@@ -58,7 +66,7 @@ export default function ListsScreen() {
             <Card
               key={item.id}
               style={{ marginBottom: 16, borderRadius: 12, elevation: 2 }}
-              onPress={() => navigation.navigate("Home", { listId: item.id })}
+              onPress={() => handleListSelect(item.id)}
             >
               <Card.Content
                 style={{ flexDirection: "row", alignItems: "center" }}
@@ -83,17 +91,9 @@ export default function ListsScreen() {
           contentContainerStyle={{ padding: 16, paddingBottom: 64 }}
         />
       )}
-
       <FAB
         icon="plus"
-        label="Adicionar Lista"
-        style={{
-          position: "absolute",
-          right: 24,
-          bottom: 32,
-          backgroundColor: theme.colors.primary,
-        }}
-        color={theme.colors.onPrimary}
+        style={styles.fab}
         onPress={() => navigation.navigate("AddList")}
       />
     </View>
@@ -104,15 +104,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 16,
-    marginBottom: 32,
   },
   title: {
     fontSize: 24,
-    marginBottom: 8,
-    marginTop: 8,
     fontWeight: "bold",
+    marginBottom: 24,
+    textAlign: "center",
   },
-  button: {
-    marginTop: 16,
+  fab: {
+    position: "absolute",
+    margin: 16,
+    right: 0,
+    bottom: 0,
   },
 });

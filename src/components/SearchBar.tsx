@@ -4,15 +4,19 @@ import { TextInput as PaperTextInput } from "react-native-paper";
 import { useTheme } from "react-native-paper";
 import { createHomeScreenStyles } from "../styles/HomeScreenStyles";
 
-export default function SearchBar({ searchQuery, setSearchQuery }) {
+interface SearchBarProps {
+  searchQuery: string;
+  setSearchQuery: (q: string) => void;
+  placeholder?: string;
+}
 
+export default function SearchBar({ searchQuery, setSearchQuery, placeholder = "Buscar produtos..." }: SearchBarProps) {
     const theme = useTheme();
-
     const styles = createHomeScreenStyles(theme);
     return (
         <View style={styles.searchContainer}>
             <PaperTextInput
-                placeholder="Buscar produtos..."
+                placeholder={placeholder}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
                 mode="outlined"

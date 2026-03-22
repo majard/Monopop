@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { updateProduct, deleteProduct } from "../database/database";
+import { updateInventoryItemQuantity, deleteInventoryItem } from "../database/database";
 import { Alert } from "react-native";
 
 interface UseProductProps {
@@ -30,7 +30,7 @@ export const useProduct = ({
     }
     updateTimeoutRef.current = setTimeout(async () => {
       try {
-        await updateProduct(id, newQuantity);
+        await updateInventoryItemQuantity(id, newQuantity);
       } catch (err) {
         console.error(`Erro ao atualizar produto ${id}:`, err);
       } finally {
@@ -41,7 +41,7 @@ export const useProduct = ({
 
 
   // --- Public Quantity Update Function (UI + Triggers Debounced DB Update) ---
-  const updateProductQuantity = useCallback(
+  const updateInventoryItemQuantity = useCallback(
     (newQuantity: number) => {
       const clampedQuantity = Math.max(0, newQuantity); // Ensure quantity doesn't go below zero
       setQuantity(clampedQuantity); // Optimistic UI update
@@ -134,7 +134,7 @@ export const useProduct = ({
           style: "destructive",
           onPress: async () => {
             try {
-              await deleteProduct(productId);
+              await deleteInventoryItem(productId);
               if (onProductUpdated) {
                 onProductUpdated();
               }
@@ -163,7 +163,7 @@ export const useProduct = ({
 
   return {
     quantity,
-    updateProductQuantity,
+    updateInventoryItemQuantity,
     confirmRemoveProduct,
     startContinuousAdjustment,
     stopContinuousAdjustment,

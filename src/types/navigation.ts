@@ -1,11 +1,20 @@
-import { Product } from '../database/database';
+import { InventoryItem, Product } from '../database/models';
 
 export type RootStackParamList = {
-  Home: { listId?: number };
+  MainTabs: { listId?: number };
   AddProduct: {listId: number};
+  AddInventoryItem: {listId: number};
   EditProduct: { product: Product };
-  Lists: undefined;
+  EditInventoryItem: {inventoryItem: InventoryItem}
   AddList: undefined;
+  ShoppingList: {listId: number};
+  AddProductToShoppingList: { listId: number };
+};
+
+export type BottomTabParamList = {
+  Inventory: { listId?: number };
+  ShoppingList: { listId?: number };
+  Lists: undefined;
 };
 
 declare global {

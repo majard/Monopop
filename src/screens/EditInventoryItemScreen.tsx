@@ -23,53 +23,55 @@ import {
 } from "@react-navigation/native-stack";
 import { LineChart } from "react-native-chart-kit";
 import {
-  updateInventoryItemQuantity,
+  updateInventoryItem,
   getInventoryHistory,
   updateProductName,
   deleteInventoryItem,
   getLists,
-  updateProductList,
+  updateInventoryItemList,
 } from "../database/database";
 import { InventoryHistory } from "../database/models";
 import { RootStackParamList } from "../types/navigation";
 import { getEmojiForList } from "../utils/stringUtils";
+import { EditableName } from "../components/EditableName";
 
-type EditProductScreenNavigationProp = NativeStackNavigationProp<
+type EditInventoryItemNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
-  "EditProduct"
+  "EditInventoryItem"
 >;
-type EditProductScreenProps = NativeStackScreenProps<
+type EditInventoryItemProps = NativeStackScreenProps<
   RootStackParamList,
-  "EditProduct"
+  "EditInventoryItem"
 >;
 
-export default function EditProductScreen() {
-  const route = useRoute<EditProductScreenProps["route"]>();
-  const product = route.params?.product;
-  const [quantity, setQuantity] = useState(product?.quantity?.toString() || "");
+export default function EditInventoryItem() {
+  const route = useRoute<EditInventoryItemProps["route"]>();
+  const inventoryItem = route.params?.inventoryItem;
+  const [quantity, setQuantity] = useState(inventoryItem?.quantity?.toString() || "");
+  const [notes, setNotes] = useState(inventoryItem?.notes || "");
   const [history, setHistory] = useState<InventoryHistory[]>([]);
-  const navigation = useNavigation<EditProductScreenNavigationProp>();
+  const navigation = useNavigation<EditInventoryItemNavigationProp>();
   const theme = useTheme();
-  const [name, setName] = useState(product?.name || "");
-  const [isEditingName, setIsEditingName] = useState(false);
+  const [name, setName] = useState(inventoryItem?.productName || "");
   const [lists, setLists] = useState<{ id: number; name: string }[]>([]);
   const [listModalVisible, setListModalVisible] = useState(false);
-  const [selectedListId, setSelectedListId] = useState(product?.listId ?? 1);
+  const [selectedListId, setSelectedListId] = useState(inventoryItem?.listId ?? 1);
 
   useEffect(() => {
-    if (product) {
-      setQuantity(product.quantity.toString());
-      setName(product.name);
+    console.log('\n\ninventoryItem', inventoryItem);
+    if (inventoryItem) {
+      setQuantity(inventoryItem.quantity.toString());
       loadHistory();
     }
     getLists().then(setLists);
-    setSelectedListId(product?.listId ?? 1);
+    setSelectedListId(inventoryItem?.listId ?? 1);
   }, []);
 
   const loadHistory = async () => {
-    if (product?.name) { // Ensure product and id exist before calling
+    console.log('\n\n loading history inventoryItem', inventoryItem);
+    if (inventoryItem?.productName) { // Ensure product and id exist before calling
       try {
-        const data = await getInventoryHistory(product.name.toString());
+        const data = await getInventoryHistory(inventoryItem.id);
         console.log('\n\ndata', data);
         setHistory(data || []); 
       } catch (error) {
@@ -79,9 +81,9 @@ export default function EditProductScreen() {
   };
 
   const handleUpdate = async () => {
-    if (product?.id) {
+    if (inventoryItem?.id) {
       try {
-        await updateInventoryItemQuantity(product.id, parseInt(quantity));
+        await updateInventoryItem(inventoryItem.id, parseInt(quantity), notes);
         navigation.goBack();
       } catch (error) {
         console.error("Erro ao atualizar produto:", error);
@@ -89,12 +91,11 @@ export default function EditProductScreen() {
     }
   };
 
-  const handleNameUpdate = async () => {
-    if (product?.id) {
+  const handleNameUpdate = async (newName: string) => {
+    if (inventoryItem?.id) {
       try {
-        await updateProductName(product.id, name);
-        setIsEditingName(false);
-        navigation.setParams({ product: { ...product, name } });
+        setName(newName);
+        await updateProductName(inventoryItem.productId, newName);
       } catch (error) {
         console.error("Erro ao atualizar nome do produto:", error);
       }
@@ -102,7 +103,7 @@ export default function EditProductScreen() {
   };
 
   const handleDelete = async () => {
-    if (product?.id) {
+    if (inventoryItem?.id) {
       Alert.alert(
         "Confirmar Exclusão",
         "Tem certeza que deseja excluir este produto?",
@@ -115,7 +116,7 @@ export default function EditProductScreen() {
             text: "Excluir",
             onPress: async () => {
               try {
-                await deleteInventoryItem(product.id);
+                await deleteInventoryItem(inventoryItem.id);
                 navigation.goBack();
               } catch (error) {
                 console.error("Erro ao deletar produto:", error);
@@ -162,10 +163,10 @@ export default function EditProductScreen() {
   };
 
   const handleChangeList = async (newListId: number) => {
-    if (product?.id && newListId !== selectedListId) {
-      await updateProductList(product.id, newListId);
+    if (inventoryItem?.id && newListId !== selectedListId) {
+      await updateInventoryItemList(inventoryItem.id, newListId);
       setSelectedListId(newListId);
-      navigation.setParams({ product: { ...product, listId: newListId } });
+      navigation.setParams({ inventoryItem: { ...inventoryItem, listId: newListId } });
     }
     setListModalVisible(false);
   };
@@ -173,56 +174,7 @@ export default function EditProductScreen() {
   return (
     <SafeAreaView style={{ flex: 1 }}>
       <ScrollView style={styles.container}>
-        <View style={styles.header}>
-          {isEditingName ? (
-            <View style={styles.nameEditContainer} testID="name-edit-container">
-              <PaperTextInput
-                value={name}
-                onChangeText={setName}
-                style={styles.nameInput}
-                mode="outlined"
-                testID="name-input"
-              />
-              <IconButton
-                icon="check"
-                size={24}
-                onPress={handleNameUpdate}
-                iconColor={theme.colors.primary}
-                testID="save-name-button"
-              />
-              <IconButton
-                icon="close"
-                size={24}
-                onPress={() => {
-                  setName(product?.name || "");
-                  setIsEditingName(false);
-                }}
-                iconColor={theme.colors.error}
-                testID="cancel-name-button"
-              />
-            </View>
-          ) : (
-            <View style={styles.nameContainer} testID="name-container">
-              <Text variant="titleLarge" style={styles.title} testID="product-name">
-                {product?.name}
-              </Text>
-              <IconButton
-                icon="pencil"
-                size={24}
-                onPress={() => setIsEditingName(true)}
-                iconColor={theme.colors.primary}
-                testID="edit-name-button"
-              />
-            </View>
-          )}
-          <IconButton
-            icon="delete"
-            size={24}
-            onPress={handleDelete}
-            iconColor={theme.colors.error}
-            testID="delete-button"
-          />
-        </View>
+      <EditableName name={name} handleSave={handleNameUpdate} handleDelete={handleDelete}/>
 
         <Card style={styles.card}>
           <Card.Content>
@@ -240,9 +192,6 @@ export default function EditProductScreen() {
 
         <Card style={styles.card}>
           <Card.Content>
-            <Text variant="titleMedium" style={styles.subtitle}>
-              Quantidade Atual
-            </Text>
             <PaperTextInput
               label="Quantidade"
               value={quantity}
@@ -260,6 +209,31 @@ export default function EditProductScreen() {
               testID="update-button"
             >
               Atualizar Quantidade
+            </Button>
+          </Card.Content>
+        </Card>
+
+        
+        <Card style={styles.card}>
+          <Card.Content>
+
+            <PaperTextInput
+              label="Observações"
+              value={notes}
+              onChangeText={setNotes}
+              keyboardType="default"
+              style={styles.input}
+              mode="outlined"
+              testID="notes-input"
+            />
+            <Button
+              mode="contained"
+              onPress={handleUpdate}
+              style={styles.button}
+              disabled={!notes}
+              testID="update-button"
+            >
+              Atualizar Observações
             </Button>
           </Card.Content>
         </Card>

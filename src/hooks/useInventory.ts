@@ -1,4 +1,3 @@
-// hooks/useProducts.ts
 import { useState, useEffect, useCallback } from "react";
 import { getInventoryItems, updateInventoryItemOrder, saveInventoryHistorySnapshot } from "../database/database";
 import { sortProducts, SortOrder } from "../utils/sortUtils";
@@ -7,62 +6,62 @@ import { InventoryItem } from "../database/models";
 
 const searchSimilarityThreshold = 0.4;
 
-export default function useProducts(listId: number, sortOrder: SortOrder, searchQuery: string) {
-  const [products, setProducts] = useState<InventoryItem[]>([]);
+export default function useInventory(listId: number, sortOrder: SortOrder, searchQuery: string) {
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
 
   // --- Filtering Logic (memoized for performance) ---
-  const filteredProducts = useCallback(() => {
-    const filtered = products.filter((product) => {
-      const processedProductName = preprocessName(product.productName);
+  const filteredInventoryItems = useCallback(() => {
+    const filtered = inventoryItems.filter((inventoryItem: InventoryItem) => {
+      const processedInventoryItemName = preprocessName(inventoryItem.productName);
       const processedSearchQuery = preprocessName(searchQuery);
 
       if (!processedSearchQuery) {
         return true;
       }
 
-      const nameLength = processedProductName.length;
+      const nameLength = processedInventoryItemName.length;
       const queryLength = processedSearchQuery.length;
       const lengthThreshold = Math.ceil(nameLength * 0.5);
 
       if (queryLength < lengthThreshold) {
-        return processedProductName.includes(processedSearchQuery);
+        return processedInventoryItemName.includes(processedSearchQuery);
       }
 
-      const similarity = calculateSimilarity(processedProductName, processedSearchQuery);
+      const similarity = calculateSimilarity(processedInventoryItemName, processedSearchQuery);
       return similarity >= searchSimilarityThreshold;
     });
     return sortProducts(filtered, sortOrder, searchQuery); // Apply sort after filtering
-  }, [products, searchQuery, sortOrder]);
+  }, [inventoryItems, searchQuery, sortOrder]);
 
   // --- Load Products Logic ---
-  const loadProducts = useCallback(async () => {
+  const loadInventoryItems = useCallback(async () => {
     try {
       const loaded = await getInventoryItems(listId);
       console.log("Produtos carregados:", loaded);
-      setProducts(loaded);
+      setInventoryItems(loaded);
     } catch (err) {
       console.error("Erro ao carregar produtos:", err);
     }
   }, [listId]);
 
   useEffect(() => {
-    loadProducts();
-  }, [loadProducts]);
+    loadInventoryItems();
+  }, [loadInventoryItems]);
 
   // --- Product Order Handling Logic ---
   const handleProductOrderChange = useCallback(async (newOrder: InventoryItem[]) => {
-    setProducts(newOrder); // Update UI immediately
+    setInventoryItems(newOrder); // Update UI immediately
     try {
       const updates = newOrder.map((inventoryItem, index) => ({
         id: inventoryItem.id,
-        order: index,
+        sortOrder: index,
       }));
       await updateInventoryItemOrder(updates);
     } catch (error) {
       console.error("Erro ao reordenar produtos:", error);
-      loadProducts(); // Reload from DB if update fails
+      loadInventoryItems(); // Reload from DB if update fails
     }
-  }, [loadProducts]);
+  }, [loadInventoryItems]);
 
   // Optionally, you could expose a way for useProduct to directly update the `products` state here
   // For instance, `updateProductState = (id, newQuantity) => { setProducts(prev => prev.map(...)) }`
@@ -70,10 +69,10 @@ export default function useProducts(listId: number, sortOrder: SortOrder, search
   // For deletion, `loadProducts` is definitely the way to go for now, as `useProduct` won't know about `filteredProducts`
 
   return {
-    products, // Keep products for DraggableFlatList extraData
-    filteredProducts: filteredProducts(), // Call the memoized function
-    setProducts, // Potentially useful if external state manipulation is needed (e.g., import)
-    loadProducts, // Expose for manual refresh
+    inventoryItems, // Keep products for DraggableFlatList extraData
+    filteredInventoryItems: filteredInventoryItems(), // Call the memoized function
+    setInventoryItems, // Potentially useful if external state manipulation is needed (e.g., import)
+    loadInventoryItems, // Expose for manual refresh
     handleProductOrderChange,
     saveInventoryHistorySnapshot, 
   };

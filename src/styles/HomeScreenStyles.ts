@@ -130,7 +130,7 @@ export const createHomeScreenStyles = (theme: MD3Theme) => StyleSheet.create<Sty
     position: "absolute", 
     margin: 16, 
     right: 0, 
-    bottom: 16 
+    bottom: 0 
   },
   modalOverlay: {
     flex: 1,

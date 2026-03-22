@@ -6,11 +6,13 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StyleSheet } from 'react-native';
 import { initializeDatabase } from './src/database/database';
-import HomeScreen from './src/screens/HomeScreen';
+import MainScreen from './src/screens/MainScreen';
 import AddProductScreen from './src/screens/AddProductScreen';
-import EditProductScreen from './src/screens/EditProductScreen';
-import ListsScreen from './src/screens/ListsScreen';
+import AddInventoryItemScreen from './src/screens/AddInventoryItemScreen';
+import EditInventoryItemScreen from './src/screens/EditInventoryItemScreen';
 import AddListScreen from './src/screens/AddListScreen';
+import AddProductToShoppingListScreen from './src/screens/AddProductToShoppingListScreen';
+import { ListProvider } from './src/context/ListContext';
 
 const Stack = createNativeStackNavigator();
 
@@ -32,48 +34,55 @@ export default function App() {
     <GestureHandlerRootView style={styles.container}>
       <SafeAreaProvider>
         <PaperProvider theme={theme}>
-          <NavigationContainer>
-            <Stack.Navigator
-              initialRouteName="Lists"
-              screenOptions={{
-                headerStyle: {
-                  backgroundColor: theme.colors.primary,
-                },
-                headerTintColor: '#fff',
-                headerTitleStyle: {
-                  fontWeight: 'bold',
-                },
-              }}
-            >
-            <Stack.Screen 
-              name="Home" 
-              component={HomeScreen} 
-              options={{ title: 'Lista de Produção', headerShown : false }}
-            />
-            
-            <Stack.Screen 
-                name="Lists" 
-                component={ListsScreen} 
-                options={{ title: 'Listas', headerShown : false }}
-              />
-             <Stack.Screen 
-                name="AddProduct" 
-                component={AddProductScreen} 
-                options={{ title: 'Adicionar Produto', headerShown: false }}
-              />
-              <Stack.Screen 
-                name="EditProduct" 
-                component={EditProductScreen} 
-                // header was interfering with the other views placement
-                options={{ title: 'Editar Produto', headerShown: false }}
-              />
-              <Stack.Screen
-              name="AddList"
-              options={{title: 'Adicionar Lista'}}
-              component={AddListScreen}
-              />
-            </Stack.Navigator>
-          </NavigationContainer>
+          <ListProvider initialListId={1}>
+            <NavigationContainer>
+              <Stack.Navigator
+                initialRouteName="MainTabs"
+                screenOptions={{
+                  headerStyle: {
+                    backgroundColor: theme.colors.primary,
+                  },
+                  headerTintColor: '#fff',
+                  headerTitleStyle: {
+                    fontWeight: 'bold',
+                  },
+                }}
+              >
+                <Stack.Screen 
+                  name="MainTabs" 
+                  component={MainScreen}
+                  options={{ headerShown: false }}
+                  initialParams={{ listId: 1 }}
+                />
+                
+                <Stack.Screen 
+                  name="AddProduct" 
+                  component={AddProductScreen} 
+                  options={{ title: 'Adicionar Produto', headerShown: false }}
+                />
+                <Stack.Screen 
+                  name="EditInventoryItem" 
+                  component={EditInventoryItemScreen}  
+                  options={{ title: 'Editar Produto', headerShown: false }}
+                />
+                <Stack.Screen
+                  name="AddList"
+                  options={{title: 'Adicionar Lista'}}
+                  component={AddListScreen}
+                />
+                <Stack.Screen
+                  name="AddInventoryItem"
+                  options={{title: 'Adicionar Produto ao Estoque', headerShown: false}}
+                  component={AddInventoryItemScreen}
+                />
+                <Stack.Screen
+                  name="AddProductToShoppingList"
+                  options={{ title: 'Adicionar à Lista de Compras', headerShown: false }}
+                  component={AddProductToShoppingListScreen}
+                />
+              </Stack.Navigator>
+            </NavigationContainer>
+          </ListProvider>
         </PaperProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

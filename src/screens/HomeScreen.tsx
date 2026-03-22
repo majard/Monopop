@@ -7,36 +7,35 @@ import {
 } from "react-native-paper";
 import {
   useNavigation,
-  useRoute,
   useFocusEffect,
 } from "@react-navigation/native";
 import {
   NativeStackNavigationProp,
-  NativeStackScreenProps,
 } from "@react-navigation/native-stack";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { RootStackParamList } from "../types/navigation";
 import { createHomeScreenStyles } from "../styles/HomeScreenStyles";
 import { generateStockListText } from "../utils/stringUtils";
 import ImportModal from "../components/ImportModal";
-import useProducts from "../hooks/useProducts";
+import useInventory from "../hooks/useInventory";
 import { SortOrder } from "../utils/sortUtils";
 import SearchBar from "../components/SearchBar";
 import { useList } from "../hooks/useList";
 import { SortMenu } from "../components/SortMenu";
 import { EditableName } from "../components/EditableName";
 import { AddItemButton } from "../components/AddItemButton";
-import ProductList from "../components/ProductList";
+import InventoryList from "../components/InventoryList";
+import { saveInventoryHistorySnapshot } from "../database/database";
+import { useListContext } from "../context/ListContext";
 
 type HomeScreenNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
-  "Home"
+  "MainTabs"
 >;
-type HomeScreenProps = NativeStackScreenProps<RootStackParamList, "Home">;
 
 export default function HomeScreen() {
-  const route = useRoute<HomeScreenProps["route"]>();
-  const listId = route.params?.listId ?? 1;
+  const { listId } = useListContext();
+  console.log('HomeScreen listId:', listId);
 
   const navigation = useNavigation<HomeScreenNavigationProp>();
   const theme = useTheme();
@@ -47,19 +46,14 @@ export default function HomeScreen() {
   const [searchQuery, setSearchQuery] = useState("");
 
   const {
-    products,
-    loadProducts,
-    saveProductHistory,
+    inventoryItems,
+    loadInventoryItems,
+    saveInventoryHistorySnapshot,
     handleProductOrderChange,
-    filteredProducts,
-  } = useProducts(listId, sortOrder, searchQuery);
+    filteredInventoryItems,
+  } = useInventory(listId, sortOrder, searchQuery);
 
-  const {
-    listName,
-    handleListNameSave,
-    handleListDelete,
-  } = useList(listId);
-
+  const { listName, handleListNameSave, handleListDelete } = useList(listId);
 
   const handleImportButtonClick = useCallback(() => {
     setIsImportModalVisible(true);
@@ -74,16 +68,25 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      loadProducts();
-    }, [sortOrder, loadProducts])
+      loadInventoryItems();
+    }, [sortOrder, loadInventoryItems])
   );
 
   const saveAndCopyStockList = async () => {
     try {
-      await saveProductHistory();
-      const text = generateStockListText(products);
+      for (const inventoryItem of inventoryItems) {
+        console.log(
+          "\n\n\nSaving history snapshot for inventory item:",
+          inventoryItem.id
+        );
+        await saveInventoryHistorySnapshot(inventoryItem.id);
+      }
+      const text = generateStockListText(inventoryItems);
       Clipboard.setStringAsync(text);
-      Alert.alert("Sucesso", "Lista de estoque copiada para a área de transferência!");
+      Alert.alert(
+        "Sucesso",
+        "Lista de estoque copiada para a área de transferência!"
+      );
     } catch (error) {
       console.error("Erro ao salvar histórico e copiar lista:", error);
       Alert.alert("Erro", "Não foi possível copiar a lista de estoque.");
@@ -126,16 +129,19 @@ export default function HomeScreen() {
           <SortMenu setSortOrder={handleSortOrderChange} />
         </View>
       </View>
-      
-      <ProductList
-        products={filteredProducts}
-        handleProductOrderChange={handleProductOrderChange}
+
+      <InventoryList
+        inventoryItems={filteredInventoryItems}
+        handleInventoryItemOrderChange={handleProductOrderChange}
       />
-      <AddItemButton onPress={() => navigation.navigate("AddProduct", { listId })} label="Adicionar Produto" />
+      <AddItemButton
+        onPress={() => navigation.navigate("AddInventoryItem", { listId })}
+        label="Adicionar Produto ao Estoque"
+      />
       <ImportModal
         isImportModalVisible={isImportModalVisible}
         setIsImportModalVisible={setIsImportModalVisible}
-        loadProducts={loadProducts}
+        loadItems={loadInventoryItems}
         listId={listId}
       />
     </SafeAreaView>
