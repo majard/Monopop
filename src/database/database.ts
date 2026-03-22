@@ -12,36 +12,35 @@ export const initializeDatabase = async (
   if (initPromise) return initPromise;
 
   initPromise = (async () => {
-    db = await SQLite.openDatabaseAsync(databaseName);
-
-    await db.execAsync('PRAGMA journal_mode = WAL;');
-    await db.execAsync('PRAGMA synchronous = NORMAL;');
-    await db.execAsync('PRAGMA temp_store = memory;');
-    await db.execAsync('PRAGMA cache_size = -8000;');
-    await db.execAsync('PRAGMA foreign_keys = ON;');
-
-
     try {
+      db = await SQLite.openDatabaseAsync(databaseName);
+
+      await db.execAsync('PRAGMA journal_mode = WAL;');
+      await db.execAsync('PRAGMA synchronous = NORMAL;');
+      await db.execAsync('PRAGMA temp_store = memory;');
+      await db.execAsync('PRAGMA cache_size = -8000;');
+      await db.execAsync('PRAGMA foreign_keys = ON;');
+
       const result = db.getFirstSync<{ user_version: number }>('PRAGMA user_version;');
       const currentVersion = result ? result.user_version : 0;
 
       if (currentVersion < CURRENT_DATABASE_VERSION) {
         console.log(`Migrating database from v${currentVersion} to v${CURRENT_DATABASE_VERSION}...`);
         await runMigrations(db, currentVersion);
-
-        // Reopen to clear any cached prepared statements
         db = await SQLite.openDatabaseAsync(databaseName);
         await db.execAsync('PRAGMA foreign_keys = ON;');
         console.log('Database migration complete.');
       } else {
         console.log('Database is already up to date.');
       }
+
+      return db;
     } catch (error) {
+      db = null;
+      initPromise = null;
       console.error("Error during database initialization or migration:", error);
       throw error;
     }
-
-    return db;
   })();
 
   return initPromise;
