@@ -39,35 +39,40 @@ export function ConfirmInvoiceModal({
   const [defaultStoreId, setDefaultStoreId] = useState<number | null>(null);
 
   useEffect(() => {
+    if (!visible) return;
+
     const loadSettings = async () => {
-      const [storeMode, storeId] = await Promise.all([
-        getSetting('defaultStoreMode'),
-        getSetting('defaultStoreId')
-      ]);
-      
-      setDefaultStoreMode((storeMode as 'ask' | 'last' | 'fixed') || 'ask');
-      setDefaultStoreId(storeId ? parseInt(storeId) : null);
-    };
-    
-    loadSettings();
-  }, []);
+      try {
+        const [storeMode, storeId] = await Promise.all([
+          getSetting('defaultStoreMode'),
+          getSetting('defaultStoreId')
+        ]);
 
-  useEffect(() => {
-    if (visible) {
-      let initialStoreName = defaultStoreName || "";
-      
-      // Use default store mode to determine initial store
-      if (defaultStoreMode !== 'ask' && defaultStoreId) {
-        const defaultStore = stores.find(s => s.id === defaultStoreId);
-        if (defaultStore) {
-          initialStoreName = defaultStore.name;
+        const mode = (storeMode as 'ask' | 'last' | 'fixed') || 'ask';
+        const id = storeId ? parseInt(storeId) : null;
+
+        setDefaultStoreMode(mode);
+        setDefaultStoreId(id);
+
+        let initialStoreName = defaultStoreName || "";
+
+        if (mode === 'fixed' && id !== null) {
+          const defaultStore = stores.find(s => s.id === id);
+          if (defaultStore) initialStoreName = defaultStore.name;
         }
-      }
-      
-      setStoreName(initialStoreName);
-    }
-  }, [visible, defaultStoreName, defaultStoreMode, defaultStoreId, stores]);
+        // 'last': defaultStoreName already carries last store
+        // 'ask': start with defaultStoreName fallback or empty
 
+        setStoreName(initialStoreName);
+      } catch (error) {
+        console.error('Failed to load store settings:', error);
+        setStoreName(defaultStoreName || "");
+      }
+    };
+
+    loadSettings();
+  }, [visible, defaultStoreName, stores]);
+  
   const normalizedInput = storeName.trim().toLowerCase();
 
   const suggestions = useMemo(() => {
