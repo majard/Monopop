@@ -1214,10 +1214,14 @@ export const updateProductCategory = async (productId: number, categoryId: numbe
 export const updateCategoryName = async (id: number, name: string): Promise<void> => {
   const db = getDb();
   const now = new Date().toISOString();
+  const normalized = name.trim();
+  if (!normalized) {
+    throw new Error("Category name is required");
+  }
   try {
     await db.runAsync(
       `UPDATE categories SET name = ?, updatedAt = ? WHERE id = ?`,
-      [name.trim(), now, id]
+      [normalized, now, id]
     );
   } catch (error) {
     console.error("Error updating category name:", error);
@@ -1237,10 +1241,14 @@ export const deleteCategory = async (id: number): Promise<void> => {
 
 export const updateStoreName = async (id: number, name: string): Promise<void> => {
   const db = getDb();
+  const normalized = normalizeStoreName(name);
+  if (!normalized) {
+    throw new Error("Store name is required");
+  }
   try {
     await db.runAsync(
       `UPDATE stores SET name = ? WHERE id = ?`,
-      [normalizeStoreName(name), id]
+      [normalized, id]
     );
   } catch (error) {
     console.error("Error updating store name:", error);
