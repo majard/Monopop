@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ScrollView } from 'react-native';
 import {
   Card,
@@ -21,7 +21,7 @@ import { getDb } from '../database/database';
 
 type HistoryScreenNavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
-type HistoryEvent = 
+type HistoryEvent =
   | { type: 'purchase'; id: number; date: string; store: string; total: number; items: InvoiceItemDetail[] }
   | { type: 'inventory'; id: number; date: string; changes: InventoryChange[] };
 
@@ -60,7 +60,7 @@ export default function HistoryScreen() {
   const [selectedPeriod, setSelectedPeriod] = useState<'all' | 'month' | 'week'>('all');
   const navigation = useNavigation<HistoryScreenNavigationProp>();
   const theme = useTheme();
-  
+
   // Use inventory hook for fuzzy search and finding items
   const { findByProductId, inventoryItems, filteredInventoryItems } = useInventory(listId, 'alphabetical', searchQuery);
 
@@ -68,7 +68,7 @@ export default function HistoryScreen() {
   const loadHistory = async () => {
     try {
       const db = getDb();
-      
+
       // Load invoices (purchases) for this list
       const invoices = await db.getAllAsync<Invoice & { storeName: string }>(
         `SELECT i.*, s.name as storeName 
@@ -88,7 +88,7 @@ export default function HistoryScreen() {
              WHERE ii.invoiceId = ?`,
             [invoice.id]
           );
-          
+
           return {
             type: 'purchase',
             id: invoice.id,
@@ -120,12 +120,12 @@ export default function HistoryScreen() {
 
       // Group inventory saves by date
       const inventoryEventsMap = new Map<string, InventoryChange[]>();
-      
+
       for (const entry of inventoryHistory) {
         if (!inventoryEventsMap.has(entry.date)) {
           inventoryEventsMap.set(entry.date, []);
         }
-        
+
         // Get previous quantity to calculate change
         const prevEntry = await db.getFirstAsync<{ quantity: number }>(
           `SELECT quantity FROM inventory_history 
@@ -133,10 +133,10 @@ export default function HistoryScreen() {
            ORDER BY date DESC LIMIT 1`,
           [entry.inventoryItemId, entry.date]
         );
-        
+
         const previousQuantity = prevEntry?.quantity ?? 0;
         const change = entry.quantity - previousQuantity;
-        
+
         if (change !== 0) {
           inventoryEventsMap.get(entry.date)!.push({
             id: entry.inventoryItemId,
@@ -164,24 +164,24 @@ export default function HistoryScreen() {
       );
 
       setEvents(allEvents);
-      
+
       // Calculate month summary
       const now = new Date();
       const currentMonth = now.getMonth();
       const currentYear = now.getFullYear();
-      
+
       const thisMonthPurchases = purchaseEvents.filter(e => {
         const date = new Date(e.date);
         return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
       });
 
       const totalSpent = thisMonthPurchases.reduce((sum, e) => sum + e.total, 0);
-      
+
       const storeCount = new Map<string, number>();
       thisMonthPurchases.forEach(e => {
         storeCount.set(e.store, (storeCount.get(e.store) || 0) + 1);
       });
-      
+
       let mostUsedStore: string | null = null;
       let maxCount = 0;
       storeCount.forEach((count, store) => {
@@ -203,10 +203,13 @@ export default function HistoryScreen() {
     }
   };
 
-  const applyFilter = (allEvents: HistoryEvent[], query: string, period: 'all' | 'month' | 'week') => {
+  const applyFilter = useCallback((
+    allEvents: HistoryEvent[],
+    query: string,
+    period: 'all' | 'month' | 'week'
+  ) => {
     let filtered = [...allEvents];
-    
-    // Apply period filter
+
     const now = new Date();
     if (period === 'month') {
       const currentMonth = now.getMonth();
@@ -219,12 +222,9 @@ export default function HistoryScreen() {
       const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
       filtered = filtered.filter(e => new Date(e.date) >= oneWeekAgo);
     }
-    
-    // Apply search filter using fuzzy matching from useInventory
+
     if (query.trim()) {
-      // Get the set of product IDs that match the fuzzy search
       const matchedProductIds = new Set(filteredInventoryItems.map(item => item.productId));
-      
       filtered = filtered.filter(e => {
         if (e.type === 'purchase') {
           return e.store.toLowerCase().includes(query.toLowerCase()) ||
@@ -234,9 +234,9 @@ export default function HistoryScreen() {
         }
       });
     }
-    
+
     setFilteredEvents(filtered);
-  };
+  }, [filteredInventoryItems]);
 
   useFocusEffect(
     useCallback(() => {
@@ -244,14 +244,16 @@ export default function HistoryScreen() {
     }, [listId])
   );
 
+  useEffect(() => {
+    applyFilter(events, searchQuery, selectedPeriod);
+  }, [events, searchQuery, selectedPeriod, applyFilter]);
+
   const handleSearch = (query: string) => {
     setSearchQuery(query);
-    applyFilter(events, query, selectedPeriod);
   };
 
   const handlePeriodChange = (period: 'all' | 'month' | 'week') => {
     setSelectedPeriod(period);
-    applyFilter(events, searchQuery, period);
   };
 
   const toggleExpand = (eventId: number) => {
@@ -259,7 +261,7 @@ export default function HistoryScreen() {
   };
 
   const formatCurrency = (value: number) => `R$ ${value.toFixed(2).replace('.', ',')}`;
-  
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -276,7 +278,7 @@ export default function HistoryScreen() {
 
   const renderEvent = ({ item }: { item: HistoryEvent }) => {
     const isExpanded = expandedEventId === item.id;
-    
+
     if (item.type === 'purchase') {
       return (
         <Card style={styles.eventCard}>
@@ -299,7 +301,7 @@ export default function HistoryScreen() {
               <Text style={styles.itemCount}>{item.items.length} itens</Text>
             </Card.Content>
           </TouchableOpacity>
-          
+
           {isExpanded && (
             <Card.Content style={styles.expandedContent}>
               {item.items.map((listItem) => (
@@ -341,7 +343,7 @@ export default function HistoryScreen() {
               <Text style={styles.itemCount}>{item.changes.length} alterações</Text>
             </Card.Content>
           </TouchableOpacity>
-          
+
           {isExpanded && (
             <Card.Content style={styles.expandedContent}>
               {item.changes.map((change) => (
@@ -372,12 +374,12 @@ export default function HistoryScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ContextualHeader 
+      <ContextualHeader
         listName={listName}
         onListNameSave={handleListNameSave}
         onListDelete={handleListDelete}
       />
-      
+
       <View style={styles.summaryCard}>
         <Text style={styles.summaryTitle}>Este Mês</Text>
         <View style={styles.summaryRow}>
@@ -422,7 +424,7 @@ export default function HistoryScreen() {
             Esta Semana
           </Chip>
         </ScrollView>
-        
+
         <Searchbar
           placeholder="Buscar por produto, loja..."
           onChangeText={handleSearch}
