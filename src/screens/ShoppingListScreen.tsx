@@ -399,20 +399,20 @@ export default function ShoppingListScreen() {
   };
 
   const handleStoreSelect = useCallback((storeId: number) => {
-  setSelectedStoreId(storeId);
-  const selectedStore = stores.find(s => s.id === storeId);
-  setDefaultStoreName(selectedStore?.name ?? "");
-  setShoppingListItems(prev => {
-    if (prev.length > 0) {
-      loadPricesAsync(prev, storeId);
-    }
-    return prev;
-  });
-}, [stores, loadPricesAsync]);
+    setSelectedStoreId(storeId);
+    const selectedStore = stores.find(s => s.id === storeId);
+    setDefaultStoreName(selectedStore?.name ?? "");
+    setShoppingListItems(prev => {
+      if (prev.length > 0) {
+        loadPricesAsync(prev, storeId);
+      }
+      return prev;
+    });
+  }, [stores, loadPricesAsync]);
 
   const handleCreateStore = useCallback(async (name: string) => {
     const id = await addStore(name);
-    await loadStores(); 
+    await loadStores();
     handleStoreSelect(id);
   }, [loadStores, handleStoreSelect]);
 
@@ -1212,18 +1212,19 @@ export default function ShoppingListScreen() {
                 icon: "cart-remove",
                 label: "Limpar carrinho",
                 onPress: async () => {
-                  const unchecked = shoppingListItems.map((i) => ({
-                    ...i,
-                    checked: false,
-                  }));
-                  setShoppingListItems(unchecked);
-                  await Promise.all(
-                    shoppingListItems
-                      .filter((i) => i.checked)
-                      .map((i) =>
-                        updateShoppingListItem(i.id, { checked: false }),
-                      ),
-                  );
+                  const previous = shoppingListItems;  // snapshot
+                  const unchecked = shoppingListItems.map((i) => ({ ...i, checked: false }));
+                  setShoppingListItems(unchecked);     // optimistic
+                  try {
+                    await Promise.all(
+                      previous
+                        .filter((i) => i.checked)
+                        .map((i) => updateShoppingListItem(i.id, { checked: false }))
+                    );
+                  } catch (error) {
+                    setShoppingListItems(previous);    // revert
+                    console.error('Erro ao limpar carrinho:', error);
+                  }
                 },
               },
             ].map((action) => (

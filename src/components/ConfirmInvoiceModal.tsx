@@ -29,9 +29,22 @@ interface ConfirmInvoiceModalProps {
   loading?: boolean;
   updateReferencePrices?: boolean;
 }
+
+export const ConfirmInvoiceModal: React.FC<ConfirmInvoiceModalProps> = ({
+  visible,
+  stores,
+  defaultStoreName,
+  total,
+  onConfirm,
+  onDismiss,
+  loading = false,
+  updateReferencePrices = true,
+}) => {
+  const theme = useTheme();
+  const [storeName, setStoreName] = useState('');
   const [date, setDate] = useState(new Date());
   const [datePickerVisible, setDatePickerVisible] = useState(false);
-  const [updateRef, setUpdateRef] = useState(true);
+  const [updateRef, setUpdateRef] = useState(updateReferencePrices);
 
   useEffect(() => {
     if (visible) {
