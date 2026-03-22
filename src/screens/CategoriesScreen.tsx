@@ -64,12 +64,17 @@ export default function CategoriesScreen() {
   };
 
   const getAssociations = async (category: Category) => {
-    const { productCount } = await getCategoryAssociations(category.id);
-    let message = '';
-    if (productCount > 0) {
-      message = `Esta categoria possui ${productCount} produto(s) associado(s). Deseja realmente excluir?`;
+    try {
+      const { productCount } = await getCategoryAssociations(category.id);
+      let message = '';
+      if (productCount > 0) {
+        message = `Esta categoria possui ${productCount} produto(s) associado(s). Deseja realmente excluir?`;
+      }
+      return { count: productCount, message };
+    } catch (error) {
+      console.error('Error getting category associations:', error);
+      return { count: 0, message: '' };
     }
-    return { count: productCount, message };
   };
 
   return (

@@ -39,11 +39,12 @@ export default function ListsScreen() {
     }, [])
   );
 
-  const handleListSelect = async (listId: number) => {
+  const handleListSelect = (listId: number) => {
     setListId(listId);
-    // Save last opened list
-    await setSetting('lastOpenedListId', listId.toString());
     navigation.navigate("MainTabs", { listId });
+    void setSetting('lastOpenedListId', listId.toString()).catch((error) => {
+      console.error("Erro ao salvar a última lista aberta:", error);
+    });
   };
 
   return (

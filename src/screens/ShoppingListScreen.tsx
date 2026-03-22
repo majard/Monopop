@@ -172,7 +172,9 @@ export default function ShoppingListScreen() {
       i.id === item.id ? { ...i, checked: !item.checked } : i
     ));
     try {
-      await updateShoppingListItem(item.id, { checked: !item.checked });
+try {
+  await updateShoppingListItem(item.id, { checked: !item.checked });
+} catch (error) {
     } catch (error) {
       // revert on failure
       setShoppingListItems(prev => prev.map(i =>
