@@ -13,6 +13,8 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../types/navigation";
 import { getEmojiForList } from "../utils/stringUtils";
 import { useListContext } from "../context/ListContext";
+import { EmojiAvatar } from "../components/EmojiAvatar";
+import { ScreenContainer } from "../components/ScreenContainer";
 
 type ListItem = {
   id: number;
@@ -46,75 +48,75 @@ export default function ListsScreen() {
   };
 
   return (
-    <View
-      style={[styles.container, { backgroundColor: theme.colors.background }]}
-    >
-      <View style={styles.header}>
-        <Text style={[styles.title, { color: theme.colors.primary }]}>
-          Suas Listas
-        </Text>
-        <IconButton
-          icon="cog"
-          size={28}
-          onPress={() => navigation.navigate('Config')}
-          iconColor={theme.colors.primary}
+    <ScreenContainer>
+      <View
+        style={[styles.container, { backgroundColor: theme.colors.background }]}
+      >
+        <View style={styles.header}>
+          <Text style={[styles.title, { color: theme.colors.primary }]}>
+            Suas Listas
+          </Text>
+          <IconButton
+            icon="cog"
+            size={28}
+            onPress={() => navigation.navigate('Config')}
+            iconColor={theme.colors.primary}
+          />
+        </View>
+        {lists.length === 0 ? (
+          <View style={localStyles.emptyState}>
+            <Text style={localStyles.emptyStateTitle}>
+              Nenhuma lista encontrada
+            </Text>
+            <Text style={localStyles.emptyStateText}>
+              Crie sua primeira lista para começar a organizar seus produtos
+            </Text>
+            <Button
+              mode="contained"
+              onPress={() => navigation.navigate("AddList")}
+              style={localStyles.emptyStateButton}
+              icon="plus"
+            >
+              Criar Primeira Lista
+            </Button>
+          </View>
+        ) : (
+          <FlatList
+            data={lists}
+            renderItem={({ item }) => (
+              <Card
+                key={item.id}
+                style={{ marginBottom: 16, borderRadius: 12, elevation: 2 }}
+                onPress={() => handleListSelect(item.id)}
+              >
+                <Card.Content
+                  style={{ flexDirection: "row", alignItems: "center" }}
+                >
+                  <EmojiAvatar emoji={getEmojiForList(item.name)} size="large" />
+                  <Text
+                    style={{
+                      fontSize: 18,
+                      flex: 1,
+                      color: theme.colors.onSurface,
+                    }}
+                  >
+                    {item.name}
+                  </Text>
+                  <IconButton icon="chevron-right" size={28} />
+                </Card.Content>
+              </Card>
+            )}
+            keyExtractor={(item) => item.id.toString()}
+            contentContainerStyle={{ padding: 16, paddingBottom: 64 }}
+          />
+        )}
+        <FAB
+          icon="plus"
+          style={styles.fab}
+          onPress={() => navigation.navigate("AddList")}
         />
       </View>
-      {lists.length === 0 ? (
-        <View style={localStyles.emptyState}>
-          <Text style={localStyles.emptyStateTitle}>
-            Nenhuma lista encontrada
-          </Text>
-          <Text style={localStyles.emptyStateText}>
-            Crie sua primeira lista para começar a organizar seus produtos
-          </Text>
-          <Button
-            mode="contained"
-            onPress={() => navigation.navigate("AddList")}
-            style={localStyles.emptyStateButton}
-            icon="plus"
-          >
-            Criar Primeira Lista
-          </Button>
-        </View>
-      ) : (
-        <FlatList
-          data={lists}
-          renderItem={({ item }) => (
-            <Card
-              key={item.id}
-              style={{ marginBottom: 16, borderRadius: 12, elevation: 2 }}
-              onPress={() => handleListSelect(item.id)}
-            >
-              <Card.Content
-                style={{ flexDirection: "row", alignItems: "center" }}
-              >
-                <Text style={{ fontSize: 28, marginRight: 16 }}>
-                  {getEmojiForList(item.name)}
-                </Text>
-                <Text
-                  style={{
-                    fontSize: 18,
-                    flex: 1,
-                    color: theme.colors.onSurface,
-                  }}
-                >
-                  {item.name}
-                </Text>
-                <IconButton icon="chevron-right" size={28} />
-              </Card.Content>
-            </Card>
-          )}
-          keyExtractor={(item) => item.id.toString()}
-          contentContainerStyle={{ padding: 16, paddingBottom: 64 }}
-        />
-      )}
-      <FAB
-        icon="plus"
-        style={styles.fab}
-        onPress={() => navigation.navigate("AddList")}
-      />
-    </View>
+    </ScreenContainer>
   );
 }
 

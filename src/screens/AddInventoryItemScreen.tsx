@@ -1,298 +1,437 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Text, TouchableOpacity, FlatList, Pressable } from 'react-native';
-import { TextInput as PaperTextInput, Button, useTheme, List, Chip, Surface } from 'react-native-paper';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { View, FlatList, SectionList, Pressable, Alert } from 'react-native';
+import { Surface, Text, useTheme, FAB, Chip } from 'react-native-paper';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
-import { addInventoryItem, addProduct, getProducts } from '../database/database';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  getInventoryItems,
+  addInventoryItem,
+  addProduct,
+  getProducts,
+  deleteInventoryItem,
+} from '../database/database';
 import { RootStackParamList } from '../types/navigation';
-import { useHeaderHeight } from '@react-navigation/elements';
 import { Product } from '../database/models';
+import { createHomeScreenStyles } from '../styles/HomeScreenStyles';
+import SearchBar from '../components/SearchBar';
+import { sortItems, SortOrder } from '../utils/sortUtils';
+import { preprocessName, calculateSimilarity } from '../utils/similarityUtils';
+import { useListContext } from '../context/ListContext';
+import { ProductSearchRow } from '../components/ProductSearchRow';
+import ContextualHeader from '../components/ContextualHeader';
+import { useList } from '../hooks/useList';
+import { SortMenu } from '../components/SortMenu';
+import { useInventoryItem } from '../hooks/useInventoryItem';
 
-type AddProductScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'AddProduct'>;
-type AddProductScreenProps = NativeStackScreenProps<RootStackParamList, 'AddProduct'>;
+const searchSimilarityThreshold = 0.4;
 
-export default function AddInventoryItemScreen() {
-  const headerHeight = useHeaderHeight();
+type AddInventoryItemScreenProps = NativeStackScreenProps<RootStackParamList, 'AddInventoryItem'>;
 
-  const route = useRoute<AddProductScreenProps["route"]>();
-  const listId = route.params?.listId ?? 1;
-  const [productName, setProductName] = useState('');
-  const [quantity, setQuantity] = useState('0');
-  const [products, setProducts] = useState<Product[]>([]);
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const navigation = useNavigation<AddProductScreenNavigationProp>();
-  const theme = useTheme();
-
-  // Load existing products on component mount
-  useEffect(() => {
-    loadProducts();
-  }, []);
-
-  const loadProducts = async () => {
-    try {
-      const existingProducts = await getProducts();
-      setProducts(existingProducts);
-    } catch (error) {
-      console.error('Erro ao carregar produtos:', error);
-    }
-  };
-
-  // Filter products based on input
-  const filteredProducts = useMemo(() => {
-    if (!productName.trim()) return [];
-    
-    return products.filter(product =>
-      product.name.toLowerCase().includes(productName.toLowerCase())
-    ).slice(0, 5); // Limit to 5 suggestions
-  }, [products, productName]);
-
-  const handleProductSelect = (product: Product) => {
-    setSelectedProduct(product);
-    setProductName(product.name);
-    setShowSuggestions(false);
-  };
-
-  const handleProductNameChange = (text: string) => {
-    setProductName(text);
-    setSelectedProduct(null);
-    setShowSuggestions(text.length > 0);
-  };
-
-  const handleSubmit = async () => {    
-    if (!productName.trim()) {
-      console.error('Nome do produto é obrigatório');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      let productId: number;
-
-      if (selectedProduct) {
-        // Use existing product
-        productId = selectedProduct.id;
-      } else {
-        // Create new product
-        productId = await addProduct(productName.trim());
-      }
-
-      await addInventoryItem(
-        listId,
-        productId,
-        parseInt(quantity, 10), 
-        0,
-        ""
-      );
-      navigation.goBack();
-    } catch (error) {
-      console.error('Erro ao adicionar produto:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const renderProductSuggestion = ({ item }: { item: Product }) => (
-    <Pressable
-      onPressIn={() => handleProductSelect(item)}
-      style={styles.suggestionItem}
-    >
-      <List.Item
-        title={item.name}
-        left={props => <List.Icon {...props} icon="package-variant" />}
-        right={props => <List.Icon {...props} icon="plus" />}
-        style={styles.suggestionListItem}
-      />
-    </Pressable>
-  );
-
-  const isCreatingNew = !selectedProduct && productName.trim().length > 0;
-  const hasSuggestions = filteredProducts.length > 0 && showSuggestions;
-
-  return (
-    <KeyboardAvoidingView 
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={headerHeight}
-      style={styles.container}
-    >
-      <View 
-        style={styles.scrollContent}
-      >
-        <Surface style={styles.card}>
-          <Text style={styles.title}>Adicionar Item ao Inventário</Text>
-          
-          <View style={styles.inputContainer}>
-            <PaperTextInput
-              label="Nome do Produto"
-              value={productName}
-              onChangeText={handleProductNameChange}
-              onFocus={() => setShowSuggestions(productName.length > 0)}
-              style={styles.productInput}
-              mode="outlined"
-              autoFocus
-              blurOnSubmit={false}
-              returnKeyType="next"
-              testID="product-name-input"
-              right={
-                selectedProduct ? (
-                  <PaperTextInput.Icon 
-                    icon="check-circle" 
-                    color={theme.colors.primary}
-                  />
-                ) : isCreatingNew ? (
-                  <PaperTextInput.Icon 
-                    icon="plus-circle" 
-                    color={theme.colors.secondary}
-                  />
-                ) : null
-              }
-            />
-
-            {/* Product Suggestions */}
-            {hasSuggestions && (
-              <View style={styles.suggestionsContainer}>
-                <Text style={styles.suggestionsTitle}>Produtos Existentes:</Text>
-                <FlatList
-                  data={filteredProducts}
-                  renderItem={renderProductSuggestion}
-                  keyExtractor={(item) => item.id.toString()}
-                  style={styles.suggestionsList}
-                  nestedScrollEnabled
-                />
-              </View>
-            )}
-
-            {/* New Product Indicator */}
-            {isCreatingNew && !hasSuggestions && (
-              <View style={styles.newProductIndicator}>
-                <Chip 
-                  icon="plus" 
-                  mode="outlined"
-                  style={styles.newProductChip}
-                >
-                  Criar novo produto: "{productName}"
-                </Chip>
-              </View>
-            )}
-
-            {/* Selected Product Indicator */}
-            {selectedProduct && (
-              <View style={styles.selectedProductIndicator}>
-                <Chip 
-                  icon="check" 
-                  mode="flat"
-                  style={styles.selectedProductChip}
-                >
-                  Produto selecionado: {selectedProduct.name}
-                </Chip>
-              </View>
-            )}
-          </View>
-
-          <PaperTextInput
-            label="Quantidade"
-            value={quantity}
-            onChangeText={setQuantity}
-            keyboardType="numeric"
-            style={styles.quantityInput}
-            mode="outlined"
-            blurOnSubmit={true}
-            returnKeyType="done"
-            testID="product-quantity-input"
-          />
-
-          <Button
-            mode="contained"
-            onPress={handleSubmit}
-            style={styles.submitButton}
-            disabled={loading || !productName.trim()}
-            loading={loading}
-            testID="add-product-button"
-            icon="plus"
-          >
-            {selectedProduct ? 'Adicionar ao Inventário' : 'Criar Produto e Adicionar'}
-          </Button>
-        </Surface>
-      </View>
-    </KeyboardAvoidingView>
-  );
+interface JustAddedRowProps {
+  product: Product;
+  inventoryItemId: number;
+  onRemove: () => void;
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  scrollContent: {
-    flexGrow: 1,
-    padding: 16,
-  },
-  card: {
-    padding: 20,
-    borderRadius: 12,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 24,
-    textAlign: 'center',
-    color: '#333',
-  },
-  inputContainer: {
-    marginBottom: 16,
-  },
-  productInput: {
-    marginBottom: 8,
-  },
-  suggestionsContainer: {
-    marginTop: 8,
-  },
-  suggestionsTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
-    color: '#666',
-  },
-  suggestionsList: {
-    maxHeight: 200,
-  },
-  suggestionItem: {
-    backgroundColor: '#fff',
-    marginBottom: 4,
-    borderRadius: 8,
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-  },
-  suggestionListItem: {
-    paddingVertical: 8,
-  },
-  newProductIndicator: {
-    marginTop: 8,
-  },
-  newProductChip: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#e8f5e8',
-  },
-  selectedProductIndicator: {
-    marginTop: 8,
-  },
-  selectedProductChip: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#e3f2fd',
-  },
-  quantityInput: {
-    marginBottom: 24,
-  },
-  submitButton: {
-    paddingVertical: 8,
-  },
-});
+const JustAddedRow = ({ product, inventoryItemId, onRemove }: JustAddedRowProps) => {
+  const {
+    quantity,
+    updateInventoryItemQuantity,
+    startContinuousAdjustment,
+    stopContinuousAdjustment,
+  } = useInventoryItem({
+    inventoryItemId,
+    initialQuantity: 1,
+    productName: product.name,
+  });
+
+  return (
+    <ProductSearchRow
+      productName={product.name}
+      isOnList={true}
+      listQuantity={quantity}
+      onPlus={() => updateInventoryItemQuantity(quantity + 1)}
+      onMinus={() => {
+        if (quantity <= 1) onRemove();
+        else updateInventoryItemQuantity(quantity - 1);
+      }}
+      onStartContinuousIncrement={() => startContinuousAdjustment(true)}
+      onStartContinuousDecrement={() => startContinuousAdjustment(false)}
+      onStopContinuous={stopContinuousAdjustment}
+    />
+  );
+};
+
+export default function AddInventoryItemScreen() {
+  const route = useRoute<AddInventoryItemScreenProps['route']>();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const { listId: contextListId } = useListContext();
+  const listId = route.params?.listId ?? contextListId ?? 1;
+
+  const theme = useTheme();
+  const styles = createHomeScreenStyles(theme);
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const [existingInventoryProductIds, setExistingInventoryProductIds] = useState<Set<number>>(new Set());
+  const justAddedRef = useRef<Map<number, number>>(new Map()); // productId -> inventoryItemId
+  const [justAdded, setJustAdded] = useState<Map<number, number>>(new Map());
+  const confirmedRef = useRef(false);
+  const flatListRef = useRef<any>(null);
+  const [sortOrder, setSortOrder] = useState<SortOrder>('category');
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
+  const { listName, handleListNameSave, handleListDelete } = useList(listId);
+
+  const updateJustAdded = useCallback((productId: number, inventoryItemId: number | null) => {
+    if (inventoryItemId === null) {
+      justAddedRef.current.delete(productId);
+    } else {
+      justAddedRef.current.set(productId, inventoryItemId);
+    }
+    setJustAdded(new Map(justAddedRef.current));
+  }, []);
+
+  const loadData = useCallback(async () => {
+    const [products, inventory] = await Promise.all([
+      getProducts(),
+      getInventoryItems(listId),
+    ]);
+    setAllProducts(products);
+    const existingIds = new Set(inventory.map(item => item.productId));
+    setExistingInventoryProductIds(existingIds);
+  }, [listId]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+      if (justAddedRef.current.size === 0 || confirmedRef.current) return;
+
+      e.preventDefault();
+
+      Alert.alert(
+        'Sair sem confirmar?',
+        `Você adicionou ${justAddedRef.current.size} ${justAddedRef.current.size === 1 ? 'produto' : 'produtos'} ao estoque. Deseja mantê-los ou desfazer?`,
+        [
+          {
+            text: 'Desfazer',
+            style: 'destructive',
+            onPress: async () => {
+              await Promise.all(
+                Array.from(justAddedRef.current.values()).map(id => deleteInventoryItem(id))
+              );
+              navigation.dispatch(e.data.action);
+            },
+          },
+          {
+            text: 'Manter',
+            style: 'default',
+            onPress: () => navigation.dispatch(e.data.action),
+          },
+        ]
+      );
+    });
+
+    return unsubscribe;
+  }, [navigation]);
+
+  const filteredProducts = useMemo(() => {
+    const filtered = allProducts.filter((product) => {
+      // Exclude products already in inventory
+      if (existingInventoryProductIds.has(product.id)) return false;
+      // Exclude products just added in this session
+      if (justAdded.has(product.id)) return false;
+
+      // Apply search filter
+      const processedName = preprocessName(product.name);
+      const processedQuery = preprocessName(searchQuery);
+      if (!processedQuery) return true;
+      const nameLength = processedName.length;
+      const queryLength = processedQuery.length;
+      const lengthThreshold = Math.ceil(nameLength * 0.5);
+      if (queryLength < lengthThreshold) {
+        return processedName.includes(processedQuery);
+      }
+      return calculateSimilarity(processedName, processedQuery) >= searchSimilarityThreshold;
+    });
+    const mapped = filtered.map(p => ({
+      ...p,
+      productName: p.name,
+      sortOrder: p.sortOrder ?? 0,
+      categoryName: p.categoryName,
+    }));
+    return sortItems(mapped, sortOrder, searchQuery);
+  }, [allProducts, existingInventoryProductIds, justAdded, searchQuery, sortOrder]);
+
+  const toggleCategory = useCallback((category: string) => {
+    setCollapsedCategories(prev => {
+      const next = new Set(prev);
+      if (next.has(category)) next.delete(category);
+      else next.add(category);
+      return next;
+    });
+  }, []);
+
+  const categorySections = useMemo(() => {
+    const grouped = new Map<string, Product[]>();
+    for (const item of filteredProducts) {
+      const key = item.categoryName ?? 'Sem categoria';
+      if (!grouped.has(key)) grouped.set(key, []);
+      grouped.get(key)!.push(item);
+    }
+    return Array.from(grouped.entries()).map(([title, data]) => ({ title, data }));
+  }, [filteredProducts]);
+
+  const handleAddNewProduct = useCallback(async () => {
+    if (!searchQuery.trim()) return;
+    try {
+      const productId = await addProduct(searchQuery.trim());
+      const inventoryItemId = await addInventoryItem(listId, productId, 1);
+      await loadData();
+      updateJustAdded(productId, inventoryItemId);
+      setSearchQuery('');
+    } catch (error) {
+      console.error('Erro ao criar produto:', error);
+    }
+  }, [searchQuery, listId, updateJustAdded, loadData]);
+
+  const handlePlus = useCallback(async (product: Product) => {
+    
+    try {
+      const inventoryItemId = await addInventoryItem(listId, product.id, 1);
+      updateJustAdded(product.id, inventoryItemId);
+    } catch (error) {
+      console.error('Erro ao adicionar ao inventário:', error);
+    }
+  }, [listId, updateJustAdded]);
+
+  const renderJustAddedSection = useCallback(() => {
+    if (justAdded.size === 0) return null;
+    const items = allProducts.filter(p => justAdded.has(p.id));
+    return (
+      <View>
+        <Text variant="labelMedium" style={{
+          paddingHorizontal: 4,
+          paddingBottom: 8,
+          paddingTop: 4,
+          color: theme.colors.primary,
+          fontWeight: '700',
+          textTransform: 'uppercase',
+          fontSize: 11,
+        }}>
+          Adicionados agora
+        </Text>
+        {items.map(product => (
+          <JustAddedRow
+            key={product.id}
+            product={product}
+            inventoryItemId={justAdded.get(product.id)!}
+            onRemove={async () => {
+              const inventoryItemId = justAdded.get(product.id)!;
+              updateJustAdded(product.id, null);
+              await deleteInventoryItem(inventoryItemId);
+            }}
+          />
+        ))}
+        <View style={{
+          height: 1,
+          backgroundColor: theme.colors.outlineVariant,
+          marginVertical: 12,
+        }} />
+      </View>
+    );
+  }, [justAdded, allProducts, updateJustAdded, theme]);
+
+  const renderNewProductRow = useCallback(() => {
+    if (!searchQuery.trim()) return null;
+    return (
+      <Pressable onPress={handleAddNewProduct}>
+        <Surface style={{ borderRadius: 8, elevation: 1, marginBottom: 8 }}>
+          <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingVertical: 12,
+            paddingHorizontal: 16,
+            gap: 12,
+          }}>
+            <Chip icon="plus" mode="outlined" onPress={handleAddNewProduct}>
+              Criar produto "{searchQuery.trim()}"
+            </Chip>
+          </View>
+        </Surface>
+      </Pressable>
+    );
+  }, [searchQuery, handleAddNewProduct]);
+
+  const renderInventoryRowForSection = useCallback(({ item }: { item: Product }) => (
+    <ProductSearchRow
+      productName={item.name}
+      isOnList={false}
+      onPlus={() => handlePlus(item)}
+    />
+  ), [handlePlus]);
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <ContextualHeader
+        listName={listName}
+        onListNameSave={handleListNameSave}
+        onListDelete={handleListDelete}
+      />
+      <View style={styles.header}>
+        <SearchBar
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
+          placeholder="Buscar ou criar produto"
+          autoFocus
+        />
+        {searchQuery.trim() ? (
+          <Pressable onPress={handleAddNewProduct}>
+            <Surface style={{ borderRadius: 8, elevation: 1, marginBottom: 8 }}>
+              <View style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                paddingVertical: 12,
+                paddingHorizontal: 16,
+                gap: 12,
+              }}>
+                <Chip icon="plus" mode="outlined" onPress={handleAddNewProduct}>
+                  Criar produto "{searchQuery.trim()}"
+                </Chip>
+              </View>
+            </Surface>
+          </Pressable>
+        ) : null}
+        <View style={styles.buttonRow}>
+          {justAdded.size > 0 ? (
+            <Chip
+              icon="arrow-up"
+              onPress={() => {
+                if (sortOrder === 'category') {
+                  flatListRef.current?.scrollToLocation({
+                    sectionIndex: 0,
+                    itemIndex: 0,
+                    animated: true,
+                  });
+                } else {
+                  flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+                }
+              }}
+              mode="flat"
+              style={{ backgroundColor: theme.colors.primaryContainer }}
+              textStyle={{ color: theme.colors.primary }}
+            >
+              {justAdded.size} {justAdded.size === 1 ? 'adicionado' : 'adicionados'}
+            </Chip>
+          ) : null}
+          <SortMenu setSortOrder={setSortOrder} sortOrder={sortOrder} mode="product" />
+        </View>
+      </View>
+      {sortOrder === 'category' ? (
+        <SectionList
+          ref={flatListRef as React.RefObject<SectionList>}
+          sections={categorySections.map(s => ({
+            ...s,
+            data: collapsedCategories.has(s.title) ? [] : s.data,
+          }))}
+          keyExtractor={(item) => item.id.toString()}
+          renderItem={renderInventoryRowForSection}
+          renderSectionHeader={({ section }) => {
+            const fullCount = categorySections.find(s => s.title === section.title)?.data.length ?? 0;
+            const isCollapsed = collapsedCategories.has(section.title);
+            return (
+              <Pressable
+                onPress={() => toggleCategory(section.title)}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  paddingHorizontal: 12,
+                  paddingVertical: 10,
+                  backgroundColor: theme.colors.surfaceVariant,
+                  borderRadius: 8,
+                  marginBottom: 4,
+                  marginTop: 8,
+                }}
+              >
+                <Text variant="labelLarge" style={{
+                  color: theme.colors.onSurfaceVariant,
+                  textTransform: 'uppercase',
+                  fontSize: 12,
+                  fontWeight: '700',
+                  letterSpacing: 0.8,
+                }}>
+                  {section.title} ({fullCount})
+                </Text>
+                <MaterialCommunityIcons
+                  name={isCollapsed ? 'chevron-down' : 'chevron-up'}
+                  size={20}
+                  color={theme.colors.onSurfaceVariant}
+                />
+              </Pressable>
+            );
+          }}
+          ListHeaderComponent={() => (
+            <View>
+              {renderJustAddedSection()}
+              {filteredProducts.length > 0 ? (
+                <Text variant="labelMedium" style={{
+                  paddingHorizontal: 4,
+                  paddingBottom: 8,
+                  color: theme.colors.onSurfaceVariant,
+                  textTransform: 'uppercase',
+                  fontSize: 11,
+                }}>
+                  Produtos
+                </Text>
+              ) : null}
+            </View>
+          )}
+          contentContainerStyle={{ paddingBottom: 80, paddingTop: 8, paddingHorizontal: 16 }}
+        />
+      ) : (
+        <FlatList
+          ref={flatListRef as React.RefObject<FlatList>}
+          data={filteredProducts}
+          keyExtractor={(item) => item.id.toString()}
+          renderItem={renderInventoryRowForSection}
+          ListHeaderComponent={() => (
+            <View>
+              {renderJustAddedSection()}
+              {filteredProducts.length > 0 ? (
+                <Text variant="labelMedium" style={{
+                  paddingHorizontal: 4,
+                  paddingBottom: 8,
+                  color: theme.colors.onSurfaceVariant,
+                  textTransform: 'uppercase',
+                  fontSize: 11,
+                }}>
+                  Produtos
+                </Text>
+              ) : null}
+            </View>
+          )}
+          contentContainerStyle={styles.list}
+        />
+      )}
+      <FAB
+        style={[
+          styles.fab,
+          {
+            right: 16
+          }
+        ]}
+        icon="check"
+        onPress={() => {
+          confirmedRef.current = true;
+          navigation.goBack();
+        }}
+        label="Concluído"
+      />
+    </SafeAreaView>
+  );
+}

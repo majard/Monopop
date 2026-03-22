@@ -3,37 +3,49 @@ import { Product, InventoryItem, InventoryHistory, List, ShoppingListItem, Categ
 import { CURRENT_DATABASE_VERSION, runMigrations } from "./migrations";
 
 let db: SQLite.SQLiteDatabase | null = null;
+let initPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
 export const initializeDatabase = async (
   databaseName: string = "listai.db"
 ): Promise<SQLite.SQLiteDatabase> => {
-  if (!db) {
-    db = await SQLite.openDatabaseAsync(databaseName);
-    // Enable foreign key constraints (sqlite3 default is OFF)
-    await db.execAsync('PRAGMA foreign_keys = ON;');
+  if (db) return db;
+  if (initPromise) return initPromise;
 
+  initPromise = (async () => {
     try {
+      db = await SQLite.openDatabaseAsync(databaseName);
+
+      await db.execAsync('PRAGMA journal_mode = WAL;');
+      await db.execAsync('PRAGMA synchronous = NORMAL;');
+      await db.execAsync('PRAGMA temp_store = memory;');
+      await db.execAsync('PRAGMA cache_size = -8000;');
+      await db.execAsync('PRAGMA foreign_keys = ON;');
+
       const result = db.getFirstSync<{ user_version: number }>('PRAGMA user_version;');
       const currentVersion = result ? result.user_version : 0;
 
       if (currentVersion < CURRENT_DATABASE_VERSION) {
         console.log(`Migrating database from v${currentVersion} to v${CURRENT_DATABASE_VERSION}...`);
-        // The transaction for migration is handled inside runMigrations now
         await runMigrations(db, currentVersion);
-        // PRAGMA user_version is also handled inside runMigrations within the transaction
+        db = await SQLite.openDatabaseAsync(databaseName);
+        await db.execAsync('PRAGMA foreign_keys = ON;');
         console.log('Database migration complete.');
       } else {
         console.log('Database is already up to date.');
       }
 
+      return db;
     } catch (error) {
+      db = null;
+      initPromise = null;
       console.error("Error during database initialization or migration:", error);
-      // It's crucial to throw the error to prevent the app from continuing with a potentially broken DB
       throw error;
     }
-  }
-  return db;
+  })();
+
+  return initPromise;
 };
+
 
 export const getDb = (): SQLite.SQLiteDatabase => {
   if (!db) {
@@ -114,6 +126,88 @@ export const getLastUnitPriceForProduct = async (productId: number): Promise<num
     return row?.unitPrice ?? null;
   } catch (error) {
     console.error("Error getting last unit price for product:", error);
+    throw error;
+  }
+};
+
+export const getLastUnitPriceForProductAtStore = async (productId: number, storeId: number): Promise<number | null> => {
+  const db = getDb();
+  try {
+    const row = await db.getFirstAsync<{ unitPrice: number }>(
+      `SELECT ii.unitPrice 
+       FROM invoice_items ii
+       INNER JOIN invoices i ON ii.invoiceId = i.id
+       WHERE ii.productId = ? AND i.storeId = ?
+       ORDER BY ii.createdAt DESC 
+       LIMIT 1`,
+      [productId, storeId]
+    );
+    return row?.unitPrice || null;
+  } catch (error) {
+    console.error('Error getting last unit price for product at store:', error);
+    return null;
+  }
+};
+
+export const getLastUnitPricesForProductsAtStore = async (productIds: number[], storeId: number): Promise<Map<number, number>> => {
+  if (productIds.length === 0) return new Map();
+
+  const db = getDb();
+  try {
+    const placeholders = productIds.map(() => '?').join(',');
+    const rows = await db.getAllAsync<{ productId: number; unitPrice: number }>(
+      `SELECT ii.productId, ii.unitPrice 
+       FROM invoice_items ii
+       INNER JOIN invoices i ON ii.invoiceId = i.id
+       WHERE ii.productId IN (${placeholders}) AND i.storeId = ? AND ii.unitPrice IS NOT NULL
+       ORDER BY ii.productId, i.createdAt DESC`,
+      [...productIds, storeId]
+    );
+
+    const priceMap = new Map<number, number>();
+    const seenProducts = new Set<number>();
+
+    for (const row of rows) {
+      if (!seenProducts.has(row.productId)) {
+        priceMap.set(row.productId, row.unitPrice);
+        seenProducts.add(row.productId);
+      }
+    }
+
+    return priceMap;
+  } catch (error) {
+    console.error('Error getting last unit prices for products at store:', error);
+    throw error;
+  }
+};
+
+export const getLastUnitPricesForProducts = async (productIds: number[]): Promise<Map<number, number>> => {
+  if (productIds.length === 0) return new Map();
+
+  const db = getDb();
+  try {
+    const placeholders = productIds.map(() => '?').join(',');
+    const rows = await db.getAllAsync<{ productId: number; unitPrice: number }>(
+      `SELECT productId, unitPrice
+       FROM invoice_items
+       WHERE productId IN (${placeholders}) AND unitPrice IS NOT NULL
+       ORDER BY productId, createdAt DESC`,
+      productIds
+    );
+
+    const priceMap = new Map<number, number>();
+    const seenProducts = new Set<number>();
+
+    for (const row of rows) {
+      if (!seenProducts.has(row.productId)) {
+        priceMap.set(row.productId, row.unitPrice);
+        seenProducts.add(row.productId);
+      }
+    }
+
+    return priceMap;
+  } catch (error) {
+    console.error('Error getting last unit prices for products:', error);
     throw error;
   }
 };
@@ -273,7 +367,7 @@ export const getProducts = async (): Promise<Product[]> => {
   const db = getDb();
   try {
     const result = await db.getAllAsync<Product>(
-      "SELECT * FROM products ORDER BY name ASC;"
+      "SELECT p.*, c.name as categoryName FROM products p LEFT JOIN categories c ON p.categoryId = c.id ORDER BY p.name ASC;"
     );
     return result;
   } catch (error: any) {
@@ -489,14 +583,15 @@ export const saveInventoryHistorySnapshot = async (
       [inventoryItemId]
     );
 
+
     if (!currentInventoryItem) {
       console.warn(`Inventory item with ID ${inventoryItemId} not found. Cannot save history snapshot.`);
       return; // Or throw an error, depending on desired behavior
     }
 
     const existingEntry = await db.getFirstAsync<{ id: number }>(
-      `SELECT id FROM inventory_history WHERE inventoryItemId = ? AND date = ?;`,
-      [inventoryItemId, dateToSave]
+      `SELECT id FROM inventory_history WHERE inventoryItemId = ? AND date LIKE ?;`,
+      [inventoryItemId, `${dateToSave}%`]
     );
 
     if (existingEntry) {
@@ -509,7 +604,7 @@ export const saveInventoryHistorySnapshot = async (
       // Otherwise, insert a new entry
       await db.runAsync(
         `INSERT INTO inventory_history (inventoryItemId, quantity, date, createdAt) VALUES (?, ?, ?, ?);`,
-        [inventoryItemId, currentInventoryItem.quantity, dateToSave, createdAt]
+        [inventoryItemId, quantityToSave !== undefined ? quantityToSave : currentInventoryItem.quantity, dateToSave, createdAt]
       );
     }
   });
@@ -572,11 +667,16 @@ export const addCategory = async (name: string): Promise<number> => {
   }
 };
 
-export const getCategories = async (): Promise<Category[]> => {
+export const getCategories = async (orderBy: 'name' | 'usage' = 'usage'): Promise<Category[]> => {
   const db = getDb();
   try {
-    const result = await db.getAllAsync<Category>("SELECT * FROM categories ORDER BY name ASC;");
-    return result;
+    const query = orderBy === 'usage'
+      ? `SELECT c.* FROM categories c
+         LEFT JOIN products p ON p.categoryId = c.id
+         GROUP BY c.id
+         ORDER BY COUNT(p.id) DESC, c.name ASC;`
+      : `SELECT * FROM categories ORDER BY name ASC;`;
+    return await db.getAllAsync<Category>(query);
   } catch (error) {
     console.error("Error getting categories:", error);
     throw error;
@@ -710,10 +810,13 @@ export const getShoppingListItemsByListId = async (listId: number): Promise<Shop
           sli.createdAt,
           sli.updatedAt,
           p.name AS productName,       -- Add product name for convenience
-          ii.productId AS productId    -- Add productId for convenience
+          ii.productId AS productId,    -- Add productId for convenience
+          ii.quantity AS currentInventoryQuantity, -- Add current inventory quantity
+          c.name AS categoryName        -- Add category name for convenience
        FROM shopping_list_items sli
        JOIN inventory_items ii ON sli.inventoryItemId = ii.id
        JOIN products p ON ii.productId = p.id
+       LEFT JOIN categories c ON p.categoryId = c.id
        WHERE ii.listId = ?
        ORDER BY sli.sortOrder ASC;`,
       [listId]
@@ -831,10 +934,11 @@ export const buyShoppingListItem = async (
 /** Conclude shopping for a list AND create an invoice (store required). Single transaction. */
 export const concludeShoppingForListWithInvoice = async (
   listId: number,
-  storeName: string
+  storeName: string,
+  date?: Date
 ): Promise<{ invoiceId: number }> => {
   const db = getDb();
-  const now = new Date().toISOString();
+  const now = (date ?? new Date()).toISOString();
   const dateToSave = now.split('T')[0];
 
   let invoiceId = 0;
@@ -1282,6 +1386,335 @@ export const deleteStore = async (id: number): Promise<void> => {
     });
   } catch (error) {
     console.error("Error deleting store:", error);
+    throw error;
+  }
+};
+
+// --- CONSUMPTION AND SHOPPING LIST FUNCTIONS ---
+
+export const getProductConsumptionStats = async (
+  inventoryItemId: number,
+  productId: number,
+): Promise<{
+  avgWeeklyConsumption: number | null;
+  avgPrice90d: number | null;
+  lowestPrice90d: { price: number; storeName: string } | null;
+}> => {
+  const db = getDb();
+  const now = new Date();
+  const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+  const ninetyDaysAgoStr = ninetyDaysAgo.toISOString().split('T')[0];
+
+  // Get history entries ordered by date ASC, last 90 days
+  const history = await db.getAllAsync<{ date: string; quantity: number }>(
+    `SELECT date, quantity FROM inventory_history 
+     WHERE inventoryItemId = ? AND date >= ?
+     ORDER BY date ASC;`,
+    [inventoryItemId, ninetyDaysAgoStr]
+  );
+
+  let avgWeeklyConsumption: number | null = null;
+
+  if (history.length >= 2) {
+    // Sum all drops between consecutive snapshots
+    let totalConsumed = 0;
+    for (let i = 1; i < history.length; i++) {
+      const drop = history[i - 1].quantity - history[i].quantity;
+      if (drop > 0) totalConsumed += drop;
+    }
+    // Days in interval
+    const firstDateStr = history[0].date.includes('T') ? history[0].date : history[0].date + 'T00:00:00';
+    const lastDateStr = history[history.length - 1].date.includes('T') ? history[history.length - 1].date : history[history.length - 1].date + 'T00:00:00';
+    const firstDate = new Date(firstDateStr);
+    const lastDate = new Date(lastDateStr);
+    const days = Math.max(1, (lastDate.getTime() - firstDate.getTime()) / (1000 * 60 * 60 * 24));
+    avgWeeklyConsumption = (totalConsumed / days) * 7;
+  } else if (history.length === 1) {
+    // Only one point — can't calculate consumption
+    avgWeeklyConsumption = null;
+  }
+
+  // Price stats from invoice_items last 90 days
+  const priceRows = await db.getAllAsync<{ unitPrice: number; storeName: string }>(
+    `SELECT ii.unitPrice, s.name as storeName
+     FROM invoice_items ii
+     JOIN invoices inv ON ii.invoiceId = inv.id
+     LEFT JOIN stores s ON inv.storeId = s.id
+     WHERE ii.productId = ? 
+       AND ii.unitPrice IS NOT NULL 
+       AND ii.unitPrice > 0
+       AND inv.createdAt >= ?
+     ORDER BY ii.unitPrice ASC;`,
+    [productId, ninetyDaysAgo.toISOString()]
+  );
+
+  const avgPrice90d = priceRows.length > 0
+    ? priceRows.reduce((sum, r) => sum + r.unitPrice, 0) / priceRows.length
+    : null;
+
+  const lowestPrice90d = priceRows.length > 0
+    ? { price: priceRows[0].unitPrice, storeName: priceRows[0].storeName }
+    : null;
+
+  return { avgWeeklyConsumption, avgPrice90d, lowestPrice90d };
+};
+
+export const getShoppingListItemForInventoryItem = async (
+  inventoryItemId: number
+): Promise<{ id: number; quantity: number; price?: number } | null> => {
+  const db = getDb();
+  const result = await db.getFirstAsync<{ id: number; quantity: number; price: number | null }>(
+    `SELECT id, quantity, price FROM shopping_list_items WHERE inventoryItemId = ?;`,
+    [inventoryItemId]
+  );
+  return result ?? null;
+};
+
+export const getPriceHistory = async (productId: number): Promise<{ date: string; price: number; storeName: string }[]> => {
+  const db = getDb();
+  return db.getAllAsync(`
+    SELECT inv_i.createdAt as date, inv_i.unitPrice as price, s.name as storeName
+    FROM invoice_items inv_i
+    JOIN invoices inv ON inv_i.invoiceId = inv.id
+    LEFT JOIN stores s ON inv.storeId = s.id
+    WHERE inv_i.productId = ? AND inv_i.unitPrice IS NOT NULL
+    ORDER BY inv_i.createdAt DESC LIMIT 20
+  `, [productId]);
+};
+
+export const getLowestPriceForProducts = async (
+  productIds: number[]
+): Promise<Map<number, { price: number; storeName: string }>> => {
+  if (productIds.length === 0) return new Map();
+  const db = getDb();
+  const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+  const placeholders = productIds.map(() => '?').join(',');
+
+  const rows = await db.getAllAsync<{ productId: number; unitPrice: number; storeName: string }>(
+    `SELECT ii.productId, ii.unitPrice, s.name as storeName
+     FROM invoice_items ii
+     JOIN invoices inv ON ii.invoiceId = inv.id
+     LEFT JOIN stores s ON inv.storeId = s.id
+     WHERE ii.productId IN (${placeholders})
+       AND ii.unitPrice IS NOT NULL
+       AND ii.unitPrice > 0
+       AND inv.createdAt >= ?
+     ORDER BY ii.productId, ii.unitPrice ASC;`,
+    [...productIds, ninetyDaysAgo]
+  );
+
+  const result = new Map<number, { price: number; storeName: string }>();
+  for (const row of rows) {
+    if (!result.has(row.productId)) {
+      result.set(row.productId, { price: row.unitPrice, storeName: row.storeName });
+    }
+  }
+  return result;
+};
+
+// ─── Reference Price — single upserts ────────────────────────────────────────
+
+export const upsertProductStorePrice = async (
+  productId: number,
+  storeId: number,
+  price: number
+): Promise<void> => {
+  const db = getDb();
+  const now = new Date().toISOString();
+  try {
+    await db.runAsync(
+      `INSERT INTO product_store_prices (productId, storeId, price, updatedAt)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT (productId, storeId) DO UPDATE SET
+         price     = excluded.price,
+         updatedAt = excluded.updatedAt;`,
+      [productId, storeId, price, now]
+    );
+  } catch (error) {
+    console.error('Error upserting product store price:', error);
+    throw error;
+  }
+};
+
+export const upsertProductBasePrice = async (
+  productId: number,
+  price: number
+): Promise<void> => {
+  const db = getDb();
+  const now = new Date().toISOString();
+  try {
+    await db.runAsync(
+      `INSERT INTO product_base_prices (productId, price, updatedAt)
+       VALUES (?, ?, ?)
+       ON CONFLICT (productId) DO UPDATE SET
+         price     = excluded.price,
+         updatedAt = excluded.updatedAt;`,
+      [productId, price, now]
+    );
+  } catch (error) {
+    console.error('Error upserting product base price:', error);
+    throw error;
+  }
+};
+
+// ─── Reference Price — single lookup (full chain) ────────────────────────────
+
+/**
+ * Returns the best reference price for a product, walking the full chain:
+ * 1. product_store_prices @ storeId
+ * 2. product_base_prices
+ * 4. last invoice price @ any store
+ *
+ * storeId is optional — if null, skips steps 1 and 2.
+ */
+export const getReferencePriceForProduct = async (
+  productId: number,
+  storeId: number | null
+): Promise<number | null> => {
+  const db = getDb();
+  try {
+    if (storeId !== null) {
+      // 1. Store reference price
+      const storeRef = await db.getFirstAsync<{ price: number }>(
+        `SELECT price FROM product_store_prices WHERE productId = ? AND storeId = ?;`,
+        [productId, storeId]
+      );
+      if (storeRef?.price != null) return storeRef.price;
+
+      // 2. Last invoice at this store
+      const storeInvoice = await db.getFirstAsync<{ unitPrice: number }>(
+        `SELECT ii.unitPrice
+         FROM invoice_items ii
+         INNER JOIN invoices i ON ii.invoiceId = i.id
+         WHERE ii.productId = ? AND i.storeId = ?
+         ORDER BY i.createdAt DESC
+         LIMIT 1;`,
+        [productId, storeId]
+      );
+      return storeInvoice?.unitPrice ?? null;
+    }
+
+    // storeId === null
+    // 1. Base reference price
+    const baseRef = await db.getFirstAsync<{ price: number }>(
+      `SELECT price FROM product_base_prices WHERE productId = ?;`,
+      [productId]
+    );
+    if (baseRef?.price != null) return baseRef.price;
+
+    // 2. Last invoice any store
+    const anyInvoice = await db.getFirstAsync<{ unitPrice: number }>(
+      `SELECT unitPrice
+       FROM invoice_items
+       WHERE productId = ? AND unitPrice IS NOT NULL
+       ORDER BY createdAt DESC
+       LIMIT 1;`,
+      [productId]
+    );
+    return anyInvoice?.unitPrice ?? null;
+
+  } catch (error) {
+    console.error('Error getting reference price for product:', error);
+    return null;
+  }
+};
+
+// ─── Reference Price — batch lookup (for ShoppingListScreen) ─────────────────
+
+/**
+ * Returns a Map<productId, price> with the best reference price for each product.
+ * Walks the same 4-step chain but in batch — O(1) per item after the queries.
+ *
+ * storeId is optional — if null, skips store-specific steps.
+ */
+export const getReferencePricesForProducts = async (
+  productIds: number[],
+  storeId: number | null
+): Promise<Map<number, number>> => {
+  if (productIds.length === 0) return new Map();
+
+  const db = getDb();
+  const result = new Map<number, number>();
+  const remaining = new Set(productIds);
+  const placeholders = productIds.map(() => '?').join(',');
+
+  try {
+    if (storeId !== null) {
+      // 1. Store reference prices
+      const rows = await db.getAllAsync<{ productId: number; price: number }>(
+        `SELECT productId, price
+         FROM product_store_prices
+         WHERE productId IN (${placeholders}) AND storeId = ?;`,
+        [...productIds, storeId]
+      );
+      for (const row of rows) {
+        result.set(row.productId, row.price);
+        remaining.delete(row.productId);
+      }
+
+      if (remaining.size === 0) return result;
+
+      // 2. Last invoice at this store
+      const remainingIds = [...remaining];
+      const remainingPlaceholders = remainingIds.map(() => '?').join(',');
+      const invoiceStoreRows = await db.getAllAsync<{ productId: number; unitPrice: number }>(
+        `SELECT ii.productId, ii.unitPrice
+         FROM invoice_items ii
+         INNER JOIN invoices i ON ii.invoiceId = i.id
+         WHERE ii.productId IN (${remainingPlaceholders}) AND i.storeId = ? AND ii.unitPrice IS NOT NULL
+         ORDER BY ii.productId, i.createdAt DESC;`,
+        [...remainingIds, storeId]
+      );
+      const seenStore = new Set<number>();
+      for (const row of invoiceStoreRows) {
+        if (!seenStore.has(row.productId)) {
+          result.set(row.productId, row.unitPrice);
+          remaining.delete(row.productId);
+          seenStore.add(row.productId);
+        }
+      }
+
+      return result;
+    }
+
+    // storeId === null
+    // 1. Base reference prices
+    const baseRows = await db.getAllAsync<{ productId: number; price: number }>(
+      `SELECT productId, price
+       FROM product_base_prices
+       WHERE productId IN (${placeholders});`,
+      productIds
+    );
+    for (const row of baseRows) {
+      result.set(row.productId, row.price);
+      remaining.delete(row.productId);
+    }
+
+    if (remaining.size === 0) return result;
+
+    // 2. Last invoice any store
+    const remainingIds = [...remaining];
+    const remainingPlaceholders = remainingIds.map(() => '?').join(',');
+    const invoiceAnyRows = await db.getAllAsync<{ productId: number; unitPrice: number }>(
+      `SELECT productId, unitPrice
+       FROM invoice_items
+       WHERE productId IN (${remainingPlaceholders}) AND unitPrice IS NOT NULL
+       ORDER BY productId, createdAt DESC;`,
+      remainingIds
+    );
+    const seenAny = new Set<number>();
+    for (const row of invoiceAnyRows) {
+      if (!seenAny.has(row.productId)) {
+        result.set(row.productId, row.unitPrice);
+        remaining.delete(row.productId);
+        seenAny.add(row.productId);
+      }
+    }
+
+    return result;
+
+  } catch (error) {
+    console.error('Error getting reference prices for products:', error);
     throw error;
   }
 };

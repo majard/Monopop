@@ -5,16 +5,18 @@ import { Alert } from "react-native";
 interface UseInventoryItemProps {
   inventoryItemId: number;
   initialQuantity: number;
+  productName: string;
   onInventoryItemUpdated?: () => void;
 }
 
-const updateDebounceDelay = 300; // Debounce delay for single inventory item DB updates
+const updateDebounceDelay = 150; // Debounce delay for single inventory item DB updates
 const initialContinuousDelay = 300; // Delay before continuous adjustment starts repeating
 const intervalContinuousDelay = 100; // Interval for continuous adjustment repeats
 
 export const useInventoryItem = ({
   inventoryItemId,
   initialQuantity,
+  productName,
   onInventoryItemUpdated,
 }: UseInventoryItemProps) => {
   const [quantity, setQuantity] = useState(initialQuantity);
@@ -24,17 +26,14 @@ export const useInventoryItem = ({
   // --- Debounced DB Update Logic ---
   const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const debouncedDbUpdate = useCallback(async (id: number, newQuantity: number) => {
+  const debouncedDbUpdate = useCallback(async (id: number, newQuantity: number, skipDb: boolean = false) => {
+    if (skipDb) return;
     if (updateTimeoutRef.current) {
       clearTimeout(updateTimeoutRef.current);
     }
     updateTimeoutRef.current = setTimeout(async () => {
       try {
         await updateInventoryItem(id, newQuantity);
-        // Trigger immediate parent refresh after successful DB update
-        if (onInventoryItemUpdated) {
-          onInventoryItemUpdated();
-        }
       } catch (err) {
         console.error(`Erro ao atualizar inventory item ${id}:`, err);
       } finally {
@@ -46,19 +45,15 @@ export const useInventoryItem = ({
 
   // --- Public Quantity Update Function (UI + Triggers Debounced DB Update) ---
   const updateInventoryItemQuantity = useCallback(
-    (newQuantity: number) => {
+    (newQuantity: number, skipDb: boolean = false) => {
       const clampedQuantity = Math.max(0, newQuantity); // Ensure quantity doesn't go below zero
       setQuantity(clampedQuantity); // Optimistic UI update
       latestQuantityRef.current = clampedQuantity; // Keep track of the latest quantity for DB update
 
-      if (onInventoryItemUpdated) {
-        onInventoryItemUpdated();
-      }
-
       // Trigger the debounced DB update
-      debouncedDbUpdate(inventoryItemId, clampedQuantity);
+      debouncedDbUpdate(inventoryItemId, clampedQuantity, skipDb);
     },
-    [inventoryItemId, onInventoryItemUpdated, debouncedDbUpdate]
+    [inventoryItemId, debouncedDbUpdate]
   );
 
   // --- Continuous Adjustment States and Refs ---
@@ -107,7 +102,7 @@ export const useInventoryItem = ({
   }, [isAdjusting, adjustmentIncrement]);
 
 
-  const startContinuousAdjustment = useCallback((increment: boolean) => {
+  const startContinuousAdjustment = useCallback((increment: boolean, skipDb: boolean = false) => {
     // Perform an immediate UI update on the initial press
     setQuantity((prevQuantity) => {
       const newQuantity = increment ? prevQuantity + 1 : Math.max(0, prevQuantity - 1);
@@ -119,10 +114,10 @@ export const useInventoryItem = ({
     setIsAdjusting(true);
   }, []); // Dependencies are empty as it sets flags and updates state
 
-  const stopContinuousAdjustment = useCallback(() => {
+  const stopContinuousAdjustment = useCallback((skipDb: boolean = false) => {
     setIsAdjusting(false);
     // When adjustment stops, trigger a final debounced DB update with the latest quantity
-    debouncedDbUpdate(inventoryItemId, latestQuantityRef.current);
+    debouncedDbUpdate(inventoryItemId, latestQuantityRef.current, skipDb);
   }, [inventoryItemId, debouncedDbUpdate]);
 
 
@@ -130,7 +125,7 @@ export const useInventoryItem = ({
   const confirmRemoveInventoryItem = useCallback(() => {
     Alert.alert(
       "Confirmar Exclusão",
-      "Tem certeza que deseja excluir este item do estoque?",
+      `Tem certeza que deseja excluir "${productName}" do estoque?`,
       [
         { text: "Cancelar", style: "cancel" },
         {

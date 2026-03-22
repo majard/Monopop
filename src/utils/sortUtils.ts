@@ -1,20 +1,22 @@
-import { Product } from "../database/database";
 import { calculateSimilarity, preprocessName } from "./similarityUtils";
 
-export type SortOrder = "custom" | "alphabetical" | "quantityAsc" | "quantityDesc";
+export type SortOrder = "custom" | "alphabetical" | "category" | "quantityAsc" | "quantityDesc" | "stockAsc" | "stockDesc";
 
-export interface SortableInventoryItem {
+export interface SortableItem {
   productName: string;
-  quantity: number;
-  sortOrder: number;
+  quantity?: number;
+  sortOrder?: number;
+  categoryName?: string | null;
+  stockQuantity?: number;
 }
 
-export function sortInventoryItems<T extends SortableInventoryItem>(
+export function sortItems<T extends SortableItem>(
   items: T[],
   sortOrder: SortOrder,
   searchQuery: string
 ): T[] {
   const sorted = [...items];
+
   if (searchQuery.trim()) {
     const processedQuery = preprocessName(searchQuery);
     sorted.sort((a, b) => {
@@ -24,62 +26,39 @@ export function sortInventoryItems<T extends SortableInventoryItem>(
     });
     return sorted;
   }
+
   switch (sortOrder) {
     case "alphabetical":
       sorted.sort((a, b) => a.productName.localeCompare(b.productName));
       break;
+    case "category":
+      sorted.sort((a, b) => {
+        const catA = a.categoryName ?? 'zzz';
+        const catB = b.categoryName ?? 'zzz';
+        if (catA !== catB) return catA.localeCompare(catB);
+        return a.productName.localeCompare(b.productName);
+      });
+      break;
     case "quantityAsc":
-      sorted.sort((a, b) => a.quantity - b.quantity);
+      sorted.sort((a, b) => (a.quantity ?? 0) - (b.quantity ?? 0));
       break;
     case "quantityDesc":
-      sorted.sort((a, b) => b.quantity - a.quantity);
+      sorted.sort((a, b) => (b.quantity ?? 0) - (a.quantity ?? 0));
       break;
-    default:
-      sorted.sort((a, b) => a.sortOrder - b.sortOrder);
+    case "stockAsc":
+      sorted.sort((a, b) => (a.stockQuantity ?? 0) - (b.stockQuantity ?? 0));
+      break;
+    case "stockDesc":
+      sorted.sort((a, b) => (b.stockQuantity ?? 0) - (a.stockQuantity ?? 0));
+      break;
+    default: // custom
+      sorted.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
       break;
   }
   return sorted;
 }
 
-export function sortProducts(
-    products: Product[], 
-    sortOrder: SortOrder,
-    searchQuery: string
-) {
-    const sortedProducts = [...products]
-    
-    // If there's a search query, sort by similarity
-    if (searchQuery.trim()) {
-        const processedQuery = preprocessName(searchQuery);
-        sortedProducts.sort((a, b) => {
-          const similarityA = calculateSimilarity(
-            processedQuery,
-            preprocessName(a.name)
-          );
-          const similarityB = calculateSimilarity(
-            processedQuery,
-            preprocessName(b.name)
-          );
-          return similarityB - similarityA;
-        });
-        return sortedProducts;
-      }
-  
-      // Otherwise use the selected sort order
-      switch (sortOrder) {
-        case "alphabetical":
-          sortedProducts.sort((a, b) => a.name.localeCompare(b.name));
-          break;
-        case "quantityAsc":
-          sortedProducts.sort((a, b) => a.quantity - b.quantity);
-          break;
-        case "quantityDesc":
-          sortedProducts.sort((a, b) => b.quantity - a.quantity);
-          break;
-        default:
-          sortedProducts.sort((a, b) => a.order - b.order);
-          break;
-      }
-      return sortedProducts;
-  
-}
+// Keep sortInventoryItems as alias for backwards compatibility
+export const sortInventoryItems = sortItems;
+// Keep sortProducts as alias for backwards compatibility  
+export const sortProducts = sortItems;

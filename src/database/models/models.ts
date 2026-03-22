@@ -2,6 +2,7 @@ export interface Product {
   id: number;
   name: string; // "Rice", "Coffee", "Shampoo"
   categoryId?: number; // FK to Category 
+  categoryName?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -50,6 +51,10 @@ export interface ShoppingListItem {
   notes?: string;
   createdAt: string;
   updatedAt: string;
+  categoryName?: string | null;
+  productName?: string; // Added from JOIN
+  productId?: number; // Added from JOIN
+  currentInventoryQuantity?: number; // Added from JOIN
 }
 
 export interface Store {
@@ -74,4 +79,17 @@ export interface InvoiceItem {
   unitPrice?: number | null;
   lineTotal: number;
   createdAt: string;
+}
+
+export interface ProductStorePrice {
+  productId: number;
+  storeId: number;
+  price: number;
+  updatedAt: string;
+}
+
+export interface ProductBasePrice {
+  productId: number;
+  price: number;
+  updatedAt: string;
 }

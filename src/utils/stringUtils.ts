@@ -1,35 +1,119 @@
 import { InventoryItem } from "../database/models";
 
+const PRODUCT_EMOJI_MAP: Array<[string[], string]> = [
+  // Vegetables
+  [["batata"], "🥔"],
+  [["abóbora"], "🎃"],
+  [["brócolis", "brocolis"], "🥦"],
+  [["cenoura"], "🥕"],
+  [["tomate"], "🍅"],
+  [["cebola"], "🧅"],
+  [["alho"], "🧄"],
+  [["alface", "rúcula", "rucula"], "🥬"],
+  [["pepino"], "🥒"],
+  [["pimentão", "pimentao", "pimenta"], "🌶️"],
+  [["milho"], "🌽"],
+  [["cogumelo"], "🍄"],
+  // Grains & carbs
+  [["arroz"], "🍚"],
+  [["feijão", "feijao"], "🫘"],
+  [["lentilha", "grão", "grao"], "🫘"],
+  [["macarrão", "macarrao", "espaguete", "risoto"], "🍝"],
+  [["pão", "pao"], "🍞"],
+  [["biscoito", "bolacha"], "🍪"],
+  [["bolo"], "🎂"],
+  [["farinha", "aveia"], "🌾"],
+  [["panqueca"], "🥞"],
+  [["waffle"], "🧇"],
+  // Fruits
+  [["banana"], "🍌"],
+  [["laranja"], "🍊"],
+  [["limão", "limao"], "🍋"],
+  [["uva"], "🍇"],
+  [["morango"], "🍓"],
+  [["melancia"], "🍉"],
+  [["melão", "melao"], "🍈"],
+  [["manga"], "🥭"],
+  [["abacaxi"], "🍍"],
+  [["abacate"], "🥑"],
+  [["maçã", "maca"], "🍎"],
+  [["pêra", "pera"], "🍐"],
+  // Proteins
+  [["frango", "galinha", "filé de peito", "file de peito"], "🍗"],
+  [["carne", "bife", "picadinho", "costela", "alcatra", "maminha"], "🥩"],
+  [["peixe", "atum", "salmão", "salmao", "tilápia", "tilapia"], "🐟"],
+  [["camarão", "camarao"], "🦐"],
+  [["ovo", "ovos"], "🥚"],
+  [["bacon", "presunto"], "🥓"],
+  [["linguiça", "linguica", "salsicha"], "🌭"],
+  // Dairy
+  [["azeite", "óleo", "oleo"], "🫙"],
+  [["leite"], "🥛"],
+  [["queijo"], "🧀"],
+  [["manteiga", "margarina"], "🧈"],
+  [["iogurte"], "🥛"],
+  [["creme de leite", "nata"], "🥛"],
+  // Drinks
+  [["suco"], "🧃"],
+  [["refrigerante", "coca", "pepsi", "guaraná", "guarana"], "🥤"],
+  [["cerveja"], "🍺"],
+  [["vinho"], "🍷"],
+  [["café", "cafe"], "☕"],
+  [["chá", "cha"], "🍵"],
+  [["achocolatado", "chocolate"], "🍫"],
+  [["água", "agua"], "💧"],
+  // Condiments & misc
+  [["mel"], "🍯"],
+  [["sal"], "🧂"],
+  [["açúcar", "acucar"], "🍬"],
+  [["molho", "ketchup", "mostarda", "maionese"], "🫙"],
+  [["sorvete", "gelado"], "🍦"],
+  // Cleaning & household
+  [["detergente", "sabão", "sabao"], "🧴"],
+  [["lava roupa", "lava-roupa", "amaciante"], "🧺"],
+  [["papel higiênico", "papel higienico"], "🧻"],
+  [["esponja"], "🧽"],
+  [["desinfetante", "alvejante"], "🧹"],
+  // Personal care
+  [["shampoo", "condicionador"], "🧴"],
+  [["sabonete"], "🧼"],
+  [["pasta de dente", "escova de dente"], "🪥"],
+  [["fralda"], "👶"],
+];
+
+const LIST_EMOJI_MAP: Array<[string[], string]> = [
+  [["mercado", "supermercado"], "🛒"],
+  [["frutas", "verduras", "hortifruti"], "🥦"],
+  [["padaria"], "🥖"],
+  [["café", "cafe"], "☕"],
+  [["carne", "açougue", "acougue"], "🥩"],
+  [["festa", "evento"], "🎉"],
+  [["casa", "doméstico", "domestico"], "🏠"],
+  [["trabalho", "escritório", "escritorio"], "💼"],
+  [["viagem"], "✈️"],
+  [["farmácia", "farmacia", "remédio", "remedio"], "💊"],
+  [["pet", "animal", "veterinário", "veterinario"], "🐾"],
+  [["limpeza"], "🧹"],
+  [["bebê", "bebe", "infantil"], "👶"],
+];
+
 export const getEmojiForProduct = (name: string): string => {
-    const nameLower = name.toLowerCase();
-    if (nameLower.includes("batata")) return "🥔";
-    if (nameLower.includes("abóbora")) return "🎃";
-    if (nameLower.includes("brócolis")) return "🥦";
-    if (nameLower.includes("arroz")) return "🍚";
-    if (nameLower.includes("risoto")) return "🍝";
-    if (nameLower.includes("milho")) return "🌽";
-    if (nameLower.includes("picadinho")) return "🍖";
-    if (nameLower.includes("tropical")) return "🌴";
-    if (nameLower.includes("panqueca")) return "🥞";
-    if (nameLower.includes("waffle")) return "🧇";
-    if (nameLower.includes("pão")) return "🍞";
-    if (nameLower.includes("macarrão")) return "🍝";
-    return "🍽️";
-  };
+  const lower = name.toLowerCase();
+  for (const entry of PRODUCT_EMOJI_MAP) {
+    const keywords = entry[0];
+    const emoji = entry[1];
+    if (keywords.some((k: string) => lower.includes(k))) return emoji;
+  }
+  return "🛒";
+};
 
 export const getEmojiForList = (name: string): string => {
-  const nameLower = name.toLowerCase();
-  if (nameLower.includes("mercado") || nameLower.includes("supermercado")) return "🛒";
-  if (nameLower.includes("frutas") || nameLower.includes("verduras")) return "🥦";
-  if (nameLower.includes("padaria")) return "🥖";
-  if (nameLower.includes("café")) return "☕";
-  if (nameLower.includes("carnes")) return "🥩";
-  if (nameLower.includes("festa")) return "🎉";
-  if (nameLower.includes("casa")) return "🏠";
-  if (nameLower.includes("trabalho")) return "💼";
-  if (nameLower.includes("viagem")) return "✈️";
-  if (nameLower.includes("farmácia")) return "💊";
-  if (nameLower.includes("pet")) return "🐾";
+  const lower = name.toLowerCase();
+  for (const entry of LIST_EMOJI_MAP) {
+    const keywords = entry[0];
+    const emoji = entry[1];
+    if (keywords.some((k: string) => lower.includes(k))) return emoji;
+  }
   return "📝";
 };
 
@@ -44,7 +128,16 @@ export const generateStockListText = (inventoryItems: InventoryItem[]): string =
   inventoryItems.forEach((inventoryItem) => {
     const emoji = getEmojiForProduct(inventoryItem.productName);
     text += `- ${inventoryItem.productName}: ${inventoryItem.quantity} ${emoji}\n`;
-    text += inventoryItem.notes ? `  -   ${inventoryItem.notes}\n` : "";
+    text += inventoryItem.notes ? `  obs:   ${inventoryItem.notes}\n` : "";
   });
   return text;
+};
+
+export const generateShoppingListText = (items: { productName: string; quantity: number }[]): string => {
+  let text = '';
+  items.forEach(item => {
+    const emoji = getEmojiForProduct(item.productName);
+    text += `- ${item.productName}: ${item.quantity} ${emoji}\n`;
+  });
+  return text.trim();
 };

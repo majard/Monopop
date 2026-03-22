@@ -3,6 +3,7 @@ import { useRoute, RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../types/navigation';
 import BottomTabNavigator from '../navigation/BottomTabNavigator';
 import { useListContext } from '../context/ListContext';
+import { ListDataProvider } from '../context/ListDataContext';
 import { useLists } from '../hooks/useLists';
 
 type MainScreenProps = RouteProp<RootStackParamList, 'MainTabs'>;
@@ -22,5 +23,9 @@ export default function MainScreen() {
 
 
 
-  return <BottomTabNavigator key={listId} listId={listId} />;
+  return (
+    <ListDataProvider>
+      <BottomTabNavigator key={listId} listId={listId} />
+    </ListDataProvider>
+  );
 } 

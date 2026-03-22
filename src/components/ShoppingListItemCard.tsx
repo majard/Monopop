@@ -1,11 +1,12 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import {
   Surface,
-  Checkbox,
   IconButton,
   useTheme,
 } from "react-native-paper";
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import Animated, { useSharedValue, useAnimatedStyle, withSequence, withTiming, runOnJS, interpolateColor } from 'react-native-reanimated';
 
 export interface ShoppingListItemCardItem {
   id: number;
@@ -14,6 +15,7 @@ export interface ShoppingListItemCardItem {
   productName: string;
   currentInventoryQuantity: number;
   price?: number;
+  lowestPrice90d: { price: number; storeName: string } | null;
 }
 
 interface ShoppingListItemCardProps {
@@ -30,6 +32,38 @@ export function ShoppingListItemCard({
   onEdit,
 }: ShoppingListItemCardProps) {
   const theme = useTheme();
+  const [localChecked, setLocalChecked] = useState(item.checked);
+
+  useEffect(() => {
+    setLocalChecked(item.checked);
+  }, [item.checked]);
+
+  const progress = useSharedValue(0);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(
+      progress.value,
+      [0, 1, 2, 3],
+      ['transparent', theme.colors.primaryContainer, theme.colors.primaryContainer, 'transparent']
+    ),
+    borderRadius: 8,
+  }));
+
+  const handleToggle = () => {
+    if (!localChecked) {
+      setLocalChecked(true);  // checkbox updates immediately
+      progress.value = withSequence(
+        withTiming(1, { duration:  100 }),
+        withTiming(3, { duration: 100 }, () => runOnJS(onToggleChecked)())
+      );
+    } else {
+      setLocalChecked(false);
+      progress.value = withSequence(
+        withTiming(1, { duration: 60 }),
+        withTiming(3, { duration: 60 }, () => runOnJS(onToggleChecked)())
+      );
+    }
+  };
 
   const formatCurrency = (value: number) => {
     return `R$ ${value ? value.toFixed(2).replace(".", ",") : "0,00"}`;
@@ -38,58 +72,70 @@ export function ShoppingListItemCard({
   const itemTotal = item.price ? formatCurrency(item.quantity * item.price) : null;
 
   return (
-    <Pressable onPress={onEdit}>
-      <Surface style={cardStyles.shoppingItemCard}>
-        <View style={cardStyles.shoppingItemContent}>
-          <View style={cardStyles.shoppingItemLeft}>
-            <Checkbox
-              status={item.checked ? "checked" : "unchecked"}
-              onPress={onToggleChecked}
-            />
-            <View style={cardStyles.shoppingItemInfo}>
-              <Text
-                style={[
-                  cardStyles.shoppingItemName,
-                  item.checked && cardStyles.checkedItem,
-                ]}
-              >
-                {item.productName}
+      <Pressable onPress={onEdit}>
+        <Surface style={cardStyles.card}>
+          <Animated.View 
+            style={[StyleSheet.absoluteFillObject, animatedStyle]} 
+            pointerEvents="none" 
+          />
+          <View style={cardStyles.row}>
+            {/* Checkbox with large hitSlop */}
+            <Pressable
+              onPress={handleToggle}
+              hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+            >
+              <MaterialCommunityIcons
+                name={localChecked ? 'checkbox-marked' : 'checkbox-blank-outline'}
+                size={24}
+                color={localChecked ? theme.colors.primary : theme.colors.onSurfaceVariant}
+              />
+            </Pressable>
+
+          {/* Name — left, takes remaining space */}
+          <Text
+            style={[
+              cardStyles.name,
+              { color: theme.colors.onSurface },
+              localChecked && { textDecorationLine: 'line-through', color: theme.colors.onSurfaceVariant },
+            ]}
+            numberOfLines={1}
+          >
+            {item.productName}
+          </Text>
+
+          {/* Right column: qty+price top, total middle, stock bottom */}
+          <View style={cardStyles.rightCol}>
+            <View style={cardStyles.priceRow}>
+              <Text style={[cardStyles.detail, { color: theme.colors.onSurfaceVariant }]}>
+                {item.quantity}× {item.price ? formatCurrency(item.price) : '—'}
               </Text>
-              <View style={cardStyles.detailsRow}>
-                <Text style={cardStyles.quantityText}>
-                  Qtd: {item.quantity}
-                </Text>
-                {item.price !== undefined && (
-                  <>
-                    <Text style={cardStyles.separator}>•</Text>
-                    <Text style={cardStyles.priceText}>
-                      {formatCurrency(item.price)} un
-                    </Text>
-                  </>
-                )}
-              </View>
-              {itemTotal && item.checked && (
-                <Text style={cardStyles.totalText}>Total: {itemTotal}</Text>
+              {item.price && item.lowestPrice90d && item.price > item.lowestPrice90d.price && (
+                <MaterialCommunityIcons
+                  name="alert-circle-outline"
+                  size={14}
+                  color="orange"
+                  style={cardStyles.warningIcon}
+                />
               )}
-              <Text style={cardStyles.stockLabel}>
-                Estoque: {item.currentInventoryQuantity}
-              </Text>
             </View>
+            {itemTotal && localChecked && (
+              <Text style={[cardStyles.total, { color: theme.colors.primary }]}>
+                {itemTotal}
+              </Text>
+            )}
+            <Text style={[cardStyles.stock, { color: theme.colors.outline }]}>
+              estoque: {item.currentInventoryQuantity}
+            </Text>
           </View>
-          <View style={cardStyles.shoppingItemActions}>
-            <IconButton
-              icon="pencil"
-              size={20}
-              onPress={onEdit}
-              iconColor={theme.colors.primary}
-            />
-            <IconButton
-              icon="delete"
-              size={20}
-              onPress={onDelete}
-              iconColor={theme.colors.error}
-            />
-          </View>
+
+          {/* Delete */}
+          <IconButton
+            icon="delete"
+            size={18}
+            onPress={onDelete}
+            iconColor={theme.colors.onSurfaceVariant}
+            style={{ margin: 0 }}
+          />
         </View>
       </Surface>
     </Pressable>
@@ -97,65 +143,42 @@ export function ShoppingListItemCard({
 }
 
 const cardStyles = StyleSheet.create({
-  shoppingItemCard: {
-    marginBottom: 8,
+  card: {
+    marginBottom: 6,
     borderRadius: 8,
     elevation: 1,
   },
-  shoppingItemContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 12,
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    gap: 8,
   },
-  shoppingItemLeft: {
+  name: {
     flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
+    fontSize: 15,
+    fontWeight: '500',
   },
-  shoppingItemInfo: {
-    flex: 1,
-    marginLeft: 8,
+  rightCol: {
+    alignItems: 'flex-end',
   },
-  shoppingItemName: {
-    fontSize: 16,
-    fontWeight: "500",
-    color: "#333",
+  priceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
-  checkedItem: {
-    textDecorationLine: "line-through",
-    color: "#888",
+  detail: {
+    fontSize: 13,
   },
-  detailsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 4,
+  warningIcon: {
+    marginLeft: 2,
   },
-  quantityText: {
-    fontSize: 14,
-    color: "#666",
+  total: {
+    fontSize: 13,
+    fontWeight: '600',
   },
-  priceText: {
-    fontSize: 14,
-    color: "#666",
-  },
-  separator: {
-    fontSize: 14,
-    color: "#999",
-    marginHorizontal: 6,
-  },
-  totalText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#2196F3",
-    marginTop: 2,
-  },
-  stockLabel: {
-    fontSize: 12,
-    color: "#999",
-    marginTop: 4,
-  },
-  shoppingItemActions: {
-    flexDirection: "row",
-    alignItems: "center",
+  stock: {
+    fontSize: 11,
   },
 });

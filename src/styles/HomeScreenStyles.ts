@@ -20,6 +20,7 @@ export interface Styles {
   input: ViewStyle;
   cardActions: ViewStyle;
   fab: ViewStyle;
+  fabBottomInset: ViewStyle;
   modalOverlay: ViewStyle;
   modalContainer: ViewStyle;
   modalTitle: TextStyle;
@@ -62,9 +63,11 @@ export const createHomeScreenStyles = (theme: MD3Theme) => StyleSheet.create<Sty
     borderBottomColor: '#e0e0e0',
   },
   searchContainer: {
+    // TODO: remove after confirming no other usages
     marginBottom: 8,
   },
   searchInput: {
+    // TODO: remove after confirming no other usages
     backgroundColor: 'white',
     borderRadius: 5,
     paddingHorizontal: 10,
@@ -86,24 +89,24 @@ export const createHomeScreenStyles = (theme: MD3Theme) => StyleSheet.create<Sty
     marginHorizontal: 16,
     marginLeft: 24
   },
-  list: { 
-    padding: 16, 
+  list: {
+    padding: 16,
     paddingBottom: 192
   },
-  card: { 
-    marginBottom: 16 
+  card: {
+    marginBottom: 6
   },
   cardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  dragHandle: { 
-    flexDirection: "row", 
-    alignItems: "center" 
+  dragHandle: {
+    flexDirection: "row",
+    alignItems: "center"
   },
-  cardContent: { 
-    marginTop: 8 
+  cardContent: {
+    marginTop: 8
   },
   quantityContainer: {
     flexDirection: "row",
@@ -111,26 +114,32 @@ export const createHomeScreenStyles = (theme: MD3Theme) => StyleSheet.create<Sty
     alignItems: "center",
     marginBottom: 8,
   },
-  quantityButtons: { 
-    flexDirection: "row" 
+  quantityButtons: {
+    flexDirection: "row"
   },
   quantityInputContainer: {
     flexDirection: "row",
     alignItems: "center",
     flex: 1,
   },
-  input: { 
-    flex: 1, 
-    marginHorizontal: 8 
+  input: {
+    flex: 1,
+    marginHorizontal: 8
   },
-  cardActions: { 
-    flexDirection: "row" 
+  cardActions: {
+    flexDirection: "row"
   },
-  fab: { 
-    position: "absolute", 
-    margin: 16, 
-    right: 0, 
-    bottom: 0 
+  fab: {
+    position: "absolute",
+    margin: 16,
+    right: 0,
+    bottom: 42
+  },
+  fabBottomInset: {
+    position: "absolute",
+    margin: 16,
+    right: 0,
+    bottom: 4
   },
   modalOverlay: {
     flex: 1,

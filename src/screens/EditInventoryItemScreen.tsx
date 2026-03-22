@@ -1,27 +1,17 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  View,
-  StyleSheet,
-  Dimensions,
-  ScrollView,
-  SafeAreaView,
-  Alert,
-  Modal,
-} from "react-native";
+  View, ScrollView, StyleSheet, TextInput as RNTextInput,
+  Alert, Pressable, Dimensions,
+} from 'react-native';
 import {
-  TextInput as PaperTextInput,
-  Button,
-  Text,
-  useTheme,
-  Card,
-  IconButton,
-} from "react-native-paper";
-import { useNavigation, useRoute, useFocusEffect } from "@react-navigation/native";
-import {
-  NativeStackNavigationProp,
-  NativeStackScreenProps,
-} from "@react-navigation/native-stack";
-import { LineChart } from "react-native-chart-kit";
+  Text, useTheme, Card, Chip, Divider, Button, IconButton,
+} from 'react-native-paper';
+import { useNavigation, useRoute, useFocusEffect, usePreventRemove } from '@react-navigation/native';
+import { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { parseISO, format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   updateInventoryItem,
   getInventoryHistory,
@@ -29,358 +19,607 @@ import {
   deleteInventoryItem,
   getLists,
   updateInventoryItemList,
-} from "../database/database";
-import { InventoryHistory } from "../database/models";
-import { RootStackParamList } from "../types/navigation";
-import { getEmojiForList } from "../utils/stringUtils";
-import { EditableName } from "../components/EditableName";
+  getCategories,
+  addCategory,
+  updateProductCategory,
+  addShoppingListItem,
+  updateShoppingListItem,
+  deleteShoppingListItem,
+  getProductConsumptionStats,
+  getShoppingListItemForInventoryItem,
+  getSetting,
+  getStores,
+  getPriceHistory,
+  getReferencePriceForProduct,
+  upsertProductStorePrice,
+  upsertProductBasePrice
+} from '../database/database';
+import { InventoryHistory } from '../database/models';
+import { RootStackParamList } from '../types/navigation';
+import ContextualHeader from '../components/ContextualHeader';
+import { ItemPickerDialog } from '../components/ItemPickerDialog';
+import { StoreSelector } from '../components/StoreSelector';
+import { SearchablePickerDialog } from '../components/SearchablePickerDialog';
+import { useInventoryItem } from '../hooks/useInventoryItem';
+import QuantityHistorySection from '../components/QuantityHistorySection';
+import PriceHistorySection from '../components/PriceHistorySection';
+import { editInventoryItemStyles } from '../styles/EditInventoryItemStyles';
 
-type EditInventoryItemNavigationProp = NativeStackNavigationProp<
-  RootStackParamList,
-  "EditInventoryItem"
->;
-type EditInventoryItemProps = NativeStackScreenProps<
-  RootStackParamList,
-  "EditInventoryItem"
->;
+type EditInventoryItemProps = NativeStackScreenProps<RootStackParamList, 'EditInventoryItem'>;
+
+interface PriceHistory {
+  date: string;
+  price: number;
+  storeName: string;
+}
+
+interface ConsumptionStats {
+  avgWeeklyConsumption: number | null;
+  avgPrice90d: number | null;
+  lowestPrice90d: { price: number; storeName: string } | null;
+}
 
 export default function EditInventoryItem() {
-  const route = useRoute<EditInventoryItemProps["route"]>();
+  const route = useRoute<EditInventoryItemProps['route']>();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const inventoryItem = route.params?.inventoryItem;
-  const [quantity, setQuantity] = useState(inventoryItem?.quantity?.toString() || "");
-  const [notes, setNotes] = useState(inventoryItem?.notes || "");
-  const [history, setHistory] = useState<InventoryHistory[]>([]);
-  const navigation = useNavigation<EditInventoryItemNavigationProp>();
   const theme = useTheme();
-  const [name, setName] = useState(inventoryItem?.productName || "");
+
+  // Core fields
+  const [name, setName] = useState(inventoryItem?.productName || '');
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [notes, setNotes] = useState(inventoryItem?.notes || '');
+  const [quantityInput, setQuantityInput] = useState('');
+
+  // Category and list
   const [lists, setLists] = useState<{ id: number; name: string }[]>([]);
-  const [listModalVisible, setListModalVisible] = useState(false);
+  const [categories, setCategories] = useState<{ id: number; name: string }[]>([]);
   const [selectedListId, setSelectedListId] = useState(inventoryItem?.listId ?? 1);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(inventoryItem?.categoryId ?? null);
+  const [listModalVisible, setListModalVisible] = useState(false);
+  const [categoryModalVisible, setCategoryModalVisible] = useState(false);
 
+  // Shopping list
+  const [shoppingListItem, setShoppingListItem] = useState<{ id: number; quantity: number; price?: number } | null>(null);
+  const [suggestedPrice, setSuggestedPrice] = useState<number>(0);
+  const [editingPrice, setEditingPrice] = useState(false);
+  const [priceInput, setPriceInput] = useState('');
+  const [selectedStoreId, setSelectedStoreId] = useState<number | null>(null);
+  const [stores, setStores] = useState<{ id: number; name: string }[]>([]);
+
+  // History
+  const [history, setHistory] = useState<InventoryHistory[]>([]);
+  const [priceHistory, setPriceHistory] = useState<PriceHistory[]>([]);
+  const [quantityHistoryCollapsed, setQuantityHistoryCollapsed] = useState(false);
+  const [priceHistoryCollapsed, setPriceHistoryCollapsed] = useState(false);
+  const [statsCollapsed, setStatsCollapsed] = useState(true);
+
+  // Derived stats
+  const [stats, setStats] = useState<ConsumptionStats | null>(null);
+
+  // useInventoryItem hook for quantity management
+  const {
+    quantity: liveQuantity,
+    updateInventoryItemQuantity,
+    startContinuousAdjustment,
+    stopContinuousAdjustment,
+  } = useInventoryItem({
+    inventoryItemId: inventoryItem?.id ?? 0,
+    initialQuantity: inventoryItem?.quantity ?? 0,
+    productName: inventoryItem?.productName ?? '',
+  });
+
+  // Sync quantity input with live quantity
   useEffect(() => {
-    if (inventoryItem) {
-      setQuantity(inventoryItem.quantity.toString());
-      loadHistory();
+    setQuantityInput(liveQuantity.toString());
+  }, [liveQuantity]);
+
+  // Dirty tracking for beforeRemove
+  const isDirtyRef = useRef(false);
+  const mountedRef = useRef(false);
+  const loadingRef = useRef(true); // starts true, set false after first load
+  const savedRef = useRef(false);
+
+  // Initial value refs for revert functionality
+  const initialQuantityRef = useRef(inventoryItem?.quantity ?? 0);
+  const initialPriceRef = useRef<number>(0);
+  const initialShoppingListItemRef = useRef<{ id: number; quantity: number; price?: number } | null>(null);
+
+  // Mark dirty on any field change (but not on initial mount)
+  useEffect(() => {
+
+    if (!mountedRef.current) {
+      mountedRef.current = true;
+      return;
     }
-    getLists().then(setLists);
-    setSelectedListId(inventoryItem?.listId ?? 1);
-  }, []);
+    if (loadingRef.current) return;
+    isDirtyRef.current = true;
+  }, [name, notes, selectedCategoryId, selectedListId, liveQuantity, suggestedPrice, shoppingListItem]);
 
-  // Refresh data when screen gains focus to show latest changes
-  useFocusEffect(
-    useCallback(() => {
-      if (inventoryItem) {
-        setQuantity(inventoryItem.quantity.toString());
-        setNotes(inventoryItem.notes || "");
-        setName(inventoryItem.productName || "");
-        setSelectedListId(inventoryItem.listId ?? 1);
-        loadHistory();
+  const handleSave = useCallback(async () => {
+
+    if (!inventoryItem?.id) return;
+    try {
+      const resolvedPrice = parseFloat(priceInput.replace(',', '.'));
+      const finalPrice = isNaN(resolvedPrice) ? suggestedPrice : resolvedPrice;
+
+      await updateInventoryItem(inventoryItem.id, liveQuantity, notes);
+
+      if (name !== inventoryItem.productName) {
+        await updateProductName(inventoryItem.productId, name);
       }
-    }, [inventoryItem])
-  );
+      if (selectedCategoryId !== (inventoryItem.categoryId ?? null)) {
+        await updateProductCategory(inventoryItem.productId, selectedCategoryId!);
+      }
+      if (selectedListId !== inventoryItem.listId) {
+        await updateInventoryItemList(inventoryItem.id, selectedListId);
+      }
 
-  const loadHistory = async () => {
-    if (inventoryItem?.productName) { // Ensure product and id exist before calling
-      try {
-        const data = await getInventoryHistory(inventoryItem.id);
-        setHistory(data || []); 
-      } catch (error) {
-        console.error("Erro ao carregar histórico:", error);
+      // Handle price and shopping list changes
+      if (shoppingListItem?.id && shoppingListItem.id > 0) {
+        const updateResult = await updateShoppingListItem(shoppingListItem.id, { price: finalPrice });
+
+      }
+      const originalSli = initialShoppingListItemRef.current;
+      if (shoppingListItem === null && originalSli) {
+        await deleteShoppingListItem(originalSli.id);
+      }
+      if (shoppingListItem?.id === -1 && !originalSli) {
+        await addShoppingListItem(inventoryItem.listId, inventoryItem.productName, shoppingListItem.quantity, finalPrice);
+      }
+
+      if (finalPrice > 0) {
+        if (selectedStoreId !== null) {
+          await upsertProductStorePrice(inventoryItem.productId, selectedStoreId, finalPrice);
+        } else {
+          await upsertProductBasePrice(inventoryItem.productId, finalPrice);
+        }
+      }
+
+      setSuggestedPrice(finalPrice);
+      setPriceInput(finalPrice.toFixed(2));
+      isDirtyRef.current = false;
+    } catch (error) {
+      console.error('Erro ao salvar:', error);
+    }
+  }, [inventoryItem, liveQuantity, notes, name, selectedCategoryId, selectedListId, priceInput, suggestedPrice, shoppingListItem]);
+
+  const handleSaveAndGoBack = useCallback(async () => {
+    await handleSave();
+    navigation.goBack();
+  }, [handleSave, navigation]);
+
+  const loadAll = useCallback(async () => {
+
+    if (!inventoryItem) return;
+    loadingRef.current = true;
+
+    const [
+      historyData,
+      listsData,
+      categoriesData,
+      sli,
+      consumptionStats,
+      defaultStoreMode,
+      defaultStoreId,
+    ] = await Promise.all([
+      getInventoryHistory(inventoryItem.id),
+      getLists(),
+      getCategories(),
+      getShoppingListItemForInventoryItem(inventoryItem.id),
+      getProductConsumptionStats(inventoryItem.id, inventoryItem.productId),
+      getSetting('defaultStoreMode'),
+      getSetting('defaultStoreId'),
+    ]);
+
+    setHistory(historyData);
+    setLists(listsData);
+    setCategories(categoriesData);
+    setShoppingListItem(sli);
+    setStats(consumptionStats);
+
+    // Load price history
+    const ph = await getPriceHistory(inventoryItem.productId);
+    setPriceHistory(ph);
+
+    // Initialize stores
+    const storesData = await getStores();
+    setStores(storesData);
+
+    const initialStoreId = defaultStoreMode === 'fixed' && defaultStoreId
+      ? parseInt(defaultStoreId)
+      : null;
+    setSelectedStoreId(initialStoreId);
+
+    // Determine suggested price
+    if (sli?.price) {
+      setSuggestedPrice(sli.price);
+      setPriceInput(sli.price.toFixed(2));
+    } else {
+      const refPrice = await getReferencePriceForProduct(inventoryItem.productId, initialStoreId);
+      if (refPrice != null) {
+        setSuggestedPrice(refPrice);
+        setPriceInput(refPrice.toFixed(2));
       }
     }
-  };
 
-  const handleUpdate = async () => {
-    if (inventoryItem?.id) {
-      try {
-        await updateInventoryItem(inventoryItem.id, parseInt(quantity), notes);
-        navigation.goBack();
-      } catch (error) {
-        console.error("Erro ao atualizar produto:", error);
-      }
-    }
-  };
+    // Set initial refs after loadAll completes
+    initialPriceRef.current = suggestedPrice;
+    initialShoppingListItemRef.current = sli;
 
-  const handleNameUpdate = async (newName: string) => {
-    if (inventoryItem?.id) {
-      try {
-        setName(newName);
-        await updateProductName(inventoryItem.productId, newName);
-      } catch (error) {
-        console.error("Erro ao atualizar nome do produto:", error);
-      }
-    }
-  };
+    // Reset dirty after load
+    //workaround for the issue where the component is unmounted before the loadAll is completed
+    isDirtyRef.current = false;
+    setTimeout(() => {
+      loadingRef.current = false;
+    }, 0);
+  }, [inventoryItem]);
 
-  const handleDelete = async () => {
-    if (inventoryItem?.id) {
+  useFocusEffect(useCallback(() => { loadAll(); }, [loadAll]));
+
+  // beforeRemove guard
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+
+      if (!isDirtyRef.current || savedRef.current) return;
+      e.preventDefault();
       Alert.alert(
-        "Confirmar Exclusão",
-        "Tem certeza que deseja excluir este produto?",
+        'Sair sem salvar?',
+        'Você tem alterações não salvas.',
         [
           {
-            text: "Cancelar",
-            style: "cancel",
+            text: 'Descartar', style: 'destructive', onPress: () => {
+              isDirtyRef.current = false;
+              navigation.dispatch(e.data.action);
+            }
           },
           {
-            text: "Excluir",
-            onPress: async () => {
-              try {
-                await deleteInventoryItem(inventoryItem.id);
-                navigation.goBack();
-              } catch (error) {
-                console.error("Erro ao deletar produto:", error);
-              }
-            },
+            text: 'Salvar', onPress: async () => {
+              await handleSave();
+              navigation.dispatch(e.data.action);
+            }
           },
-        ],
-        { cancelable: true }
+        ]
       );
+    });
+    return unsubscribe;
+  }, [navigation, handleSave]);
+
+  const handleChangeList = useCallback(async (newListId: number) => {
+    setSelectedListId(newListId);
+    setListModalVisible(false);
+    isDirtyRef.current = true;
+  }, []);
+
+  const handleCategorySelect = useCallback((categoryId: number) => {
+    setSelectedCategoryId(categoryId);
+    setCategoryModalVisible(false);
+    isDirtyRef.current = true;
+  }, []);
+
+  const handleCategoryCreate = useCallback(async (categoryName: string) => {
+    const newCategoryId = await addCategory(categoryName);
+    setSelectedCategoryId(newCategoryId);
+    const updatedCategories = await getCategories();
+    setCategories(updatedCategories);
+    setCategoryModalVisible(false);
+    isDirtyRef.current = true;
+  }, []);
+
+  const handleToggleShoppingList = useCallback(() => {
+    if (!inventoryItem) return;
+    setShoppingListItem(prev => prev ? null : { id: -1, quantity: 1, price: suggestedPrice || undefined });
+    isDirtyRef.current = true;
+  }, [inventoryItem, suggestedPrice]);
+
+  const handlePriceSave = useCallback(() => {
+    const parsed = parseFloat(priceInput.replace(',', '.'));
+    if (isNaN(parsed)) return;
+    setSuggestedPrice(parsed);
+    setPriceInput(parsed.toFixed(2));
+    setEditingPrice(false);
+    isDirtyRef.current = true;
+  }, [priceInput]);
+
+  const handleStoreSelect = useCallback(async (storeId: number | null) => {
+    setSelectedStoreId(storeId);
+    if (!inventoryItem) return;
+    const price = await getReferencePriceForProduct(inventoryItem.productId, storeId);
+    if (price != null) {
+      setSuggestedPrice(price);
+      setPriceInput(price.toFixed(2));
+    } else {
+      setSuggestedPrice(0);
+      setPriceInput('');
     }
-  };
+    isDirtyRef.current = true;
+  }, [inventoryItem]);
 
-  const formatChartLabel = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("pt-BR", {
-      day: "2-digit",
-      month: "2-digit",
-    });
-  };
+  const handleDelete = useCallback(() => {
+    Alert.alert(
+      'Confirmar Exclusão',
+      `Excluir ${name} do estoque?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Excluir', style: 'destructive', onPress: async () => {
+            await deleteInventoryItem(inventoryItem!.id);
+            navigation.goBack();
+          }
+        },
+      ]
+    );
+  }, [name, inventoryItem, navigation]);
 
-  const formatHistoryDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString("pt-BR", {
-      day: "2-digit",
-      month: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
+  const formatCurrency = (v: number) => `R$ ${v.toFixed(2).replace('.', ',')}`;
+  const formatDate = (d: string) => format(parseISO(d.includes('T') ? d : d + 'T00:00:00'), 'dd/MM', { locale: ptBR });
 
   const chartData = {
-    labels: [...history]
-      .reverse()
-      .slice(-7)
-      .map((h) => formatChartLabel(h.date)),
-    datasets: [
-      {
-        data: [...history]
-          .reverse()
-          .slice(-7)
-          .map((h) => h.quantity),
-      },
-    ],
-  };
-
-  const handleChangeList = async (newListId: number) => {
-    if (inventoryItem?.id && newListId !== selectedListId) {
-      await updateInventoryItemList(inventoryItem.id, newListId);
-      setSelectedListId(newListId);
-      navigation.setParams({ inventoryItem: { ...inventoryItem, listId: newListId } });
-    }
-    setListModalVisible(false);
+    labels: [...history].reverse().slice(-7).map(h => formatDate(h.date)),
+    datasets: [{ data: [...history].reverse().slice(-7).map(h => h.quantity) }],
   };
 
   return (
-    <SafeAreaView style={{ flex: 1 }}>
-      <ScrollView style={styles.container}>
-      <EditableName name={name} handleSave={handleNameUpdate} handleDelete={handleDelete}/>
+    <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }}>
+      <ContextualHeader
+        listName={inventoryItem?.listId ? lists.find(l => l.id === inventoryItem.listId)?.name ?? '' : ''}
+        onListDelete={handleDelete}
+      />
 
-        <Card style={styles.card}>
-          <Card.Content>
-            <PaperTextInput
-              label="Lista"
-              value={lists.find((l) => l.id === selectedListId)?.name || "Selecionar Lista"}
-              mode="outlined"
-              style={[styles.input, { flex: 1 }]}
-              editable={false}
-              right={<PaperTextInput.Icon icon="menu-down" onPress={() => setListModalVisible(true)} />}
-              pointerEvents="none"
+      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32 }}>
+
+        {/* Name row */}
+        <View style={editInventoryItemStyles.nameRow}>
+          {isEditingName ? (
+            <RNTextInput
+              value={name}
+              onChangeText={setName}
+              autoFocus
+              onBlur={() => setIsEditingName(false)}
+              style={[editInventoryItemStyles.nameInput, {
+                color: theme.colors.onSurface,
+                borderBottomColor: theme.colors.primary,
+              }]}
             />
-          </Card.Content>
-        </Card>
+          ) : (
+            <Pressable onPress={() => setIsEditingName(true)} style={{ flex: 1 }}>
+              <Text style={[editInventoryItemStyles.nameText, { color: theme.colors.onSurface }]}>
+                {name}
+              </Text>
+            </Pressable>
+          )}
+          <IconButton icon="pencil-outline" size={22} onPress={() => setIsEditingName(true)} />
+          <IconButton icon="delete-outline" size={22} iconColor={theme.colors.error} onPress={handleDelete} />
+        </View>
 
-        <Card style={styles.card}>
-          <Card.Content>
-            <PaperTextInput
-              label="Quantidade"
-              value={quantity}
-              onChangeText={setQuantity}
+        {/* Quantity row */}
+        <View style={editInventoryItemStyles.quantityRow}>
+          <Text style={[editInventoryItemStyles.label, { color: theme.colors.onSurfaceVariant }]}>
+            Quantidade
+          </Text>
+          <View style={editInventoryItemStyles.quantityControls}>
+            <Pressable
+              onPress={() => updateInventoryItemQuantity(Math.max(0, liveQuantity - 1), true)}
+              onLongPress={() => startContinuousAdjustment(false, true)}
+              onPressOut={() => stopContinuousAdjustment(true)}
+              style={[editInventoryItemStyles.qtyButton, { borderColor: theme.colors.outline }]}
+            >
+              <MaterialCommunityIcons name="minus" size={20} color={theme.colors.primary} />
+            </Pressable>
+            <RNTextInput
+              value={quantityInput}
+              onChangeText={setQuantityInput}
+              onBlur={() => updateInventoryItemQuantity(parseInt(quantityInput) || 0, true)}
               keyboardType="numeric"
-              style={styles.input}
-              mode="outlined"
-              testID="quantity-input"
+              style={[editInventoryItemStyles.qtyInput, {
+                color: theme.colors.onSurface,
+                borderColor: theme.colors.outline,
+              }]}
             />
-            <Button
-              mode="contained"
-              onPress={handleUpdate}
-              style={styles.button}
-              disabled={!quantity}
-              testID="update-button"
+            <Pressable
+              onPress={() => updateInventoryItemQuantity(liveQuantity + 1, true)}
+              onLongPress={() => startContinuousAdjustment(true, true)}
+              onPressOut={() => stopContinuousAdjustment(true)}
+              style={[editInventoryItemStyles.qtyButton, { borderColor: theme.colors.outline }]}
             >
-              Atualizar Quantidade
-            </Button>
-          </Card.Content>
-        </Card>
+              <MaterialCommunityIcons name="plus" size={20} color={theme.colors.primary} />
+            </Pressable>
 
-        
-        <Card style={styles.card}>
-          <Card.Content>
+            {/* Price + shopping list inline */}
 
-            <PaperTextInput
-              label="Observações"
-              value={notes}
-              onChangeText={setNotes}
-              keyboardType="default"
-              style={styles.input}
-              mode="outlined"
-              testID="notes-input"
-            />
-            <Button
-              mode="contained"
-              onPress={handleUpdate}
-              style={styles.button}
-              disabled={!notes}
-              testID="update-button"
-            >
-              Atualizar Observações
-            </Button>
-          </Card.Content>
-        </Card>
-
-        <Card style={styles.card}>
-          <Card.Content>
-            <Text variant="titleMedium" style={styles.subtitle}>
-              Histórico de Quantidades
-            </Text>
-            {history.length > 0 ? (
-              <View>
-                <LineChart
-                  data={chartData}
-                  width={Dimensions.get("window").width - 64}
-                  height={220}
-                  chartConfig={{
-                    backgroundColor: theme.colors.primary,
-                    backgroundGradientFrom: theme.colors.primary,
-                    backgroundGradientTo: theme.colors.primary,
-                    decimalPlaces: 0,
-                    color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
-                    style: {
-                      borderRadius: 16,
-                    },
-                  }}
-                  bezier
-                  style={styles.chart}
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', gap: 12, paddingLeft: 12 }}>
+              <StoreSelector
+                stores={stores}
+                selectedStoreId={selectedStoreId}
+                onStoreChange={handleStoreSelect}
+                nullOptionLabel="Qualquer loja"
+                iconOnly
+              />
+              {editingPrice ? (
+                <RNTextInput
+                  value={priceInput}
+                  onChangeText={text => { setPriceInput(text); isDirtyRef.current = true; }}
+                  keyboardType="decimal-pad"
+                  autoFocus
+                  onBlur={handlePriceSave}
+                  style={[editInventoryItemStyles.priceInput, {
+                    color: theme.colors.onSurface,
+                    borderBottomColor: theme.colors.primary,
+                    flex: 1,
+                  }]}
                 />
-                <View style={styles.historyList}>
-                  {history.map((item, index) => (
-                    <View key={item.id} style={styles.historyItem}>
-                      <Text variant="bodyMedium">
-                        {formatHistoryDate(item.date)}
-                      </Text>
-                      <Text variant="bodyMedium">
-                        Quantidade: {item.quantity}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            ) : (
-              <Text>Nenhum histórico disponível</Text>
-            )}
-          </Card.Content>
-        </Card>
-
-        <Modal
-          visible={listModalVisible}
-          animationType="slide"
-          transparent={true}
-          onRequestClose={() => setListModalVisible(false)}
-        >
-          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'flex-end' }}>
-            <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 16, maxHeight: '60%' }}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <Text style={{ fontSize: 18, fontWeight: 'bold' }}>Escolher Lista</Text>
-                <IconButton icon="close" onPress={() => setListModalVisible(false)} />
-              </View>
-              <ScrollView>
-                {lists.map((list) => (
-                  <Card
-                    key={list.id}
-                    onPress={() => handleChangeList(list.id)}
-                    style={{ marginBottom: 8, borderRadius: 8, backgroundColor: list.id === selectedListId ? '#e3f2fd' : '#f5f5f5' }}
-                  >
-                    <Card.Content style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <Text style={{ fontSize: 22, marginRight: 12 }}>{getEmojiForList(list.name)}</Text>
-                      <Text style={{ fontSize: 16, flex: 1 }}>{list.name}</Text>
-                      {list.id === selectedListId && <IconButton icon="check" iconColor="#1976d2" size={20} />}
-                    </Card.Content>
-                  </Card>
-                ))}
-              </ScrollView>
+              ) : (
+                <Pressable onPress={() => setEditingPrice(true)} style={{ flexShrink: 1 }}>
+                  <Text style={{ color: theme.colors.onSurface, fontSize: 16 }}>
+                    {suggestedPrice > 0 ? formatCurrency(suggestedPrice) : '—'}
+                  </Text>
+                </Pressable>
+              )}
+              <Pressable onPress={handleToggleShoppingList}>
+                <MaterialCommunityIcons
+                  name={shoppingListItem ? 'cart-check' : 'cart-plus'}
+                  size={26}
+                  color={shoppingListItem ? theme.colors.primary : theme.colors.onSurfaceVariant}
+                />
+              </Pressable>
             </View>
           </View>
-        </Modal>
+        </View>
+
+        {/* Category + List chips */}
+        <View style={editInventoryItemStyles.chipsRow}>
+          <Chip
+            icon="tag-outline"
+            onPress={() => setCategoryModalVisible(true)}
+            style={editInventoryItemStyles.chip}
+            mode="outlined"
+          >
+            {categories.find(c => c.id === selectedCategoryId)?.name || 'Sem categoria'}
+          </Chip>
+          <Chip
+            icon="format-list-bulleted"
+            onPress={() => setListModalVisible(true)}
+            style={editInventoryItemStyles.chip}
+            mode="outlined"
+          >
+            {lists.find(l => l.id === selectedListId)?.name || 'Lista'}
+          </Chip>
+        </View>
+
+        {/* Notes */}
+        <RNTextInput
+          value={notes}
+          onChangeText={setNotes}
+          placeholder="Observações..."
+          placeholderTextColor={theme.colors.outline}
+          multiline
+          style={[editInventoryItemStyles.notesInput, {
+            color: theme.colors.onSurface,
+            borderColor: theme.colors.outlineVariant,
+          }]}
+        />
+
+        {/* Save + Delete buttons */}
+        <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+          <Button
+            mode="contained"
+            onPress={handleSaveAndGoBack}
+            style={{ flex: 1 }}
+            icon="content-save"
+          >
+            Salvar alterações
+          </Button>
+        </View>
+
+        {/* Derived stats */}
+        {stats && (
+          <>
+            <Pressable
+              onPress={() => setStatsCollapsed(p => !p)}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginTop: 16,
+              }}
+            >
+              <Text
+                variant="labelMedium"
+                style={{
+                  textTransform: 'uppercase',
+                  letterSpacing: 0.5,
+                  color: theme.colors.onSurfaceVariant,
+                }}
+              >
+                Estatísticas
+              </Text>
+              <MaterialCommunityIcons
+                name={statsCollapsed ? "chevron-down" : "chevron-up"}
+                size={18}
+                color={theme.colors.onSurfaceVariant}
+              />
+            </Pressable>
+            {!statsCollapsed && (
+              <View style={[editInventoryItemStyles.statsRow, { borderColor: theme.colors.outlineVariant }]}>
+                {stats.avgWeeklyConsumption !== null && (
+                  <View style={editInventoryItemStyles.statItem}>
+                    <MaterialCommunityIcons name="trending-down" size={16} color={theme.colors.onSurfaceVariant} />
+                    <Text style={[editInventoryItemStyles.statText, { color: theme.colors.onSurfaceVariant }]}>
+                      Consumo médio: ~{stats.avgWeeklyConsumption.toFixed(1)}/semana
+                    </Text>
+                  </View>
+                )}
+                {stats.avgPrice90d !== null && (
+                  <View style={editInventoryItemStyles.statItem}>
+                    <MaterialCommunityIcons name="tag-outline" size={16} color={theme.colors.onSurfaceVariant} />
+                    <Text style={[editInventoryItemStyles.statText, { color: theme.colors.onSurfaceVariant }]}>
+                      Preço médio (90d): {formatCurrency(stats.avgPrice90d)}
+                    </Text>
+                  </View>
+                )}
+                {stats.lowestPrice90d !== null && (
+                  <View style={editInventoryItemStyles.statItem}>
+                    <MaterialCommunityIcons name="sale" size={16} color={theme.colors.onSurfaceVariant} />
+                    <Text style={[editInventoryItemStyles.statText, { color: theme.colors.onSurfaceVariant }]}>
+                      Menor preço (90d): {formatCurrency(stats.lowestPrice90d.price)} em {stats.lowestPrice90d.storeName}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
+          </>
+        )}
+
+        <Divider style={{ marginVertical: 16 }} />
+
+        <QuantityHistorySection
+          history={history}
+          collapsed={quantityHistoryCollapsed}
+          onToggle={() => setQuantityHistoryCollapsed(p => !p)}
+          chartData={chartData}
+          themeColors={{
+            onSurfaceVariant: theme.colors.onSurfaceVariant,
+            onSurface: theme.colors.onSurface,
+            outline: theme.colors.outline,
+            outlineVariant: theme.colors.outlineVariant,
+            error: theme.colors.error,
+            primary: theme.colors.primary,
+            surface: theme.colors.surface,
+          }}
+        />
+
+        <PriceHistorySection
+          priceHistory={priceHistory}
+          collapsed={priceHistoryCollapsed}
+          onToggle={() => setPriceHistoryCollapsed(p => !p)}
+          themeColors={{
+            onSurfaceVariant: theme.colors.onSurfaceVariant,
+            onSurface: theme.colors.onSurface,
+            outline: theme.colors.outline,
+            outlineVariant: theme.colors.outlineVariant,
+          }}
+        />
+
       </ScrollView>
+
+      <ItemPickerDialog
+        visible={listModalVisible}
+        onDismiss={() => setListModalVisible(false)}
+        items={lists}
+        selectedId={selectedListId}
+        onSelect={handleChangeList}
+        title="Escolher Lista"
+      />
+      <SearchablePickerDialog
+        visible={categoryModalVisible}
+        onDismiss={() => setCategoryModalVisible(false)}
+        items={categories}
+        selectedId={selectedCategoryId}
+        onSelect={handleCategorySelect}
+        onCreateNew={handleCategoryCreate}
+        title="Escolher Categoria"
+        placeholder="Buscar categoria..."
+      />
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f5f5f5",
-    paddingTop: 64,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  nameContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-  },
-  nameEditContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-  },
-  nameInput: {
-    flex: 1,
-    marginRight: 8,
-  },
-  title: {
-    flex: 1,
-  },
-  subtitle: {
-    marginBottom: 16,
-  },
-  card: {
-    margin: 16,
-  },
-  input: {
-    marginBottom: 16,
-  },
-  button: {
-    marginTop: 8,
-  },
-  chart: {
-    marginVertical: 8,
-    borderRadius: 16,
-  },
-  historyList: {
-    marginTop: 16,
-    paddingBottom: 64,
-  },
-  historyItem: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
-  },
-});

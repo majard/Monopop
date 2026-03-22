@@ -1,9 +1,11 @@
+import React from 'react';
 import { View, Pressable } from 'react-native';
+import { Swipeable } from 'react-native-gesture-handler';
 import {
-  TextInput as PaperTextInput,
   Card,
   IconButton,
   Text,
+  Checkbox,
   useTheme,
 } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
@@ -14,6 +16,8 @@ import { RootStackParamList } from '../types/navigation';
 import { createHomeScreenStyles } from '../styles/HomeScreenStyles';
 import { getEmojiForProduct } from '../utils/stringUtils';
 import { useInventoryItem } from '../hooks/useInventoryItem';
+import { QuantityPill } from './QuantityPill';
+import { EmojiAvatar } from './EmojiAvatar';
 
 type ProductCardNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
@@ -25,6 +29,10 @@ interface InventoryItemCardProps {
   drag: () => void;
   isActive: boolean;
   onInventoryItemUpdated?: () => void;
+  isSelectionMode?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: (id: number) => void;
+  onLongPressStart?: () => void;
 }
 
 export const InventoryItemCard = ({
@@ -32,6 +40,10 @@ export const InventoryItemCard = ({
   drag,
   isActive,
   onInventoryItemUpdated,
+  isSelectionMode = false,
+  isSelected = false,
+  onToggleSelect,
+  onLongPressStart,
 }: InventoryItemCardProps) => {
   const navigation = useNavigation<ProductCardNavigationProp>();
   const theme = useTheme();
@@ -43,78 +55,130 @@ export const InventoryItemCard = ({
     confirmRemoveInventoryItem,
     startContinuousAdjustment,
     stopContinuousAdjustment,
-  } = useInventoryItem({ inventoryItemId: inventoryItem.id, initialQuantity: inventoryItem.quantity, onInventoryItemUpdated });
+  } = useInventoryItem({ inventoryItemId: inventoryItem.id, initialQuantity: inventoryItem.quantity, productName: inventoryItem.productName, onInventoryItemUpdated });
 
+  const handleEdit = () => {
+    if (!isSelectionMode) {
+      navigation.navigate('EditInventoryItem', { inventoryItem: inventoryItem });
+    }
+  };
+
+  const handleCardPress = () => {
+    if (isSelectionMode && onToggleSelect) {
+      onToggleSelect(inventoryItem.id);
+    } else if (!isSelectionMode) {
+      handleEdit();
+    }
+  };
+
+  const handleLongPress = () => {
+    if (isSelectionMode && onToggleSelect) {
+      onToggleSelect(inventoryItem.id);
+    } else if (!isSelectionMode) {
+      onLongPressStart?.();
+      drag();
+    }
+  };
+
+  const renderSwipeActions = () => (
+    <Pressable
+      onPress={confirmRemoveInventoryItem}
+      style={{
+        backgroundColor: theme.colors.error,
+        justifyContent: 'center',
+        alignItems: 'center',
+        width: 100,
+        marginBottom: 8,
+        borderRadius: 12,
+        marginLeft: 8,
+      }}
+    >
+      <IconButton icon="delete" size={26} iconColor="white" pointerEvents="none" />
+      <Text style={{ color: 'white', fontSize: 11, marginTop: -16 }}>Deletar</Text>
+    </Pressable>
+  );
+
+  const cardContent = (
+    <Card.Content style={{ paddingVertical: 4, paddingHorizontal: 12 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        {isSelectionMode && (
+          <View style={{ marginRight: 8 }}>
+            <Checkbox
+              status={isSelected ? 'checked' : 'unchecked'}
+              onPress={() => onToggleSelect?.(inventoryItem.id)}
+            />
+          </View>
+        )}
+
+        {/* Emoji — fixed width */}
+        <EmojiAvatar emoji={getEmojiForProduct(inventoryItem.productName)} />
+
+        {/* Name — takes remaining space, wraps up to 3 lines */}
+        <View style={{ flex: 1, marginHorizontal: 8 }}>
+          <Text variant="titleMedium" numberOfLines={3} style={{ fontSize: 16 }}>
+            {inventoryItem.productName}
+          </Text>
+          {inventoryItem.notes ? (
+            <Text
+              numberOfLines={1}
+              style={{
+                fontSize: 12,
+                color: theme.colors.onSurfaceVariant,
+                fontStyle: 'italic',
+                marginTop: 2,
+              }}
+            >
+              {inventoryItem.notes}
+            </Text>
+          ) : null}
+        </View>
+
+        {/* Pill — fixed, vertically centered by parent alignItems */}
+        <QuantityPill
+          quantity={quantity}
+          disabled={isSelectionMode}
+          onDecrement={() => updateInventoryItemQuantity(Math.max(0, quantity - 1))}
+          onIncrement={() => updateInventoryItemQuantity(quantity + 1)}
+          onStartContinuousDecrement={() => startContinuousAdjustment(false)}
+          onStartContinuousIncrement={() => startContinuousAdjustment(true)}
+          onStopContinuous={stopContinuousAdjustment}
+          testID={`increment-button-${inventoryItem.id}`}
+        />
+      </View>
+    </Card.Content>
+  );
+
+  if (isSelectionMode) {
+    return (
+      <Card style={[styles.card, { opacity: isActive ? 0.5 : 1, marginBottom: 4 }]}>
+        <Pressable
+          onPress={handleCardPress}
+          onLongPress={handleLongPress}
+          testID={`product-card-${inventoryItem.id}`}
+        >
+          {cardContent}
+        </Pressable>
+      </Card>
+    );
+  }
 
   return (
-    <Card style={[styles.card, { opacity: isActive ? 0.5 : 1 }]}>
-      <Pressable
-        onPress={() => navigation.navigate('EditInventoryItem', { inventoryItem: inventoryItem })}
-        onLongPress={drag}
-        testID={`product-card-${inventoryItem.id}`}
+    <View style={{ overflow: 'hidden', borderRadius: 12, marginBottom: 0, marginHorizontal: 4 }}>
+      <Swipeable
+        renderRightActions={renderSwipeActions}
+        overshootLeft={false}
+        overshootRight={false}
       >
-        <Card.Content>
-          <View style={styles.cardHeader}>
-            <View style={styles.dragHandle}>
-              <Text variant="titleMedium">
-                {inventoryItem.productName + ' ' + getEmojiForProduct(inventoryItem.productName)}
-              </Text>
-            </View>
-            <View style={styles.cardActions}>
-              <IconButton
-                icon="pencil"
-                size={20}
-                onPress={() =>
-                  navigation.navigate('EditInventoryItem', { inventoryItem: inventoryItem })
-                }
-                iconColor={theme.colors.primary}
-              />
-              <IconButton
-                icon="delete"
-                size={20}
-                onPress={confirmRemoveInventoryItem}
-                iconColor={theme.colors.error}
-                testID={`delete-button-${inventoryItem.id}`}
-              />
-            </View>
-          </View>
-          <View style={styles.cardContent}>
-            <View style={styles.quantityContainer}>
-              <View style={styles.quantityInputContainer}>
-                <Text variant="bodyMedium">Quantidade: </Text>
-                <PaperTextInput
-                  mode="outlined"
-                  dense
-                  value={quantity.toString()}
-                  onChangeText={(value) =>
-                    updateInventoryItemQuantity(value === '' ? 0 : parseInt(value, 10))
-                  }
-                  keyboardType="numeric"
-                  style={styles.input}
-                  testID={`quantity-text-input-${inventoryItem.id}`}
-                />
-              </View>
-              <View style={styles.quantityButtons}>
-                <IconButton
-                  icon="minus"
-                  size={20}
-                  onPress={() => updateInventoryItemQuantity(Math.max(0, quantity - 1))}
-                  onLongPress={() => startContinuousAdjustment(false)}
-                  onPressOut={stopContinuousAdjustment}
-                />
-                <IconButton
-                  icon="plus"
-                  size={20}
-                  onPress={() => updateInventoryItemQuantity(quantity + 1)}
-                  onLongPress={() => startContinuousAdjustment(true)}
-                  onPressOut={stopContinuousAdjustment}
-                  testID={`increment-button-${inventoryItem.id}`}
-                />
-              </View>
-            </View>
-          </View>
-        </Card.Content>
-      </Pressable>
-    </Card>
+        <Card style={[styles.card, { opacity: isActive ? 0.5 : 1 }]}>
+          <Pressable
+            onPress={handleCardPress}
+            onLongPress={handleLongPress}
+            testID={`product-card-${inventoryItem.id}`}
+          >
+            {cardContent}
+          </Pressable>
+        </Card>
+      </Swipeable>
+    </View>
   );
 };

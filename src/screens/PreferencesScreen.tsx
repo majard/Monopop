@@ -9,8 +9,7 @@ import {
   Divider,
   Portal,
   Dialog,
-  Button,
-  Provider
+  Button
 } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -22,6 +21,7 @@ import {
   getLists,
   getStores
 } from '../database/database';
+import { ItemPickerDialog } from '../components/ItemPickerDialog';
 
 type PreferencesScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Preferences'>;
 
@@ -136,7 +136,6 @@ export default function PreferencesScreen() {
   };
 
   return (
-    <Provider>
       <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
         <Appbar.Header>
           <Appbar.BackAction onPress={() => navigation.navigate('Config')} />
@@ -194,31 +193,14 @@ export default function PreferencesScreen() {
                   onPress={() => setListPickerVisible(true)}
                   right={props => <List.Icon {...props} icon="chevron-right" />}
                 />
-                <Portal>
-                  <Dialog visible={listPickerVisible} onDismiss={() => setListPickerVisible(false)}>
-                    <Dialog.Title>Escolher lista</Dialog.Title>
-                    <Dialog.ScrollArea>
-                      <ScrollView>
-                        {lists.map(list => (
-                          <List.Item
-                            key={list.id}
-                            title={list.name}
-                            onPress={() => {
-                              saveDefaultList(list.id);
-                              setListPickerVisible(false);
-                            }}
-                            right={props => defaultListId === list.id &&
-                              <List.Icon {...props} icon="check" />
-                            }
-                          />
-                        ))}
-                      </ScrollView>
-                    </Dialog.ScrollArea>
-                    <Dialog.Actions>
-                      <Button onPress={() => setListPickerVisible(false)}>Cancelar</Button>
-                    </Dialog.Actions>
-                  </Dialog>
-                </Portal>
+                <ItemPickerDialog
+                  visible={listPickerVisible}
+                  items={lists}
+                  selectedId={defaultListId}
+                  onSelect={saveDefaultList}
+                  onDismiss={() => setListPickerVisible(false)}
+                  title="Escolher lista"
+                />
               </>
             )}
           </View>
@@ -275,37 +257,19 @@ export default function PreferencesScreen() {
                   onPress={() => setStorePickerVisible(true)}
                   right={props => <List.Icon {...props} icon="chevron-right" />}
                 />
-                <Portal>
-                  <Dialog visible={storePickerVisible} onDismiss={() => setStorePickerVisible(false)}>
-                    <Dialog.Title>Escolher loja</Dialog.Title>
-                    <Dialog.ScrollArea>
-                      <ScrollView>
-                        {stores.map(store => (
-                          <List.Item
-                            key={store.id}
-                            title={store.name}
-                            onPress={() => {
-                              saveDefaultStore(store.id);
-                              setStorePickerVisible(false);
-                            }}
-                            right={props => defaultStoreId === store.id &&
-                              <List.Icon {...props} icon="check" />
-                            }
-                          />
-                        ))}
-                      </ScrollView>
-                    </Dialog.ScrollArea>
-                    <Dialog.Actions>
-                      <Button onPress={() => setStorePickerVisible(false)}>Cancelar</Button>
-                    </Dialog.Actions>
-                  </Dialog>
-                </Portal>
+                <ItemPickerDialog
+                  visible={storePickerVisible}
+                  items={stores}
+                  selectedId={defaultStoreId}
+                  onSelect={saveDefaultStore}
+                  onDismiss={() => setStorePickerVisible(false)}
+                  title="Escolher loja"
+                />
               </>
             )}
           </View>
         </ScrollView>
       </SafeAreaView>
-    </Provider>
   );
 }
 

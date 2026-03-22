@@ -1,23 +1,23 @@
-import React, { useState, useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ScrollView } from 'react-native';
-import {
-  Card,
-  Searchbar,
-  useTheme,
-  Chip,
-  IconButton,
-  Button,
-} from 'react-native-paper';
+import React, { useState, useCallback, useMemo } from 'react';
+import { View, StyleSheet, FlatList, Pressable } from 'react-native';
+import { Text, Surface, Chip, IconButton, Divider, useTheme } from 'react-native-paper';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { parseISO, format, isWithinInterval, startOfDay, endOfDay, subMonths, startOfMonth, endOfMonth } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { RootStackParamList } from '../types/navigation';
 import { useListContext } from '../context/ListContext';
+import { useListData } from '../context/ListDataContext';
 import { useList } from '../hooks/useList';
-import useInventory from '../hooks/useInventory';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import ContextualHeader from '../components/ContextualHeader';
-import { Invoice, InvoiceItem, InventoryItem } from '../database/models';
+import SearchBar from '../components/SearchBar';
+import { Invoice, InventoryItem } from '../database/models';
 import { getDb } from '../database/database';
+import { preprocessName, calculateSimilarity } from '../utils/similarityUtils';
+import { DateRangePickerModal, DateRange } from '../components/DateRangePickerModal';
+import HistoryScreenSkeleton from '../components/HistoryScreenSkeleton';
 
 type HistoryScreenNavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -43,12 +43,15 @@ interface InventoryChange {
   productId: number;
 }
 
-interface MonthSummary {
+interface PeriodSummary {
   totalSpent: number;
   mostUsedStore: string | null;
   purchaseCount: number;
+  label: string;
+  trend: number | null;
+  prevTotal: number;
+  prevLabel: string;
 }
-
 
 const parseHistoryDate = (value: string) =>
   value.length === 10 ? new Date(`${value}T12:00:00`) : new Date(value);
@@ -56,29 +59,116 @@ const parseHistoryDate = (value: string) =>
 export default function HistoryScreen() {
   const { listId } = useListContext();
   const { listName, handleListNameSave, handleListDelete } = useList(listId);
-  const [events, setEvents] = useState<HistoryEvent[]>([]);
-  const [filteredEvents, setFilteredEvents] = useState<HistoryEvent[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [expandedEventId, setExpandedEventId] = useState<number | null>(null);
-  const [monthSummary, setMonthSummary] = useState<MonthSummary>({ totalSpent: 0, mostUsedStore: null, purchaseCount: 0 });
-  const [selectedPeriod, setSelectedPeriod] = useState<'all' | 'month' | 'week'>('all');
+  const { findByProductId, inventoryItems } = useListData();
   const navigation = useNavigation<HistoryScreenNavigationProp>();
   const theme = useTheme();
 
-  // Use inventory hook for fuzzy search and finding items
-  const { findByProductId, inventoryItems, filteredInventoryItems } = useInventory(listId, 'alphabetical', searchQuery);
+  const [events, setEvents] = useState<HistoryEvent[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [expandedEventId, setExpandedEventId] = useState<number | null>(null);
+  const [dateRange, setDateRange] = useState<DateRange>({
+    start: subMonths(new Date(), 1),
+    end: new Date(),
+  });
+  const [datePickerVisible, setDatePickerVisible] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  //console.log('inventoryItems in historyscreen', inventoryItems);
-  const loadHistory = async () => {
+  const formatCurrency = (value: number) => `R$ ${value.toFixed(2).replace('.', ',')}`;
+  const formatDate = (dateString: string) =>
+    format(parseHistoryDate(dateString), "dd 'de' MMM yyyy", { locale: ptBR });
+
+  const matchedProductIds = useMemo(() => {
+    if (!searchQuery.trim()) return null;
+    const threshold = 0.4;
+    const processedQuery = preprocessName(searchQuery);
+    const matched = inventoryItems.filter((item: InventoryItem) => {
+      const name = preprocessName(item.productName);
+      if (!processedQuery) return true;
+      if (processedQuery.length < Math.ceil(name.length * 0.5)) return name.includes(processedQuery);
+      return calculateSimilarity(name, processedQuery) >= threshold;
+    });
+    return new Set(matched.map((i: InventoryItem) => i.productId));
+  }, [inventoryItems, searchQuery]);
+
+  const filteredEvents = useMemo(() => {
+    let result = [...events];
+
+    if (dateRange.start) {
+      const start = startOfDay(dateRange.start);
+      const end = endOfDay(dateRange.end ?? dateRange.start);
+      result = result.filter(e => isWithinInterval(parseHistoryDate(e.date), { start, end }));
+    }
+
+    if (matchedProductIds) {
+      result = result.filter(e => {
+        if (e.type === 'purchase') {
+          return e.store.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            e.items.some(item => matchedProductIds.has(item.productId));
+        }
+        return e.changes.some(c => matchedProductIds.has(c.productId));
+      });
+    }
+
+    return result;
+  }, [events, dateRange, matchedProductIds, searchQuery]);
+
+  const summary = useMemo((): PeriodSummary => {
+    const purchases = filteredEvents.filter(e => e.type === 'purchase') as Extract<HistoryEvent, { type: 'purchase' }>[];
+    const storeCount = new Map<string, number>();
+    purchases.forEach(e => storeCount.set(e.store, (storeCount.get(e.store) || 0) + 1));
+
+    let mostUsedStore: string | null = null;
+    let maxCount = 0;
+    storeCount.forEach((count, store) => { if (count > maxCount) { maxCount = count; mostUsedStore = store; } });
+
+    let label = 'Todo o tempo';
+    if (dateRange.start && dateRange.end) {
+      label = `${format(dateRange.start, 'dd/MM')} – ${format(dateRange.end, 'dd/MM')}`;
+    } else if (dateRange.start) {
+      label = `A partir de ${format(dateRange.start, 'dd/MM')}`;
+    }
+
+    const totalSpent = purchases.reduce((s, e) => s + e.total, 0);
+
+    let prevStart: Date | null = null;
+    let prevEnd: Date | null = null;
+
+    if (dateRange.start) {
+      const rangeMs = (endOfDay(dateRange.end ?? dateRange.start)).getTime()
+        - startOfDay(dateRange.start).getTime();
+      prevEnd = new Date(startOfDay(dateRange.start).getTime() - 1);
+      prevStart = new Date(prevEnd.getTime() - rangeMs);
+    } else {
+      const now = new Date();
+      prevStart = startOfMonth(subMonths(now, 1));
+      prevEnd = endOfMonth(subMonths(now, 1));
+    }
+
+    const prevLabel = prevStart && prevEnd
+      ? `${format(prevStart, 'dd/MM')}–${format(prevEnd, 'dd/MM')}`
+      : '—';
+
+    const prevPurchases = events.filter(e => {
+      if (e.type !== 'purchase') return false;
+      const d = parseHistoryDate(e.date);
+      return isWithinInterval(d, { start: prevStart!, end: prevEnd! });
+    }) as Extract<HistoryEvent, { type: 'purchase' }>[];
+
+    const prevTotal = prevPurchases.reduce((s, e) => s + e.total, 0);
+    const trend = prevTotal > 0 ? ((totalSpent - prevTotal) / prevTotal) * 100 : null;
+
+    return { totalSpent, mostUsedStore, purchaseCount: purchases.length, label, trend, prevTotal, prevLabel };
+  }, [filteredEvents, dateRange, events]);
+
+  const loadHistory = useCallback(async () => {
     try {
       const db = getDb();
 
-      // Load invoices (purchases) for this list
       const invoices = await db.getAllAsync<Invoice & { storeName: string }>(
-        `SELECT i.*, s.name as storeName 
-         FROM invoices i 
-         JOIN stores s ON i.storeId = s.id 
-         WHERE i.listId = ? 
+        `SELECT i.*, s.name as storeName
+         FROM invoices i
+         JOIN stores s ON i.storeId = s.id
+         WHERE i.listId = ?
          ORDER BY i.createdAt DESC`,
         [listId]
       );
@@ -86,546 +176,434 @@ export default function HistoryScreen() {
       const purchaseEvents: Extract<HistoryEvent, { type: 'purchase' }>[] = await Promise.all(
         invoices.map(async (invoice) => {
           const items = await db.getAllAsync<InvoiceItemDetail>(
-            `SELECT ii.*, p.name as productName 
-             FROM invoice_items ii 
-             JOIN products p ON ii.productId = p.id 
+            `SELECT ii.*, p.name as productName
+             FROM invoice_items ii
+             JOIN products p ON ii.productId = p.id
              WHERE ii.invoiceId = ?`,
             [invoice.id]
           );
-
-          return {
-            type: 'purchase',
-            id: invoice.id,
-            date: invoice.createdAt,
-            store: invoice.storeName,
-            total: invoice.total,
-            items,
-          };
+          return { type: 'purchase', id: invoice.id, date: invoice.createdAt, store: invoice.storeName, total: invoice.total, items };
         })
       );
 
-      // Load inventory save events - group by date (exclude purchase-related entries)
       const inventoryHistory = await db.getAllAsync<{
         date: string;
         inventoryItemId: number;
         quantity: number;
-        notes: string | null;
+        prevQuantity: number | null;
         productName: string;
         productId: number;
       }>(
-        `SELECT ih.date, ih.inventoryItemId, ih.quantity, ih.notes, p.name as productName, p.id as productId
+        `SELECT
+           ih.date, ih.inventoryItemId, ih.quantity,
+           prev.quantity as prevQuantity,
+           p.name as productName, p.id as productId
          FROM inventory_history ih
          JOIN inventory_items ii ON ih.inventoryItemId = ii.id
          JOIN products p ON ii.productId = p.id
-         WHERE ii.listId = ? AND (ih.notes IS NULL OR (ih.notes NOT LIKE '%Comprou%' AND ih.notes NOT LIKE '%Purchased%'))
+         LEFT JOIN inventory_history prev ON prev.inventoryItemId = ih.inventoryItemId
+           AND prev.date = (
+             SELECT MAX(date) FROM inventory_history
+             WHERE inventoryItemId = ih.inventoryItemId AND date < ih.date
+           )
+         WHERE ii.listId = ?
+           AND (ih.notes IS NULL OR (ih.notes NOT LIKE '%Comprou%' AND ih.notes NOT LIKE '%Purchased%'))
          ORDER BY ih.date DESC`,
         [listId]
       );
 
-      // Group inventory saves by date
       const inventoryEventsMap = new Map<string, InventoryChange[]>();
-
       for (const entry of inventoryHistory) {
-        if (!inventoryEventsMap.has(entry.date)) {
-          inventoryEventsMap.set(entry.date, []);
-        }
-
-        // Get previous quantity to calculate change
-        const prevEntry = await db.getFirstAsync<{ quantity: number }>(
-          `SELECT quantity FROM inventory_history 
-           WHERE inventoryItemId = ? AND date < ? 
-           ORDER BY date DESC LIMIT 1`,
-          [entry.inventoryItemId, entry.date]
-        );
-
-        const previousQuantity = prevEntry?.quantity ?? 0;
+        const previousQuantity = entry.prevQuantity ?? 0;
         const change = entry.quantity - previousQuantity;
-
-        if (change !== 0) {
-          inventoryEventsMap.get(entry.date)!.push({
-            id: entry.inventoryItemId,
-            productName: entry.productName,
-            previousQuantity,
-            currentQuantity: entry.quantity,
-            change,
-            productId: entry.productId,
-          });
-        }
+        if (change === 0) continue;
+        if (!inventoryEventsMap.has(entry.date)) inventoryEventsMap.set(entry.date, []);
+        inventoryEventsMap.get(entry.date)!.push({
+          id: entry.inventoryItemId,
+          productName: entry.productName,
+          previousQuantity,
+          currentQuantity: entry.quantity,
+          change,
+          productId: entry.productId,
+        });
       }
 
       const inventoryEvents: HistoryEvent[] = Array.from(inventoryEventsMap.entries())
         .filter(([, changes]) => changes.length > 0)
         .map(([date, changes], index) => ({
           type: 'inventory' as const,
-          id: 1000000 + index, // Unique ID for inventory events
-          date: date,
+          id: 1000000 + index,
+          date,
           changes,
         }));
 
-      // Combine and sort by date
-      const allEvents: HistoryEvent[] = [...purchaseEvents, ...inventoryEvents].sort(
-        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-      );
-
-      setEvents(allEvents);
-
-      // Calculate month summary
-      const now = new Date();
-      const currentMonth = now.getMonth();
-      const currentYear = now.getFullYear();
-
-      const thisMonthPurchases = purchaseEvents.filter(e => {
-        const date = new Date(e.date);
-        return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
-      });
-
-      const totalSpent = thisMonthPurchases.reduce((sum, e) => sum + e.total, 0);
-
-      const storeCount = new Map<string, number>();
-      thisMonthPurchases.forEach(e => {
-        storeCount.set(e.store, (storeCount.get(e.store) || 0) + 1);
-      });
-
-      let mostUsedStore: string | null = null;
-      let maxCount = 0;
-      storeCount.forEach((count, store) => {
-        if (count > maxCount) {
-          maxCount = count;
-          mostUsedStore = store;
-        }
-      });
-
-      setMonthSummary({
-        totalSpent,
-        mostUsedStore,
-        purchaseCount: thisMonthPurchases.length,
-      });
-
-      applyFilter(allEvents, searchQuery, selectedPeriod);
+      setEvents([...purchaseEvents, ...inventoryEvents].sort(
+        (a, b) => parseHistoryDate(b.date).getTime() - parseHistoryDate(a.date).getTime()
+      ));
     } catch (error) {
       console.error('Error loading history:', error);
+    } finally {
+      setLoading(false);
     }
-  };
+  }, [listId]);
 
-  const applyFilter = useCallback((
-    allEvents: HistoryEvent[],
-    query: string,
-    period: 'all' | 'month' | 'week'
-  ) => {
-    let filtered = [...allEvents];
+  useFocusEffect(useCallback(() => { loadHistory(); }, [loadHistory]));
 
-    const now = new Date();
-    if (period === 'month') {
-      const currentMonth = now.getMonth();
-      const currentYear = now.getFullYear();
-      filtered = filtered.filter(e => {
-        const date = parseHistoryDate(e.date);
-        return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
-      });
-    } else if (period === 'week') {
-      const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      filtered = filtered.filter(e => parseHistoryDate(e.date) >= oneWeekAgo);
-    }
+  const toggleExpand = useCallback((id: number) => {
+    setExpandedEventId(prev => prev === id ? null : id);
+  }, []);
 
-    if (query.trim()) {
-      const matchedProductIds = new Set(filteredInventoryItems.map(item => item.productId));
-      filtered = filtered.filter(e => {
-        if (e.type === 'purchase') {
-          return e.store.toLowerCase().includes(query.toLowerCase()) ||
-            e.items.some(item => matchedProductIds.has(item.productId));
-        } else {
-          return e.changes.some(change => matchedProductIds.has(change.productId));
-        }
-      });
-    }
+  const handleItemPress = useCallback((productId: number) => {
+    const item = findByProductId(productId);
+    if (item) navigation.navigate('EditInventoryItem', { inventoryItem: item });
+  }, [findByProductId, navigation]);
 
-    setFilteredEvents(filtered);
-  }, [filteredInventoryItems]);
-
-  useFocusEffect(
-    useCallback(() => {
-      loadHistory();
-    }, [listId])
-  );
-
-  useEffect(() => {
-    applyFilter(events, searchQuery, selectedPeriod);
-  }, [events, searchQuery, selectedPeriod, applyFilter]);
-
-  const handleSearch = (query: string) => {
-    setSearchQuery(query);
-  };
-
-  const handlePeriodChange = (period: 'all' | 'month' | 'week') => {
-    setSelectedPeriod(period);
-  };
-
-  const toggleExpand = (eventId: number) => {
-    setExpandedEventId(expandedEventId === eventId ? null : eventId);
-  };
-
-  const formatCurrency = (value: number) => `R$ ${value.toFixed(2).replace('.', ',')}`;
-
-  const formatDate = (dateString: string) => {
-    const date = parseHistoryDate(dateString);
-    return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
-  };
-
-  const handleItemPress = (productId: number) => {
-    // Find full inventory item using findByProductId
-    console.log('finding inventory item for product id', productId);
-    const inventoryItem = findByProductId(productId);
-    if (inventoryItem) {
-      navigation.navigate('EditInventoryItem', { inventoryItem });
-    }
-  };
-
-  const renderEvent = ({ item }: { item: HistoryEvent }) => {
+  const renderEvent = useCallback(({ item }: { item: HistoryEvent }) => {
     const isExpanded = expandedEventId === item.id;
 
     if (item.type === 'purchase') {
       return (
-        <Card style={styles.eventCard}>
-          <TouchableOpacity onPress={() => toggleExpand(item.id)}>
-            <Card.Content>
-              <View style={styles.eventHeader}>
-                <View>
-                  <Text style={styles.eventDate}>{formatDate(item.date)}</Text>
-                  <Text style={styles.eventStore}>{item.store}</Text>
-                </View>
-                <View style={styles.eventTotal}>
-                  <Text style={styles.totalValue}>{formatCurrency(item.total)}</Text>
-                  <IconButton
-                    icon={isExpanded ? 'chevron-up' : 'chevron-down'}
-                    size={20}
-                    style={styles.expandIcon}
-                  />
-                </View>
+        <Surface style={[localStyles.card, { backgroundColor: theme.colors.surface }]}>
+          <Pressable onPress={() => toggleExpand(item.id)} style={localStyles.cardHeader}>
+            <View style={localStyles.cardHeaderLeft}>
+              <MaterialCommunityIcons name="cart-outline" size={16} color={theme.colors.primary} />
+              <View style={{ marginLeft: 8 }}>
+                <Text style={[localStyles.cardDate, { color: theme.colors.onSurface }]}>
+                  {formatDate(item.date)}
+                </Text>
+                <Text style={[localStyles.cardSubtitle, { color: theme.colors.onSurfaceVariant }]}>
+                  {item.store}
+                </Text>
               </View>
-              <Text style={styles.itemCount}>{item.items.length} itens</Text>
-            </Card.Content>
-          </TouchableOpacity>
+            </View>
+            <View style={localStyles.cardHeaderRight}>
+              <Text style={[localStyles.totalValue, { color: theme.colors.primary }]}>
+                {formatCurrency(item.total)}
+              </Text>
+              <MaterialCommunityIcons
+                name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                size={20}
+                color={theme.colors.onSurfaceVariant}
+              />
+            </View>
+          </Pressable>
+
+          <Text style={[localStyles.countLabel, { color: theme.colors.onSurfaceVariant }]}>
+            {item.items.length} {item.items.length === 1 ? 'item' : 'itens'}
+          </Text>
 
           {isExpanded && (
-            <Card.Content style={styles.expandedContent}>
-              {item.items.map((listItem) => (
-                <TouchableOpacity
+            <>
+              <Divider style={{ marginVertical: 8 }} />
+              {item.items.map(listItem => (
+                <Pressable
                   key={listItem.id}
-                  style={styles.itemRow}
+                  style={localStyles.itemRow}
                   onPress={() => handleItemPress(listItem.productId)}
                 >
-                  <View style={styles.itemInfo}>
-                    <Text style={styles.itemName}>{listItem.productName}</Text>
-                    <Text style={styles.itemDetail}>
-                      {listItem.quantity}x {listItem.unitPrice ? formatCurrency(listItem.unitPrice) : 'Preço não informado'}
+                  <View style={{ flex: 1 }}>
+                    <Text style={[localStyles.itemName, { color: theme.colors.onSurface }]}>
+                      {listItem.productName}
+                    </Text>
+                    <Text style={[localStyles.itemDetail, { color: theme.colors.onSurfaceVariant }]}>
+                      {listItem.quantity}× {listItem.unitPrice ? formatCurrency(listItem.unitPrice) : '—'}
                     </Text>
                   </View>
-                  <Text style={styles.itemTotal}>{formatCurrency(listItem.lineTotal)}</Text>
-                </TouchableOpacity>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <Text style={[localStyles.itemTotal, { color: theme.colors.onSurface }]}>
+                      {formatCurrency(listItem.lineTotal)}
+                    </Text>
+                    <MaterialCommunityIcons name="chevron-right" size={14} color={theme.colors.outline} />
+                  </View>
+                </Pressable>
               ))}
-            </Card.Content>
+            </>
           )}
-        </Card>
+        </Surface>
       );
-    } else {
-      // Inventory event
-      return (
-        <Card style={[styles.eventCard, styles.inventoryCard]}>
-          <TouchableOpacity onPress={() => toggleExpand(item.id)}>
-            <Card.Content>
-              <View style={styles.eventHeader}>
-                <View>
-                  <Text style={styles.eventDate}>{formatDate(item.date)}</Text>
-                  <Text style={styles.inventoryLabel}>Salvamento de Estoque</Text>
-                </View>
-                <IconButton
-                  icon={isExpanded ? 'chevron-up' : 'chevron-down'}
-                  size={20}
-                  style={styles.expandIcon}
-                />
-              </View>
-              <Text style={styles.itemCount}>{item.changes.length} alterações</Text>
-            </Card.Content>
-          </TouchableOpacity>
+    }
 
-          {isExpanded && (
-            <Card.Content style={styles.expandedContent}>
-              {item.changes.map((change) => (
-                <TouchableOpacity
-                  key={change.id}
-                  style={styles.itemRow}
-                  onPress={() => handleItemPress(change.productId)}
-                >
-                  <View style={styles.itemInfo}>
-                    <Text style={styles.itemName}>{change.productName}</Text>
-                    <Text style={styles.itemDetail}>
-                      {change.previousQuantity} → {change.currentQuantity}
-                    </Text>
-                  </View>
-                  <View style={[styles.changeBadge, change.change > 0 ? styles.increase : styles.decrease]}>
-                    <Text style={styles.changeText}>
+    return (
+      <Surface style={[localStyles.card, {
+        backgroundColor: theme.colors.surface,
+        borderLeftColor: theme.colors.secondary,
+        borderLeftWidth: 3,
+      }]}>
+        <Pressable onPress={() => toggleExpand(item.id)} style={localStyles.cardHeader}>
+          <View style={localStyles.cardHeaderLeft}>
+            <MaterialCommunityIcons name="package-variant" size={16} color={theme.colors.secondary} />
+            <View style={{ marginLeft: 8 }}>
+              <Text style={[localStyles.cardDate, { color: theme.colors.onSurface }]}>
+                {formatDate(item.date)}
+              </Text>
+              <Text style={[localStyles.cardSubtitle, { color: theme.colors.secondary }]}>
+                Estoque atualizado
+              </Text>
+            </View>
+          </View>
+          <MaterialCommunityIcons
+            name={isExpanded ? 'chevron-up' : 'chevron-down'}
+            size={20}
+            color={theme.colors.onSurfaceVariant}
+          />
+        </Pressable>
+
+        <Text style={[localStyles.countLabel, { color: theme.colors.onSurfaceVariant }]}>
+          {item.changes.length} {item.changes.length === 1 ? 'alteração' : 'alterações'}
+        </Text>
+
+        {isExpanded && (
+          <>
+            <Divider style={{ marginVertical: 8 }} />
+            {item.changes.map(change => (
+              <Pressable
+                key={change.id}
+                style={localStyles.itemRow}
+                onPress={() => handleItemPress(change.productId)}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={[localStyles.itemName, { color: theme.colors.onSurface }]}>
+                    {change.productName}
+                  </Text>
+                  <Text style={[localStyles.itemDetail, { color: theme.colors.onSurfaceVariant }]}>
+                    {change.previousQuantity} → {change.currentQuantity}
+                  </Text>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <View style={[
+                    localStyles.changeBadge,
+                    { backgroundColor: change.change > 0 ? theme.colors.primaryContainer : theme.colors.errorContainer }
+                  ]}>
+                    <Text style={[localStyles.changeText, {
+                      color: change.change > 0 ? theme.colors.primary : theme.colors.error
+                    }]}>
                       {change.change > 0 ? '+' : ''}{change.change}
                     </Text>
                   </View>
-                </TouchableOpacity>
-              ))}
-            </Card.Content>
-          )}
-        </Card>
-      );
-    }
-  };
+                  <MaterialCommunityIcons name="chevron-right" size={14} color={theme.colors.outline} />
+                </View>
+              </Pressable>
+            ))}
+          </>
+        )}
+      </Surface>
+    );
+  }, [expandedEventId, theme, toggleExpand, handleItemPress]);
+
+  const hasActiveFilter = dateRange.start !== null;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[localStyles.container, { backgroundColor: theme.colors.background }]}>
       <ContextualHeader
         listName={listName}
         onListNameSave={handleListNameSave}
         onListDelete={handleListDelete}
       />
 
-      <View style={styles.summaryCard}>
-        <Text style={styles.summaryTitle}>Este Mês</Text>
-        <View style={styles.summaryRow}>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryValue}>{formatCurrency(monthSummary.totalSpent)}</Text>
-            <Text style={styles.summaryLabel}>Total Gasto</Text>
-          </View>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryValue}>{monthSummary.purchaseCount}</Text>
-            <Text style={styles.summaryLabel}>Compras</Text>
-          </View>
-          <View style={styles.summaryItem}>
-            <Text style={styles.summaryValue} numberOfLines={1}>
-              {monthSummary.mostUsedStore || '-'}
+      <Surface style={[localStyles.summaryCard, { backgroundColor: theme.colors.surface }]}>
+        <Text style={[localStyles.summaryTitle, { color: theme.colors.onSurfaceVariant }]}>
+          {summary.label}
+        </Text>
+        <View style={localStyles.summaryRow}>
+          <View style={localStyles.summaryItem}>
+            <Text style={[localStyles.summaryValue, { color: theme.colors.primary }]}>
+              {formatCurrency(summary.totalSpent)}
             </Text>
-            <Text style={styles.summaryLabel}>Loja Principal</Text>
+            <Text style={[localStyles.summaryLabel, { color: theme.colors.onSurfaceVariant }]}>
+              Total gasto
+            </Text>
           </View>
+          <View style={localStyles.summaryItem}>
+            <Text style={[localStyles.summaryValue, { color: theme.colors.primary }]}>
+              {summary.purchaseCount}
+            </Text>
+            <Text style={[localStyles.summaryLabel, { color: theme.colors.onSurfaceVariant }]}>
+              Compras
+            </Text>
+          </View>
+          <View style={localStyles.summaryItem}>
+            <Text
+              style={[localStyles.summaryValue, { color: theme.colors.primary }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.7}
+            >
+              {summary.mostUsedStore || '—'}
+            </Text>
+            <Text style={[localStyles.summaryLabel, { color: theme.colors.onSurfaceVariant }]}>
+              Loja principal
+            </Text>
+          </View>
+        </View>
+        {summary.trend !== null && (
+          <View style={[localStyles.trendRow, { borderTopColor: theme.colors.outlineVariant }]}>
+            <MaterialCommunityIcons
+              name={summary.trend > 0 ? 'trending-up' : summary.trend < 0 ? 'trending-down' : 'trending-neutral'}
+              size={16}
+              color={summary.trend > 0 ? theme.colors.error : theme.colors.primary}
+            />
+            <Text style={[localStyles.trendText, {
+              color: summary.trend > 0 ? theme.colors.error : theme.colors.primary
+            }]}>
+              {summary.trend > 0 ? '+' : ''}{summary.trend.toFixed(1)}% vs {summary.prevLabel} ({formatCurrency(summary.prevTotal)})
+            </Text>
+          </View>
+        )}
+      </Surface>
+
+      <View style={[localStyles.filterRow, { borderBottomColor: theme.colors.outlineVariant }]}>
+        <Pressable
+          onPress={() => setDatePickerVisible(true)}
+          style={[localStyles.dateButton, {
+            borderColor: hasActiveFilter ? theme.colors.primary : theme.colors.outline,
+            backgroundColor: hasActiveFilter ? theme.colors.primaryContainer : 'transparent',
+          }]}
+        >
+          <MaterialCommunityIcons
+            name="calendar-range"
+            size={15}
+            color={hasActiveFilter ? theme.colors.primary : theme.colors.onSurfaceVariant}
+          />
+          <Text style={[localStyles.dateButtonText, {
+            color: hasActiveFilter ? theme.colors.primary : theme.colors.onSurfaceVariant,
+          }]}>
+            {hasActiveFilter
+              ? `${format(dateRange.start!, 'dd/MM')}${dateRange.end ? ` → ${format(dateRange.end, 'dd/MM')}` : ''}`
+              : 'Período'}
+          </Text>
+          {hasActiveFilter && (
+            <Pressable
+              onPress={(e) => { e.stopPropagation(); setDateRange({ start: null, end: null }); }}
+              hitSlop={8}
+            >
+              <MaterialCommunityIcons name="close-circle" size={15} color={theme.colors.primary} />
+            </Pressable>
+          )}
+        </Pressable>
+
+        <View style={{ flex: 1 }}>
+          <SearchBar
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            placeholder="Produto ou loja..."
+          />
         </View>
       </View>
 
-      <View style={styles.filterSection}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.periodFilter}>
-          <Chip
-            selected={selectedPeriod === 'all'}
-            onPress={() => handlePeriodChange('all')}
-            style={styles.chip}
-          >
-            Tudo
-          </Chip>
-          <Chip
-            selected={selectedPeriod === 'month'}
-            onPress={() => handlePeriodChange('month')}
-            style={styles.chip}
-          >
-            Este Mês
-          </Chip>
-          <Chip
-            selected={selectedPeriod === 'week'}
-            onPress={() => handlePeriodChange('week')}
-            style={styles.chip}
-          >
-            Esta Semana
-          </Chip>
-        </ScrollView>
-
-        <Searchbar
-          placeholder="Buscar por produto, loja..."
-          onChangeText={handleSearch}
-          value={searchQuery}
-          style={styles.searchBar}
-        />
-      </View>
-
-      {filteredEvents.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyStateText}>Nenhum histórico encontrado</Text>
-          <Text style={styles.emptyStateSubtext}>
-            Suas compras e salvamentos de estoque aparecerão aqui
+      {loading ? (
+        <HistoryScreenSkeleton />
+      ) : filteredEvents.length === 0 ? (
+        <View style={localStyles.emptyState}>
+          <MaterialCommunityIcons name="history" size={48} color={theme.colors.onSurfaceVariant} />
+          <Text style={[localStyles.emptyTitle, { color: theme.colors.onSurfaceVariant }]}>
+            Nenhum histórico encontrado
+          </Text>
+          <Text style={[localStyles.emptySubtitle, { color: theme.colors.outline }]}>
+            Suas compras e atualizações de estoque aparecerão aqui
           </Text>
         </View>
       ) : (
         <FlatList
           data={filteredEvents}
           renderItem={renderEvent}
-          keyExtractor={(item) => `${item.type}-${item.id}`}
-          contentContainerStyle={styles.listContent}
+          keyExtractor={item => `${item.type}-${item.id}`}
+          contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
         />
       )}
+
+      <DateRangePickerModal
+        visible={datePickerVisible}
+        value={dateRange}
+        onConfirm={(range) => { setDateRange(range); setDatePickerVisible(false); }}
+        onDismiss={() => setDatePickerVisible(false)}
+      />
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
+const localStyles = StyleSheet.create({
+  container: { flex: 1, paddingBottom: -96 },
   summaryCard: {
-    backgroundColor: '#fff',
     margin: 16,
+    marginBottom: 8,
     padding: 16,
     borderRadius: 12,
     elevation: 2,
   },
   summaryTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 12,
-    color: '#333',
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  summaryItem: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  summaryValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#2196F3',
-    textAlign: 'center',
-  },
-  summaryLabel: {
     fontSize: 12,
-    color: '#666',
-    marginTop: 4,
-  },
-  filterSection: {
-    backgroundColor: '#fff',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-  },
-  periodFilter: {
-    marginBottom: 12,
-  },
-  chip: {
-    marginRight: 8,
-  },
-  searchBar: {
-    elevation: 0,
-    backgroundColor: '#f0f0f0',
-  },
-  listContent: {
-    padding: 16,
-    paddingBottom: 32,
-  },
-  eventCard: {
-    marginBottom: 12,
-    borderRadius: 12,
-    elevation: 2,
-  },
-  inventoryCard: {
-    borderLeftWidth: 4,
-    borderLeftColor: '#4CAF50',
-  },
-  eventHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
-  eventDate: {
-    fontSize: 16,
     fontWeight: '600',
-    color: '#333',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom: 10,
   },
-  eventStore: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 2,
-  },
-  inventoryLabel: {
-    fontSize: 14,
-    color: '#4CAF50',
-    marginTop: 2,
-    fontWeight: '500',
-  },
-  eventTotal: {
+  summaryRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  summaryItem: { alignItems: 'center', flex: 1 },
+  summaryValue: { fontSize: 15, fontWeight: 'bold', textAlign: 'center' },
+  summaryLabel: { fontSize: 11, marginTop: 4, textAlign: 'center' },
+  filterRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
   },
-  totalValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#2196F3',
+  dateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderWidth: 1,
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
-  expandIcon: {
-    margin: 0,
-    marginLeft: 4,
-  },
-  itemCount: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 8,
-  },
-  expandedContent: {
-    borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
+  dateButtonText: { fontSize: 13 },
+  trendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     marginTop: 12,
-    paddingTop: 12,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
+  trendText: { fontSize: 12, fontWeight: '500' },
+  card: {
+    marginBottom: 10,
+    borderRadius: 10,
+    elevation: 1,
+    padding: 12,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  cardHeaderLeft: { flexDirection: 'row', alignItems: 'center' },
+  cardHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  cardDate: { fontSize: 15, fontWeight: '600' },
+  cardSubtitle: { fontSize: 13, marginTop: 2 },
+  totalValue: { fontSize: 16, fontWeight: 'bold' },
+  countLabel: { fontSize: 12, marginTop: 6 },
   itemRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  itemInfo: {
-    flex: 1,
-  },
-  itemName: {
-    fontSize: 15,
-    color: '#333',
-  },
-  itemDetail: {
-    fontSize: 13,
-    color: '#666',
-    marginTop: 2,
-  },
-  itemTotal: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#333',
-  },
+  itemName: { fontSize: 14, fontWeight: '500' },
+  itemDetail: { fontSize: 12, marginTop: 2 },
+  itemTotal: { fontSize: 14, fontWeight: '600' },
   changeBadge: {
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 4,
+    borderRadius: 6,
     minWidth: 40,
     alignItems: 'center',
   },
-  increase: {
-    backgroundColor: '#E8F5E9',
-  },
-  decrease: {
-    backgroundColor: '#FFEBEE',
-  },
-  changeText: {
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 32,
-  },
-  emptyStateText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#666',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  emptyStateSubtext: {
-    fontSize: 14,
-    color: '#999',
-    textAlign: 'center',
-  },
+  changeText: { fontSize: 13, fontWeight: 'bold' },
+  emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12, padding: 32 },
+  emptyTitle: { fontSize: 16, fontWeight: '600', textAlign: 'center' },
+  emptySubtitle: { fontSize: 13, textAlign: 'center' },
 });
