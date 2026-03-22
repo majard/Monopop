@@ -577,24 +577,58 @@ export const moveInventoryItemToList = async (
   const now = new Date().toISOString();
   try {
     await db.withTransactionAsync(async () => {
-      // Get the product id of the item we're moving
-      const item = await db.getFirstAsync<{ productId: number }>(
-        `SELECT productId FROM inventory_items WHERE id = ?;`,
+      // Get the product id and current details of the item we're moving
+      const item = await db.getFirstAsync<{ productId: number; quantity: number; notes: string | null }>(
+        `SELECT productId, quantity, notes FROM inventory_items WHERE id = ?;`,
         [inventoryItemId]
       );
       if (!item) throw new Error('Inventory item not found');
 
-      // Delete conflicting item in target list if exists
-      await db.runAsync(
-        `DELETE FROM inventory_items WHERE listId = ? AND productId = ? AND id != ?;`,
+      // Check for existing destination row with same product in target list
+      const existingDestination = await db.getFirstAsync<{ id: number; quantity: number; notes: string | null }>(
+        `SELECT id, quantity, notes FROM inventory_items WHERE listId = ? AND productId = ? AND id != ?;`,
         [newListId, item.productId, inventoryItemId]
       );
 
-      // Move the item
-      await db.runAsync(
-        `UPDATE inventory_items SET listId = ?, updatedAt = ? WHERE id = ?;`,
-        [newListId, now, inventoryItemId]
-      );
+      if (existingDestination) {
+        // Perform merge: add quantities and merge dependent data
+        const mergedQuantity = existingDestination.quantity + item.quantity;
+        const mergedNotes = existingDestination.notes && item.notes 
+          ? `${existingDestination.notes}; ${item.notes}`
+          : existingDestination.notes || item.notes;
+
+        // Update the destination row with merged data
+        await db.runAsync(
+          `UPDATE inventory_items SET quantity = ?, notes = ?, updatedAt = ? WHERE id = ?;`,
+          [mergedQuantity, mergedNotes, now, existingDestination.id]
+        );
+
+        // Move dependent records that reference the source row to reference the destination row
+        // Move inventory history
+        await db.runAsync(
+          `UPDATE inventory_history SET inventoryItemId = ? WHERE inventoryItemId = ?;`,
+          [existingDestination.id, inventoryItemId]
+        );
+
+        // Move shopping list items
+        await db.runAsync(
+          `UPDATE shopping_list_items SET inventoryItemId = ? WHERE inventoryItemId = ?;`,
+          [existingDestination.id, inventoryItemId]
+        );
+
+        // Delete the source row since it's been merged
+        await db.runAsync(
+          `DELETE FROM inventory_items WHERE id = ?;`,
+          [inventoryItemId]
+        );
+
+      } else {
+        // No conflict - simply move the item
+        await db.runAsync(
+          `UPDATE inventory_items SET listId = ?, updatedAt = ? WHERE id = ?;`,
+          [newListId, now, inventoryItemId]
+        );
+      }
     });
   } catch (error) {
     console.error("Error moving inventory item to list:", error);

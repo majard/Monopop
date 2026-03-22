@@ -310,8 +310,8 @@ export default function EditInventoryItem() {
   }, [priceInput]);
 
   // ─── handleSave ──────────────────────────────────────────────────────────────
-  const handleSave = useCallback(async () => {
-    if (!inventoryItem?.id) return;
+  const handleSave = useCallback(async (): Promise<boolean> => {
+    if (!inventoryItem?.id) return false;
     try {
       // Core inventory
       await updateInventoryItem(inventoryItem.id, liveQuantity, notes);
@@ -367,7 +367,7 @@ export default function EditInventoryItem() {
                 : ''
             );
             isDirtyRef.current = false;
-            return;
+            return false;
           }
 
           // Write unit + clear refs
@@ -407,7 +407,7 @@ export default function EditInventoryItem() {
             setLocalUnit(inventoryItem.unit ?? null);
             setSelectedUnitSymbol(inventoryItem.unit ?? null);
             isDirtyRef.current = false;
-            return;
+            return false;
           }
           await updateProductUnit(inventoryItem.productId, localUnit, effectiveAtomicStdSize);
           await clearReferencePricesForProduct(inventoryItem.productId);
@@ -466,8 +466,10 @@ export default function EditInventoryItem() {
       }
 
       isDirtyRef.current = false;
+      return true;
     } catch (error) {
       console.error('Erro ao salvar:', error);
+      return false;
     }
   }, [
     inventoryItem, liveQuantity, notes, name, selectedCategoryId, selectedListId,
@@ -476,9 +478,11 @@ export default function EditInventoryItem() {
   ]);
 
   const handleSaveAndGoBack = useCallback(async () => {
-    await handleSave();
-    savedRef.current = true;
-    navigation.goBack();
+    const success = await handleSave();
+    if (success) {
+      savedRef.current = true;
+      navigation.goBack();
+    }
   }, [handleSave, navigation]);
 
   // ─── beforeRemove guard ──────────────────────────────────────────────────────
@@ -496,8 +500,11 @@ export default function EditInventoryItem() {
         },
         {
           text: 'Salvar', onPress: async () => {
-            await handleSave();
-            navigation.dispatch(e.data.action);
+            const success = await handleSave();
+            if (success) {
+              savedRef.current = true;
+              navigation.dispatch(e.data.action);
+            }
           },
         },
       ]);
