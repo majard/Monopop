@@ -1,11 +1,15 @@
 import { Product } from "../database/database";
 
+
+
+const commonOmittedWords = ["de", "do", "da", "e", "com"];
+
 export const preprocessName = (name: string): string => {
   return name
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/[^a-z0-9]/g, '')
     .trim();
 };
 
