@@ -2,8 +2,9 @@ import * as SQLite from "expo-sqlite";
 import { migrateToV1 } from './migrateToV1';
 import { migrateToV2 } from './migrateToV2';
 import { migrateToV3 } from './migrateToV3';
+import { migrateToV4 } from './migrateToV4';
 
-export const CURRENT_DATABASE_VERSION = 3;
+export const CURRENT_DATABASE_VERSION = 4;
 
 export const runMigrations = async (db: SQLite.SQLiteDatabase, currentVersion: number) => {
     if (currentVersion < 1) {
@@ -31,6 +32,17 @@ export const runMigrations = async (db: SQLite.SQLiteDatabase, currentVersion: n
             });
           } catch (e) {
             console.error("Migration to V3 failed:", e);
+            throw e;
+          }
+    }
+    if (currentVersion < 4) {
+        try {
+            await db.withExclusiveTransactionAsync(async () => {
+              await migrateToV4(db);
+              await db.runAsync('PRAGMA user_version = 4;');
+            });
+          } catch (e) {
+            console.error("Migration to V4 failed:", e);
             throw e;
           }
     }

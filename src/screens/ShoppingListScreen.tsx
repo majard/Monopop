@@ -3,13 +3,15 @@ import { View, StyleSheet, ScrollView, Text, FlatList } from 'react-native';
 import { Button, Surface, useTheme } from 'react-native-paper';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { concludeShoppingForListWithInvoice, getLastStoreName, getShoppingListItemsByListId, getInventoryItems, getStores, updateShoppingListItem, deleteShoppingListItem } from '../database/database';
+import { concludeShoppingForListWithInvoice, getLastStoreName, getShoppingListItemsByListId, getInventoryItems, getStores, updateShoppingListItem, deleteShoppingListItem, getSetting, setSetting } from '../database/database';
 import { RootStackParamList } from '../types/navigation';
 import { ShoppingListItem } from '../database/models';
 import { useListContext } from '../context/ListContext';
+import { useList } from '../hooks/useList';
 import { ShoppingListItemCard } from '../components/ShoppingListItemCard';
 import { EditShoppingItemModal } from '../components/EditShoppingItemModal';
 import { ConfirmInvoiceModal, StoreOption } from '../components/ConfirmInvoiceModal';
+import ContextualHeader from '../components/ContextualHeader';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AddItemButton } from '../components/AddItemButton';
 import { createHomeScreenStyles } from '../styles/HomeScreenStyles';
@@ -26,6 +28,7 @@ interface ShoppingListItemWithDetails extends Omit<ShoppingListItem, 'checked'> 
 
 export default function ShoppingListScreen() {
   const { listId } = useListContext();
+  const { listName, handleListNameSave, handleListDelete } = useList(listId);
   const [shoppingListItems, setShoppingListItems] = useState<ShoppingListItemWithDetails[]>([]);
   const [loading, setLoading] = useState(false);
   const [editingItem, setEditingItem] = useState<ShoppingListItemWithDetails | null>(null);
@@ -91,8 +94,20 @@ export default function ShoppingListScreen() {
     setLoading(true);
     try {
       await concludeShoppingForListWithInvoice(listId, storeName);
+      
       setConfirmVisible(false);
       await loadData();
+      
+      // Best-effort save of last used store (non-blocking)
+      const store = stores.find(s => s.name === storeName);
+      if (store) {
+        try {
+          await setSetting('lastUsedStoreId', store.id.toString());
+        } catch (error) {
+          console.error('Failed to save last used store:', error);
+          // Don't rethrow - checkout success should not be affected
+        }
+      }
     } catch (error) {
       console.error('Erro ao concluir compras:', error);
     } finally {
@@ -147,9 +162,12 @@ export default function ShoppingListScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={localStyles.sectionTitle}>Lista de Compras</Text>
-      </View>
+      <ContextualHeader 
+        listName={listName}
+        onListNameSave={handleListNameSave}
+        onListDelete={handleListDelete}
+      />
+      
       <ScrollView style={localStyles.scrollContent} contentContainerStyle={{ paddingBottom: bottomBarHeight + 96 }}>
         {shoppingListItems.length === 0 ? (
           <Surface style={localStyles.emptyState}>

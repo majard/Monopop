@@ -58,6 +58,31 @@ export const getStores = async (): Promise<{ id: number; name: string }[]> => {
   }
 };
 
+export const addStore = async (name: string): Promise<number> => {
+  const db = getDb();
+  const normalized = normalizeStoreName(name);
+  if (!normalized) {
+    throw new Error("Store name is required");
+  }
+
+  try {
+    const existing = await db.getFirstAsync<{ id: number }>(
+      `SELECT id FROM stores WHERE name = ?;`,
+      [normalized]
+    );
+    if (existing?.id) return existing.id;
+
+    const result = await db.runAsync(`INSERT INTO stores (name) VALUES (?);`, [normalized]);
+    if (!result.lastInsertRowId) {
+      throw new Error("Failed to create store");
+    }
+    return result.lastInsertRowId;
+  } catch (error) {
+    console.error("Error adding store:", error);
+    throw error;
+  }
+};
+
 export const getLastStoreName = async (): Promise<string | null> => {
   const db = getDb();
   try {
@@ -93,7 +118,7 @@ export const getLastUnitPriceForProduct = async (productId: number): Promise<num
   }
 };
 
-const ensureStoreExists = async (db: SQLite.SQLiteDatabase, storeName: string): Promise<number> => {
+export const ensureStoreExists = async (db: SQLite.SQLiteDatabase, storeName: string): Promise<number> => {
   const normalized = normalizeStoreName(storeName);
   if (!normalized) {
     throw new Error("Store name is required");
@@ -369,7 +394,7 @@ export const updateInventoryItem = async (
 ): Promise<void> => {
   const db = getDb();
   const now = new Date().toISOString();
-  
+
   let query = `UPDATE inventory_items SET updatedAt = ?`;
   const params: (string | number | boolean | undefined)[] = [now];
 
@@ -787,7 +812,7 @@ export const buyShoppingListItem = async (
         inventoryItemId,
         updatedInventoryItem.quantity,
         new Date(now),
-        `Purchased ${qtyToPurchase} units (via Shopping List)`
+        `Comprou ${qtyToPurchase} unidades (via Lista de Compras)`
       );
     }
 
@@ -871,7 +896,7 @@ export const concludeShoppingForListWithInvoice = async (
         [inventoryItemId]
       );
       if (updatedInventoryItem) {
-        const notes = `Purchased ${qtyToPurchase} units (via Shopping List)`;
+        const notes = `Comprou ${qtyToPurchase} unidades (via Lista de Compras)`;
         const existingEntry = await db.getFirstAsync<{ id: number }>(
           `SELECT id FROM inventory_history WHERE inventoryItemId = ? AND date = ?;`,
           [inventoryItemId, dateToSave]
@@ -934,7 +959,7 @@ export const concludeShoppingForList = async (listId: number): Promise<void> => 
         [inventoryItemId]
       );
       if (updatedInventoryItem) {
-        const notes = `Purchased ${qtyToPurchase} units (via Shopping List)`;
+        const notes = `Comprou ${qtyToPurchase} unidades (via Lista de Compras)`;
         const existingEntry = await db.getFirstAsync<{ id: number }>(
           `SELECT id FROM inventory_history WHERE inventoryItemId = ? AND date = ?;`,
           [inventoryItemId, dateToSave]
@@ -956,4 +981,307 @@ export const concludeShoppingForList = async (listId: number): Promise<void> => 
       await db.runAsync(`DELETE FROM shopping_list_items WHERE id = ?;`, [shoppingListItemId]);
     }
   });
+};
+
+// --- SETTINGS CRUD OPERATIONS ---
+
+export const getSetting = async (key: string): Promise<string | null> => {
+  const db = getDb();
+  try {
+    const result = await db.getFirstAsync<{ value: string }>(
+      "SELECT value FROM settings WHERE key = ?",
+      [key]
+    );
+    return result?.value ?? null;
+  } catch (error) {
+    console.error(`Error getting setting ${key}:`, error);
+    throw error;
+  }
+};
+
+export const setSetting = async (key: string, value: string | null): Promise<void> => {
+  const db = getDb();
+  const now = new Date().toISOString();
+  try {
+    await db.runAsync(
+      `INSERT INTO settings (key, value, updatedAt) VALUES (?, ?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = ?, updatedAt = ?`,
+      [key, value, now, value, now]
+    );
+  } catch (error) {
+    console.error(`Error setting ${key}:`, error);
+    throw error;
+  }
+};
+
+export const getAllSettings = async (): Promise<{ key: string; value: string | null }[]> => {
+  const db = getDb();
+  try {
+    const result = await db.getAllAsync<{ key: string; value: string }>(
+      "SELECT key, value FROM settings ORDER BY key ASC"
+    );
+    return result.map(r => ({ key: r.key, value: r.value ?? null }));
+  } catch (error) {
+    console.error("Error getting all settings:", error);
+    throw error;
+  }
+};
+
+// --- ASSOCIATION CHECK FUNCTIONS ---
+
+export const getProductAssociations = async (productId: number): Promise<{
+  inventoryCount: number;
+  purchaseCount: number;
+}> => {
+  const db = getDb();
+  try {
+    const [inventoryResult, purchaseResult] = await Promise.all([
+      db.getFirstAsync<{ count: number }>(
+        `SELECT COUNT(*) as count FROM inventory_items WHERE productId = ?`,
+        [productId]
+      ),
+      db.getFirstAsync<{ count: number }>(
+        `SELECT COUNT(*) as count FROM invoice_items WHERE productId = ?`,
+        [productId]
+      )
+    ]);
+    return {
+      inventoryCount: inventoryResult?.count ?? 0,
+      purchaseCount: purchaseResult?.count ?? 0
+    };
+  } catch (error) {
+    console.error("Error getting product associations:", error);
+    throw error;
+  }
+};
+
+export const getStoreAssociations = async (storeId: number): Promise<{
+  invoiceCount: number;
+}> => {
+  const db = getDb();
+  try {
+    const result = await db.getFirstAsync<{ count: number }>(
+      `SELECT COUNT(*) as count FROM invoices WHERE storeId = ?`,
+      [storeId]
+    );
+    return { invoiceCount: result?.count ?? 0 };
+  } catch (error) {
+    console.error("Error getting store associations:", error);
+    throw error;
+  }
+};
+
+export const getCategoryAssociations = async (categoryId: number): Promise<{
+  productCount: number;
+}> => {
+  const db = getDb();
+  try {
+    const result = await db.getFirstAsync<{ count: number }>(
+      `SELECT COUNT(*) as count FROM products WHERE categoryId = ?`,
+      [categoryId]
+    );
+    return { productCount: result?.count ?? 0 };
+  } catch (error) {
+    console.error("Error getting category associations:", error);
+    throw error;
+  }
+};
+
+// --- GLOBAL INVOICE FUNCTIONS ---
+
+export const getAllInvoices = async (): Promise<{
+  id: number;
+  storeName: string;
+  listName: string;
+  total: number;
+  createdAt: string;
+}[]> => {
+  const db = getDb();
+  try {
+    return await db.getAllAsync(
+      `SELECT 
+        i.id,
+        s.name as storeName,
+        l.name as listName,
+        i.total,
+        i.createdAt
+      FROM invoices i
+      JOIN stores s ON i.storeId = s.id
+      JOIN lists l ON i.listId = l.id
+      ORDER BY i.createdAt DESC`
+    );
+  } catch (error) {
+    console.error("Error getting all invoices:", error);
+    throw error;
+  }
+};
+
+export const getInvoiceDetails = async (invoiceId: number): Promise<{
+  invoice: {
+    id: number;
+    storeName: string;
+    listName: string;
+    total: number;
+    createdAt: string;
+  };
+  items: {
+    id: number;
+    productName: string;
+    quantity: number;
+    unitPrice: number | null;
+    lineTotal: number;
+  }[];
+}> => {
+  const db = getDb();
+  try {
+    const invoice = await db.getFirstAsync<{
+      id: number;
+      storeName: string;
+      listName: string;
+      total: number;
+      createdAt: string;
+    }>(
+      `SELECT 
+        i.id,
+        s.name as storeName,
+        l.name as listName,
+        i.total,
+        i.createdAt
+      FROM invoices i
+      JOIN stores s ON i.storeId = s.id
+      JOIN lists l ON i.listId = l.id
+      WHERE i.id = ?`,
+      [invoiceId]
+    );
+
+    if (!invoice) {
+      throw new Error(`Invoice ${invoiceId} not found`);
+    }
+
+    const items = await db.getAllAsync<{
+      id: number;
+      productName: string;
+      quantity: number;
+      unitPrice: number | null;
+      lineTotal: number;
+    }>(
+      `SELECT 
+        ii.id,
+        p.name as productName,
+        ii.quantity,
+        ii.unitPrice,
+        ii.lineTotal
+      FROM invoice_items ii
+      JOIN products p ON ii.productId = p.id
+      WHERE ii.invoiceId = ?
+      ORDER BY ii.id ASC`,
+      [invoiceId]
+    );
+
+    return { invoice, items };
+  } catch (error) {
+    console.error("Error getting invoice details:", error);
+    throw error;
+  }
+};
+
+export const deleteInvoice = async (invoiceId: number): Promise<void> => {
+  const db = getDb();
+  try {
+    await db.runAsync(`DELETE FROM invoices WHERE id = ?`, [invoiceId]);
+  } catch (error) {
+    console.error("Error deleting invoice:", error);
+    throw error;
+  }
+};
+
+// --- UPDATE FUNCTIONS FOR PRODUCTS/STORES/CATEGORIES ---
+
+export const updateProductCategory = async (productId: number, categoryId: number | null): Promise<void> => {
+  const db = getDb();
+  const now = new Date().toISOString();
+  try {
+    await db.runAsync(
+      `UPDATE products SET categoryId = ?, updatedAt = ? WHERE id = ?`,
+      [categoryId, now, productId]
+    );
+  } catch (error) {
+    console.error("Error updating product category:", error);
+    throw error;
+  }
+};
+
+export const updateCategoryName = async (id: number, name: string): Promise<void> => {
+  const db = getDb();
+  const now = new Date().toISOString();
+  const normalized = name.trim();
+  if (!normalized) {
+    throw new Error("Category name is required");
+  }
+  try {
+    const duplicateCategory = await db.getFirstAsync<{ id: number }>(
+      `SELECT id FROM categories WHERE name = ? AND id != ?`,
+      [normalized, id]
+    );
+    if (duplicateCategory) {
+      throw new Error("Category name already exists");
+    }
+    await db.runAsync(
+      `UPDATE categories SET name = ?, updatedAt = ? WHERE id = ?`,
+      [normalized, now, id]
+    );
+  } catch (error) {
+    console.error("Error updating category name:", error);
+    throw error;
+  }
+};
+
+export const deleteCategory = async (id: number): Promise<void> => {
+  const db = getDb();
+  try {
+    await db.runAsync("DELETE FROM categories WHERE id = ?", [id]);
+  } catch (error) {
+    console.error("Error deleting category:", error);
+    throw error;
+  }
+};
+
+export const updateStoreName = async (id: number, name: string): Promise<void> => {
+  const db = getDb();
+  const normalized = normalizeStoreName(name);
+  if (!normalized) {
+    throw new Error("Store name is required");
+  }
+  try {
+    const duplicateStore = await db.getFirstAsync<{ id: number }>(
+      `SELECT id FROM stores WHERE name = ? AND id != ?`,
+      [normalized, id]
+    );
+    if (duplicateStore) {
+      throw new Error("Store name already exists");
+    }
+    await db.runAsync(
+      `UPDATE stores SET name = ? WHERE id = ?`,
+      [normalized, id]
+    );
+  } catch (error) {
+    console.error("Error updating store name:", error);
+    throw error;
+  }
+};
+
+export const deleteStore = async (id: number): Promise<void> => {
+  const db = getDb();
+  try {
+    await db.withTransactionAsync(async () => {
+      await db.runAsync("DELETE FROM stores WHERE id = ?", [id]);
+      await db.runAsync(
+        "DELETE FROM settings WHERE key = ? AND value = ?",
+        ["defaultStoreId", id.toString()]
+      );
+    });
+  } catch (error) {
+    console.error("Error deleting store:", error);
+    throw error;
+  }
 };

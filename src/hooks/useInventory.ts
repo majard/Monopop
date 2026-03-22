@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { getInventoryItems, updateInventoryItemOrder, saveInventoryHistorySnapshot } from "../database/database";
-import { sortProducts, SortOrder } from "../utils/sortUtils";
+import { sortInventoryItems, SortOrder } from "../utils/sortUtils";
 import { preprocessName, calculateSimilarity } from "../utils/similarityUtils";
 import { InventoryItem } from "../database/models";
 
@@ -30,7 +30,7 @@ export default function useInventory(listId: number, sortOrder: SortOrder, searc
       const similarity = calculateSimilarity(processedInventoryItemName, processedSearchQuery);
       return similarity >= searchSimilarityThreshold;
     });
-    return sortProducts(filtered, sortOrder, searchQuery); // Apply sort after filtering
+    return sortInventoryItems(filtered, sortOrder, searchQuery); // Apply sort after filtering
   }, [inventoryItems, searchQuery, sortOrder]);
 
   // --- Load Products Logic ---
@@ -67,12 +67,19 @@ export default function useInventory(listId: number, sortOrder: SortOrder, searc
   // But relying on `loadProducts` via `useFocusEffect` for general consistency is often simpler initially.
   // For deletion, `loadProducts` is definitely the way to go for now, as `useProduct` won't know about `filteredProducts`
 
+  // --- Find by ID Logic ---
+  // TODO: N+1 query, otimizar com JOIN
+  const findByProductId = useCallback((productId: number) => {
+    return inventoryItems.find(item => item.productId === productId);
+  }, [inventoryItems]);
+
   return {
     inventoryItems, // Keep products for DraggableFlatList extraData
     filteredInventoryItems: filteredInventoryItems(), // Call the memoized function
     setInventoryItems, // Potentially useful if external state manipulation is needed (e.g., import)
     loadInventoryItems, // Expose for manual refresh
     handleProductOrderChange,
-    saveInventoryHistorySnapshot, 
+    saveInventoryHistorySnapshot,
+    findByProductId, // New function to find inventory item by product ID
   };
 }

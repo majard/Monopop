@@ -4,12 +4,13 @@ import {
   Card,
   IconButton,
   FAB,
+  Button,
   useTheme,
 } from "react-native-paper";
-import { getLists } from "../database/database";
+import { getLists, setSetting } from "../database/database";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { BottomTabParamList } from "../types/navigation";
+import { RootStackParamList } from "../types/navigation";
 import { getEmojiForList } from "../utils/stringUtils";
 import { useListContext } from "../context/ListContext";
 
@@ -21,7 +22,7 @@ type ListItem = {
 export default function ListsScreen() {
   const [lists, setLists] = useState<ListItem[]>([]);
   const navigation =
-    useNavigation<NativeStackNavigationProp<BottomTabParamList>>();
+    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { setListId } = useListContext();
   const theme = useTheme();
 
@@ -38,26 +39,44 @@ export default function ListsScreen() {
 
   const handleListSelect = (listId: number) => {
     setListId(listId);
-    navigation.navigate("Inventory", { listId });
+    navigation.navigate("MainTabs", { listId });
+    void setSetting('lastOpenedListId', listId.toString()).catch((error) => {
+      console.error("Erro ao salvar a última lista aberta:", error);
+    });
   };
 
   return (
     <View
       style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
-      <Text style={[styles.title, { color: theme.colors.primary }]}>
-        Suas Listas
-      </Text>
-      {lists.length === 0 ? (
-        <Text
-          style={{
-            textAlign: "center",
-            color: theme.colors.onBackground,
-            marginTop: 32,
-          }}
-        >
-          Nenhuma lista encontrada.
+      <View style={styles.header}>
+        <Text style={[styles.title, { color: theme.colors.primary }]}>
+          Suas Listas
         </Text>
+        <IconButton
+          icon="cog"
+          size={28}
+          onPress={() => navigation.navigate('Config')}
+          iconColor={theme.colors.primary}
+        />
+      </View>
+      {lists.length === 0 ? (
+        <View style={localStyles.emptyState}>
+          <Text style={localStyles.emptyStateTitle}>
+            Nenhuma lista encontrada
+          </Text>
+          <Text style={localStyles.emptyStateText}>
+            Crie sua primeira lista para começar a organizar seus produtos
+          </Text>
+          <Button
+            mode="contained"
+            onPress={() => navigation.navigate("AddList")}
+            style={localStyles.emptyStateButton}
+            icon="plus"
+          >
+            Criar Primeira Lista
+          </Button>
+        </View>
       ) : (
         <FlatList
           data={lists}
@@ -102,18 +121,49 @@ export default function ListsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 16,
   },
   title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 24,
-    textAlign: "center",
+    fontSize: 28,
+    fontWeight: 'bold',
   },
   fab: {
     position: "absolute",
     margin: 16,
     right: 0,
     bottom: 0,
+  },
+});
+
+const localStyles = StyleSheet.create({
+  emptyState: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 32,
+    paddingVertical: 64,
+  },
+  emptyStateTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#666",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  emptyStateText: {
+    fontSize: 16,
+    color: "#999",
+    textAlign: "center",
+    marginBottom: 24,
+    lineHeight: 24,
+  },
+  emptyStateButton: {
+    paddingHorizontal: 24,
   },
 });

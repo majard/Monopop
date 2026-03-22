@@ -25,6 +25,7 @@ import { SortMenu } from "../components/SortMenu";
 import { EditableName } from "../components/EditableName";
 import { AddItemButton } from "../components/AddItemButton";
 import InventoryList from "../components/InventoryList";
+import ContextualHeader from "../components/ContextualHeader";
 import { saveInventoryHistorySnapshot } from "../database/database";
 import { useListContext } from "../context/ListContext";
 
@@ -91,14 +92,13 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <ContextualHeader 
+        listName={listName} 
+        onListNameSave={handleListNameSave}
+        onListDelete={handleListDelete}
+      />
+      
       <View style={styles.header}>
-        {/* List Name Editing/Display */}
-        <EditableName
-          name={listName}
-          handleSave={handleListNameSave}
-          handleDelete={handleListDelete}
-        />
-
         <SearchBar searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
 
         <View style={styles.buttonRow}>
@@ -133,7 +133,7 @@ export default function HomeScreen() {
       />
       <AddItemButton
         onPress={() => navigation.navigate("AddInventoryItem", { listId })}
-        label="Adicionar Produto ao Estoque"
+        label="Adicionar ao Estoque"
       />
       <ImportModal
         isImportModalVisible={isImportModalVisible}

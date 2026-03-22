@@ -3,7 +3,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import HomeScreen from '../screens/HomeScreen';
 import ShoppingListScreen from '../screens/ShoppingListScreen';
-import ListsScreen from '../screens/ListsScreen';
+import HistoryScreen from '../screens/HistoryScreen';
 import { BottomTabParamList } from '../types/navigation';
 
 const Tab = createBottomTabNavigator<BottomTabParamList>();
@@ -16,6 +16,7 @@ export default function BottomTabNavigator({ listId = 1 }: BottomTabNavigatorPro
   
   return (
     <Tab.Navigator
+      id={undefined}
       screenOptions={({ route }) => ({
         tabBarIcon: ({ focused, color, size }) => {
           let iconName: keyof typeof MaterialCommunityIcons.glyphMap;
@@ -24,8 +25,8 @@ export default function BottomTabNavigator({ listId = 1 }: BottomTabNavigatorPro
             iconName = focused ? 'package-variant-closed' : 'package-variant';
           } else if (route.name === 'ShoppingList') {
             iconName = focused ? 'cart' : 'cart-outline';
-          } else if (route.name === 'Lists') {
-            iconName = focused ? 'format-list-bulleted' : 'format-list-bulleted';
+          } else if (route.name === 'History') {
+            iconName = focused ? 'history' : 'history';
           } else {
             iconName = 'help';
           }
@@ -68,12 +69,13 @@ export default function BottomTabNavigator({ listId = 1 }: BottomTabNavigatorPro
         initialParams={{ listId }}
       />
       <Tab.Screen 
-        name="Lists" 
-        component={ListsScreen}
+        name="History" 
+        component={HistoryScreen}
         options={{ 
-          title: 'Listas',
-          tabBarLabel: 'Listas'
+          title: 'Histórico',
+          tabBarLabel: 'Histórico'
         }}
+        initialParams={{ listId }}
       />
     </Tab.Navigator>
   );

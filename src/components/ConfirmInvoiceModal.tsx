@@ -9,6 +9,7 @@ import {
   Surface,
   useTheme,
 } from "react-native-paper";
+import { getSetting } from "../database/database";
 
 export interface StoreOption {
   id: number;
@@ -34,13 +35,44 @@ export function ConfirmInvoiceModal({
 }: ConfirmInvoiceModalProps) {
   const theme = useTheme();
   const [storeName, setStoreName] = useState("");
+  const [defaultStoreMode, setDefaultStoreMode] = useState<'ask' | 'last' | 'fixed'>('ask');
+  const [defaultStoreId, setDefaultStoreId] = useState<number | null>(null);
 
   useEffect(() => {
-    if (visible) {
-      setStoreName(defaultStoreName || "");
-    }
-  }, [visible, defaultStoreName]);
+    if (!visible) return;
 
+    const loadSettings = async () => {
+      try {
+        const [storeMode, storeId] = await Promise.all([
+          getSetting('defaultStoreMode'),
+          getSetting('defaultStoreId')
+        ]);
+
+        const mode = (storeMode as 'ask' | 'last' | 'fixed') || 'ask';
+        const id = storeId ? parseInt(storeId) : null;
+
+        setDefaultStoreMode(mode);
+        setDefaultStoreId(id);
+
+        let initialStoreName = defaultStoreName || "";
+
+        if (mode === 'fixed' && id !== null) {
+          const defaultStore = stores.find(s => s.id === id);
+          if (defaultStore) initialStoreName = defaultStore.name;
+        }
+        // 'last': defaultStoreName already carries last store
+        // 'ask': start with defaultStoreName fallback or empty
+
+        setStoreName(initialStoreName);
+      } catch (error) {
+        console.error('Failed to load store settings:', error);
+        setStoreName(defaultStoreName || "");
+      }
+    };
+
+    loadSettings();
+  }, [visible, defaultStoreName, stores]);
+  
   const normalizedInput = storeName.trim().toLowerCase();
 
   const suggestions = useMemo(() => {
