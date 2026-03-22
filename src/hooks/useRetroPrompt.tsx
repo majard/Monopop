@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { View, StyleSheet, TextInput as RNTextInput } from 'react-native';
 import { Text, Button, Dialog, useTheme } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -33,6 +33,12 @@ export function useRetroPrompt(): UseRetroPromptResult {
     unit: string,
     invoiceInfo: InvoiceInfo | null,
   ): Promise<number | null> => {
+    // Resolve any previous resolver to prevent awaiting callers
+    if (retroResolveRef.current) {
+      retroResolveRef.current(null);
+      retroResolveRef.current = null;
+    }
+    
     const factor = getUnitFactor(unit as UnitSymbol);
     setRetroInvoiceInfo(invoiceInfo);
     setRetroUnit(unit);
@@ -123,6 +129,16 @@ export function useRetroPrompt(): UseRetroPromptResult {
       </Dialog.Actions>
     </Dialog>
   );
+
+  // Cleanup on unmount to resolve any remaining promises
+  useEffect(() => {
+    return () => {
+      if (retroResolveRef.current) {
+        retroResolveRef.current(null);
+        retroResolveRef.current = null;
+      }
+    };
+  }, []);
 
   return { promptForRetroPackageSize, retroDialogElement };
 }

@@ -18,7 +18,7 @@ export function useMoveToList(onSuccess: () => Promise<void>) {
   const moveItems = useCallback(async (
     items: InventoryItemRef[],
     targetList: List,
-  ) => {
+  ): Promise<boolean> => {
     // Check for conflicts
     const existingItems = await getInventoryItems(targetList.id);
     const existingProductIds = new Set(existingItems.map(i => i.productId));
@@ -37,7 +37,7 @@ export function useMoveToList(onSuccess: () => Promise<void>) {
           ]
         );
       });
-      if (!confirmed) return;
+      if (!confirmed) return false;
     }
 
     for (const item of items) {
@@ -45,6 +45,7 @@ export function useMoveToList(onSuccess: () => Promise<void>) {
     }
 
     await onSuccess();
+    return true;
   }, [onSuccess]);
 
   return { moveItems };
