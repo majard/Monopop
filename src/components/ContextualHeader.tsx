@@ -7,7 +7,7 @@ import { RootStackParamList } from '../types/navigation';
 
 interface ContextualHeaderProps {
   listName: string;
-  onListNameSave?: (name: string) => void;
+  onListNameSave?: (name: string) => Promise<void> | void;
   onListDelete?: () => void;
 }
 
@@ -31,11 +31,19 @@ export default function ContextualHeader({
     setInput(listName);
   };
 
-  const handleSave = () => {
-    if (onListNameSave && input.trim()) {
-      onListNameSave(input.trim());
+
+  const handleSave = async () => {
+    const nextName = input.trim();
+    if (!nextName) return;
+
+    try {
+      if (onListNameSave) {
+        await onListNameSave(nextName);
+      }
+      setIsEditing(false);
+    } catch (error) {
+      console.error('Error saving list name:', error);
     }
-    setIsEditing(false);
   };
 
   const handleCancel = () => {
