@@ -5,7 +5,8 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { PaperProvider, MD3LightTheme } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { Text, Button } from 'react-native-paper';
 import * as Linking from 'expo-linking';
 import * as FileSystem from 'expo-file-system/legacy';
 import { initializeDatabase, getSetting } from './src/database/database';
@@ -48,6 +49,7 @@ function AppContent({ navigationRef }: AppContentProps) {
   const [initialRoute, setInitialRoute] = useState<'Lists' | 'MainTabs'>('Lists');
   const [initialParams, setInitialParams] = useState<any>({});
   const [isReady, setIsReady] = useState(false);
+  const [initError, setInitError] = useState<Error | null>(null);
 
   const handleIncomingFile = async (url: string) => {
     if (!url) return;
@@ -55,11 +57,9 @@ function AppContent({ navigationRef }: AppContentProps) {
       let content: string;
 
       if (url.startsWith('content://')) {
-        // Copy to cache first, then read
         const cacheUri = `${FileSystem.cacheDirectory}incoming.json`;
         await FileSystem.copyAsync({ from: url, to: cacheUri });
         content = await FileSystem.readAsStringAsync(cacheUri);
-        // Clean up
         await FileSystem.deleteAsync(cacheUri, { idempotent: true });
       } else {
         content = await FileSystem.readAsStringAsync(url);
@@ -110,30 +110,52 @@ function AppContent({ navigationRef }: AppContentProps) {
 
         setIsReady(true);
       } catch (error) {
-        console.error('Error initializing app:', error);
+        setInitError(error as Error);
         setIsReady(true);
+        console.error('Error initializing app:', error);
       }
     };
 
     initializeApp();
   }, []);
 
-  // Handle incoming files via intent filter
   useEffect(() => {
     if (!isReady) return;
 
-    // Cold start — app opened via file
     Linking.getInitialURL().then(url => {
       if (url) handleIncomingFile(url);
     });
 
-    // Warm start — app already open, file opened
     const subscription = Linking.addEventListener('url', ({ url }) => {
       handleIncomingFile(url);
     });
 
     return () => subscription.remove();
   }, [isReady]);
+
+  if (initError) {
+    return (
+      <SafeAreaProvider>
+        <PaperProvider theme={theme}>
+          <View style={styles.errorContainer}>
+            <Text variant="headlineSmall">Erro ao inicializar</Text>
+            <Text variant="bodyMedium" style={styles.errorMessage}>
+              {initError.message}
+            </Text>
+            <Button
+              mode="contained"
+              onPress={() => { setInitError(null); setIsReady(false); }}
+            >
+              Tentar novamente
+            </Button>
+            <Text variant="bodySmall" style={styles.errorMessage}>
+              Se o problema persistir, reinstale o aplicativo
+            </Text>
+          </View>
+        </PaperProvider>
+      </SafeAreaProvider>
+    );
+  }
 
   if (!isReady) return null;
 
@@ -168,7 +190,6 @@ function AppContent({ navigationRef }: AppContentProps) {
 }
 
 export default function App() {
-  // In App.tsx
   const navigationRef = useNavigationContainerRef<RootStackParamList>();
 
   return (
@@ -188,4 +209,15 @@ export default function App() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+    gap: 16,
+  },
+  errorMessage: {
+    textAlign: 'center',
+    opacity: 0.7,
+  },
 });

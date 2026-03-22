@@ -399,19 +399,16 @@ export default function ShoppingListScreen() {
   };
 
   const handleStoreSelect = useCallback((storeId: number) => {
-    setSelectedStoreId(storeId);
-
-    const selectedStore = stores.find(s => s.id === storeId);
-    setDefaultStoreName(selectedStore?.name ?? "");
-
-    // Trigger price reload using functional update to get fresh state
-    setShoppingListItems(prev => {
-      if (prev.length > 0) {
-        loadPricesAsync(prev, storeId);
-      }
-      return prev;
-    });
-  }, [stores, loadPricesAsync]);
+  setSelectedStoreId(storeId);
+  const selectedStore = stores.find(s => s.id === storeId);
+  setDefaultStoreName(selectedStore?.name ?? "");
+  setShoppingListItems(prev => {
+    if (prev.length > 0) {
+      loadPricesAsync(prev, storeId);
+    }
+    return prev;
+  });
+}, [stores, loadPricesAsync]);
 
   const handleCreateStore = useCallback(async (name: string) => {
     const id = await addStore(name);

@@ -29,19 +29,6 @@ interface ConfirmInvoiceModalProps {
   loading?: boolean;
   updateReferencePrices?: boolean;
 }
-
-export function ConfirmInvoiceModal({
-  visible,
-  stores,
-  defaultStoreName,
-  total,
-  onConfirm,
-  onDismiss,
-  loading,
-  updateReferencePrices = true,
-}: ConfirmInvoiceModalProps) {
-  const theme = useTheme();
-  const [storeName, setStoreName] = useState("");
   const [date, setDate] = useState(new Date());
   const [datePickerVisible, setDatePickerVisible] = useState(false);
   const [updateRef, setUpdateRef] = useState(true);
@@ -54,8 +41,8 @@ export function ConfirmInvoiceModal({
     }
   }, [visible, defaultStoreName]);
 
+  const normalizedInput = storeName.trim().toLowerCase();
   const canConfirm = storeName.trim().length > 0;
-
   const handleStoreSelect = (storeId: number) => {
     const selectedStore = stores.find(s => s.id === storeId);
     if (selectedStore) {

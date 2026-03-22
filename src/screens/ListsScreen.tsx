@@ -51,11 +51,13 @@ export default function ListsScreen() {
     }, [loadLists])
   );
 
-  const handleListSelect = async (listId: number) => {
-    setListId(listId);
-    await setSetting('lastOpenedListId', listId.toString());
-    navigation.navigate("MainTabs", { listId });
-  };
+const handleListSelect = (listId: number) => {
+  setListId(listId);
+  navigation.navigate("MainTabs", { listId });
+  void setSetting('lastOpenedListId', listId.toString()).catch((error) => {
+    console.error("Erro ao salvar a última lista aberta:", error);
+  });
+};
 
   const handleLongPress = (item: ListItem) => {
     setActionTarget(item);

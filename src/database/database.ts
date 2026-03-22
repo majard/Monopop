@@ -12,36 +12,35 @@ export const initializeDatabase = async (
   if (initPromise) return initPromise;
 
   initPromise = (async () => {
-    db = await SQLite.openDatabaseAsync(databaseName);
-
-    await db.execAsync('PRAGMA journal_mode = WAL;');
-    await db.execAsync('PRAGMA synchronous = NORMAL;');
-    await db.execAsync('PRAGMA temp_store = memory;');
-    await db.execAsync('PRAGMA cache_size = -8000;');
-    await db.execAsync('PRAGMA foreign_keys = ON;');
-
-
     try {
+      db = await SQLite.openDatabaseAsync(databaseName);
+
+      await db.execAsync('PRAGMA journal_mode = WAL;');
+      await db.execAsync('PRAGMA synchronous = NORMAL;');
+      await db.execAsync('PRAGMA temp_store = memory;');
+      await db.execAsync('PRAGMA cache_size = -8000;');
+      await db.execAsync('PRAGMA foreign_keys = ON;');
+
       const result = db.getFirstSync<{ user_version: number }>('PRAGMA user_version;');
       const currentVersion = result ? result.user_version : 0;
 
       if (currentVersion < CURRENT_DATABASE_VERSION) {
         console.log(`Migrating database from v${currentVersion} to v${CURRENT_DATABASE_VERSION}...`);
         await runMigrations(db, currentVersion);
-
-        // Reopen to clear any cached prepared statements
         db = await SQLite.openDatabaseAsync(databaseName);
         await db.execAsync('PRAGMA foreign_keys = ON;');
         console.log('Database migration complete.');
       } else {
         console.log('Database is already up to date.');
       }
+
+      return db;
     } catch (error) {
+      db = null;
+      initPromise = null;
       console.error("Error during database initialization or migration:", error);
       throw error;
     }
-
-    return db;
   })();
 
   return initPromise;
@@ -1348,10 +1347,21 @@ export const updateProductCategory = async (productId: number, categoryId: numbe
 export const updateCategoryName = async (id: number, name: string): Promise<void> => {
   const db = getDb();
   const now = new Date().toISOString();
+  const normalized = name.trim();
+  if (!normalized) {
+    throw new Error("Category name is required");
+  }
   try {
+    const duplicateCategory = await db.getFirstAsync<{ id: number }>(
+      `SELECT id FROM categories WHERE name = ? AND id != ?`,
+      [normalized, id]
+    );
+    if (duplicateCategory) {
+      throw new Error("Category name already exists");
+    }
     await db.runAsync(
       `UPDATE categories SET name = ?, updatedAt = ? WHERE id = ?`,
-      [name.trim(), now, id]
+      [normalized, now, id]
     );
   } catch (error) {
     console.error("Error updating category name:", error);
@@ -1371,10 +1381,21 @@ export const deleteCategory = async (id: number): Promise<void> => {
 
 export const updateStoreName = async (id: number, name: string): Promise<void> => {
   const db = getDb();
+  const normalized = normalizeStoreName(name);
+  if (!normalized) {
+    throw new Error("Store name is required");
+  }
   try {
+    const duplicateStore = await db.getFirstAsync<{ id: number }>(
+      `SELECT id FROM stores WHERE name = ? AND id != ?`,
+      [normalized, id]
+    );
+    if (duplicateStore) {
+      throw new Error("Store name already exists");
+    }
     await db.runAsync(
       `UPDATE stores SET name = ? WHERE id = ?`,
-      [normalizeStoreName(name), id]
+      [normalized, id]
     );
   } catch (error) {
     console.error("Error updating store name:", error);
@@ -1385,7 +1406,13 @@ export const updateStoreName = async (id: number, name: string): Promise<void> =
 export const deleteStore = async (id: number): Promise<void> => {
   const db = getDb();
   try {
-    await db.runAsync("DELETE FROM stores WHERE id = ?", [id]);
+    await db.withTransactionAsync(async () => {
+      await db.runAsync("DELETE FROM stores WHERE id = ?", [id]);
+      await db.runAsync(
+        "DELETE FROM settings WHERE key = ? AND value = ?",
+        ["defaultStoreId", id.toString()]
+      );
+    });
   } catch (error) {
     console.error("Error deleting store:", error);
     throw error;
