@@ -299,11 +299,24 @@ export default function PreferencesScreen() {
               <Button
                 compact
                 mode="text"
-                onPress={() => {
-                  setCopyMessage(null);
-                  copyMessageRef.current = null;
-                  setSetting('copyMessage', null);
-                  setMessageSaved(false);
+                onPress={async () => {
+                  const previousCopyMessage = copyMessage;
+                  const previousMessageSaved = messageSaved;
+                  
+                  try {
+                    await setSetting('copyMessage', null);
+                    // Only clear local state after successful await
+                    setCopyMessage(null);
+                    copyMessageRef.current = null;
+                    setMessageSaved(false);
+                  } catch (error) {
+                    // Roll back local state on failure
+                    setCopyMessage(previousCopyMessage);
+                    copyMessageRef.current = previousCopyMessage;
+                    setMessageSaved(previousMessageSaved);
+                    console.error('Error restoring default copy message:', error);
+                    Alert.alert('Erro', 'Falha ao restaurar mensagem padrão.');
+                  }
                 }}
               >
                 Restaurar padrão

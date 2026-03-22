@@ -603,18 +603,90 @@ export const moveInventoryItemToList = async (
           [mergedQuantity, mergedNotes, now, existingDestination.id]
         );
 
-        // Move dependent records that reference the source row to reference the destination row
-        // Move inventory history
-        await db.runAsync(
-          `UPDATE inventory_history SET inventoryItemId = ? WHERE inventoryItemId = ?;`,
-          [existingDestination.id, inventoryItemId]
+        // Handle dependent records that reference the source row
+        // First handle shopping_list_items (has UNIQUE constraint on inventoryItemId)
+        const sourceShoppingListItem = await db.getFirstAsync<{ id: number; quantity: number; checked: number; price: number | null; sortOrder: number; notes: string | null }>(
+          `SELECT id, quantity, checked, price, sortOrder, notes FROM shopping_list_items WHERE inventoryItemId = ?;`,
+          [inventoryItemId]
         );
+        
+        if (sourceShoppingListItem) {
+          const destinationShoppingListItem = await db.getFirstAsync<{ id: number; quantity: number; checked: number; price: number | null; sortOrder: number; notes: string | null }>(
+            `SELECT id, quantity, checked, price, sortOrder, notes FROM shopping_list_items WHERE inventoryItemId = ?;`,
+            [existingDestination.id]
+          );
+          
+          if (destinationShoppingListItem) {
+            // Merge shopping list items - combine quantities and pick latest metadata
+            const mergedQuantity = destinationShoppingListItem.quantity + sourceShoppingListItem.quantity;
+            const mergedChecked = destinationShoppingListItem.checked || sourceShoppingListItem.checked;
+            const mergedPrice = sourceShoppingListItem.price || destinationShoppingListItem.price;
+            const mergedSortOrder = Math.min(destinationShoppingListItem.sortOrder, sourceShoppingListItem.sortOrder);
+            const mergedNotes = destinationShoppingListItem.notes && sourceShoppingListItem.notes 
+              ? `${destinationShoppingListItem.notes}; ${sourceShoppingListItem.notes}`
+              : destinationShoppingListItem.notes || sourceShoppingListItem.notes;
+            
+            await db.runAsync(
+              `UPDATE shopping_list_items SET quantity = ?, checked = ?, price = ?, sortOrder = ?, notes = ?, updatedAt = ? WHERE id = ?;`,
+              [mergedQuantity, mergedChecked, mergedPrice, mergedSortOrder, mergedNotes, now, destinationShoppingListItem.id]
+            );
+            
+            // Delete the source shopping list item
+            await db.runAsync(
+              `DELETE FROM shopping_list_items WHERE id = ?;`,
+              [sourceShoppingListItem.id]
+            );
+          } else {
+            // No destination shopping list item exists, just update the reference
+            await db.runAsync(
+              `UPDATE shopping_list_items SET inventoryItemId = ?, updatedAt = ? WHERE inventoryItemId = ?;`,
+              [existingDestination.id, now, inventoryItemId]
+            );
+          }
+        }
 
-        // Move shopping list items
-        await db.runAsync(
-          `UPDATE shopping_list_items SET inventoryItemId = ? WHERE inventoryItemId = ?;`,
-          [existingDestination.id, inventoryItemId]
+        // Handle inventory_history (has UNIQUE constraint on inventoryItemId, date)
+        const sourceHistoryEntries = await db.getAllAsync<{ id: number; date: string; quantity: number; notes: string | null }>(
+          `SELECT id, date, quantity, notes FROM inventory_history WHERE inventoryItemId = ?;`,
+          [inventoryItemId]
         );
+        
+        for (const sourceEntry of sourceHistoryEntries) {
+          const destinationEntry = await db.getFirstAsync<{ id: number; quantity: number; notes: string | null }>(
+            `SELECT id, quantity, notes FROM inventory_history WHERE inventoryItemId = ? AND date = ?;`,
+            [existingDestination.id, sourceEntry.date]
+          );
+          
+          if (destinationEntry) {
+            // Same-day entries exist - consolidate by keeping the one with higher quantity or latest
+            const keepSourceEntry = sourceEntry.quantity > destinationEntry.quantity || 
+                                   (sourceEntry.quantity === destinationEntry.quantity && sourceEntry.notes && !destinationEntry.notes);
+            
+            if (keepSourceEntry) {
+              // Update destination with source data and delete source
+              await db.runAsync(
+                `UPDATE inventory_history SET quantity = ?, notes = ? WHERE id = ?;`,
+                [sourceEntry.quantity, sourceEntry.notes, destinationEntry.id]
+              );
+              await db.runAsync(
+                `DELETE FROM inventory_history WHERE id = ?;`,
+                [sourceEntry.id]
+              );
+            } else {
+              // Keep destination entry, delete source
+              await db.runAsync(
+                `DELETE FROM inventory_history WHERE id = ?;`,
+                [sourceEntry.id]
+              );
+            }
+          } else {
+            // No conflicting entry exists for this date, just update the reference
+            await db.runAsync(
+              `UPDATE inventory_history SET inventoryItemId = ? WHERE id = ?;`,
+              [existingDestination.id, sourceEntry.id]
+            );
+          }
+        }
 
         // Delete the source row since it's been merged
         await db.runAsync(

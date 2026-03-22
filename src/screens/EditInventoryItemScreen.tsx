@@ -216,6 +216,7 @@ export default function EditInventoryItem() {
     setCategories(categoriesData);
     setShoppingListItem(sli);
     initialShoppingListItemRef.current = sli;
+    setSlQuantity(sli?.quantity ?? 1);
     setStats(consumptionStats);
     setStores(storesData);
     setPriceHistory(historyPrice);
@@ -449,7 +450,7 @@ export default function EditInventoryItem() {
 
       if (shoppingListItem?.id && shoppingListItem.id > 0) {
         await updateShoppingListItem(shoppingListItem.id, {
-          quantity: slQuantity,
+          quantity: slQuantity ?? 1,
           price: slPrice,
         });
       }
