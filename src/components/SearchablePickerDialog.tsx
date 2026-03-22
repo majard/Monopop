@@ -17,7 +17,7 @@ interface SearchablePickerDialogProps {
   items: { id: number; name: string }[];
   selectedId: number | null;
   onSelect: (id: number) => void;
-  onCreateNew: (name: string) => void;
+  onCreateNew: (name: string) => void | Promise<void>;
   title: string;
   placeholder?: string;
   embedded?: boolean;
@@ -75,12 +75,17 @@ export function SearchablePickerDialog({
     }
   };
 
-  const handleCreateNew = () => {
-    onCreateNew(searchText.trim());
-    if (!embedded) {
-      onDismiss();
-    } else {
-      setSearchText(''); // clear so full list shows
+  const handleCreateNew = async () => {
+    try {
+      await onCreateNew(searchText.trim());
+      if (!embedded) {
+        onDismiss();
+      } else {
+        setSearchText(''); // clear so full list shows
+      }
+    } catch (error) {
+      console.error('Error creating new item:', error);
+      // Keep modal open on error so user can try again or cancel
     }
   };
 

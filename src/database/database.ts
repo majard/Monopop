@@ -1854,9 +1854,10 @@ export const getReferencePriceForProduct = async (
       );
       if (storeRef?.price != null) {
         if (storeRef.unit != null && storeRef.packageSize == null) {
-          return null;
+          // Invalid ref - skip and continue to next fallback
+        } else {
+          return { price: storeRef.price, packageSize: storeRef.packageSize ?? null };
         }
-        return { price: storeRef.price, packageSize: storeRef.packageSize ?? null };
       }
 
       const storeInvoice = await db.getFirstAsync<{ unit: string | null; unitPrice: number; packageSize: number | null }>(
@@ -1871,9 +1872,10 @@ export const getReferencePriceForProduct = async (
       );
       if (storeInvoice?.unitPrice != null) {
         if (storeInvoice.unit != null && storeInvoice.packageSize == null) {
-          return null;
+          // Invalid invoice row - skip and continue to next fallback
+        } else {
+          return { price: storeInvoice.unitPrice, packageSize: storeInvoice.packageSize ?? null };
         }
-        return { price: storeInvoice.unitPrice, packageSize: storeInvoice.packageSize ?? null };
       }
       return null;
     }
@@ -1887,9 +1889,10 @@ export const getReferencePriceForProduct = async (
     );
     if (baseRef?.price != null) {
       if (baseRef.unit != null && baseRef.packageSize == null) {
-        return null;
+        // Invalid ref - skip and continue to next fallback
+      } else {
+        return { price: baseRef.price, packageSize: baseRef.packageSize ?? null };
       }
-      return { price: baseRef.price, packageSize: baseRef.packageSize ?? null };
     }
 
     const anyInvoice = await db.getFirstAsync<{ unit: string | null; unitPrice: number; packageSize: number | null }>(
@@ -1903,9 +1906,10 @@ export const getReferencePriceForProduct = async (
     );
     if (anyInvoice?.unitPrice != null) {
       if (anyInvoice.unit != null && anyInvoice.packageSize == null) {
-        return null;
+        // Invalid invoice row - skip and continue to next fallback
+      } else {
+        return { price: anyInvoice.unitPrice, packageSize: anyInvoice.packageSize ?? null };
       }
-      return { price: anyInvoice.unitPrice, packageSize: anyInvoice.packageSize ?? null };
     }
     return null;
 
