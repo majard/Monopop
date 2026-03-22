@@ -1,9 +1,47 @@
 import * as SQLite from "expo-sqlite";
+import * as FileSystem from 'expo-file-system/legacy';
 import { Product, InventoryItem, InventoryHistory, List, ShoppingListItem, Category } from "./models";
 import { CURRENT_DATABASE_VERSION, runMigrations } from "./migrations";
 
 let db: SQLite.SQLiteDatabase | null = null;
 let initPromise: Promise<SQLite.SQLiteDatabase> | null = null;
+
+export const migrateOldDatabase = async (): Promise<void> => {
+  try {
+    const oldDbPath = `${FileSystem.documentDirectory}listai.db`;
+    const newDbPath = `${FileSystem.documentDirectory}monopop.db`;
+    
+    // Check if the old database exists
+    const oldDbInfo = await FileSystem.getInfoAsync(oldDbPath);
+    
+    if (oldDbInfo.exists) {
+      console.log('Found old listai.db, migrating to monopop.db...');
+      
+      // Check if new database already exists to avoid overwriting
+      const newDbInfo = await FileSystem.getInfoAsync(newDbPath);
+      if (newDbInfo.exists) {
+        console.log('monopop.db already exists, skipping migration');
+        return;
+      }
+      
+      // Copy old database to new location
+      await FileSystem.copyAsync({
+        from: oldDbPath,
+        to: newDbPath
+      });
+      
+      // Delete the old database
+      await FileSystem.deleteAsync(oldDbPath);
+      
+      console.log('Successfully migrated listai.db to monopop.db');
+    } else {
+      console.log('No old listai.db found, no migration needed');
+    }
+  } catch (error) {
+    console.error('Error during old database migration:', error);
+    throw error;
+  }
+};
 
 export const initializeDatabase = async (
   databaseName: string = "monopop.db"

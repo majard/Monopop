@@ -288,6 +288,7 @@ export default function BackupScreen() {
         await db.runAsync('DELETE FROM categories');
         await db.runAsync('DELETE FROM stores');
         await db.runAsync('DELETE FROM lists');
+        await db.runAsync('DELETE FROM settings');
       });
       Alert.alert('Sucesso', 'Todos os dados foram apagados!');
       setResetEnabled(false);

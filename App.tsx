@@ -9,7 +9,7 @@ import { StyleSheet, View } from 'react-native';
 import { Text, Button } from 'react-native-paper';
 import * as Linking from 'expo-linking';
 import * as FileSystem from 'expo-file-system/legacy';
-import { initializeDatabase, getSetting } from './src/database/database';
+import { initializeDatabase, getSetting, migrateOldDatabase } from './src/database/database';
 import { detectImportType, ListExportData } from './src/utils/backupUtils';
 import MainScreen from './src/screens/MainScreen';
 import AddProductScreen from './src/screens/AddProductScreen';
@@ -87,6 +87,7 @@ function AppContent({ navigationRef }: AppContentProps) {
   useEffect(() => {
     const initializeApp = async () => {
       try {
+        await migrateOldDatabase();
         await initializeDatabase();
 
         const [listMode, lastOpenedListId, defaultListId] = await Promise.all([
