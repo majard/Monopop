@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
+import { View, StyleSheet, ScrollView, Alert } from 'react-native';
 import { TextInput } from 'react-native-paper';
 import {
   Appbar,
@@ -81,29 +81,73 @@ export default function PreferencesScreen() {
   const handleSaveMessage = async () => {
     const current = copyMessageRef.current ?? copyMessage;
     const trimmed = current?.trim();
-    await setSetting('copyMessage', trimmed === '' ? '__blank__' : trimmed ?? null);
-    setMessageSaved(true);
-    setTimeout(() => setMessageSaved(false), 2000);
+    const previousMessage = copyMessage; // Snapshot previous state
+    
+    try {
+      await setSetting('copyMessage', trimmed === '' ? '__blank__' : trimmed ?? null);
+      // Only update UI state after successful save
+      setMessageSaved(true);
+      setTimeout(() => setMessageSaved(false), 2000);
+    } catch (error) {
+      // Revert to previous state on failure
+      setCopyMessage(previousMessage);
+      copyMessageRef.current = previousMessage;
+      console.error('Error saving copy message:', error);
+      // Optionally show error message to user
+      Alert.alert('Erro', 'Falha ao salvar mensagem de cópia.');
+    }
   };
 
   const saveListMode = async (mode: 'ask' | 'last' | 'fixed') => {
-    try { setDefaultListMode(mode); await setSetting('defaultListMode', mode); }
-    catch (error) { console.error('Error saving list mode:', error); }
+    const previousMode = defaultListMode; // Snapshot previous state
+    try {
+      await setSetting('defaultListMode', mode);
+      // Only update UI state after successful save
+      setDefaultListMode(mode);
+    } catch (error) {
+      // Revert on failure
+      console.error('Error saving list mode:', error);
+      Alert.alert('Erro', 'Falha ao salvar modo de lista padrão.');
+    }
   };
 
   const saveDefaultList = async (listId: number | null) => {
-    try { setDefaultListId(listId); await setSetting('defaultListId', listId?.toString() || null); }
-    catch (error) { console.error('Error saving default list:', error); }
+    const previousListId = defaultListId; // Snapshot previous state
+    try {
+      await setSetting('defaultListId', listId?.toString() || null);
+      // Only update UI state after successful save
+      setDefaultListId(listId);
+    } catch (error) {
+      // Revert on failure
+      console.error('Error saving default list:', error);
+      Alert.alert('Erro', 'Falha ao salvar lista padrão.');
+    }
   };
 
   const saveStoreMode = async (mode: 'ask' | 'last' | 'fixed') => {
-    try { setDefaultStoreMode(mode); await setSetting('defaultStoreMode', mode); }
-    catch (error) { console.error('Error saving store mode:', error); }
+    const previousMode = defaultStoreMode; // Snapshot previous state
+    try {
+      await setSetting('defaultStoreMode', mode);
+      // Only update UI state after successful save
+      setDefaultStoreMode(mode);
+    } catch (error) {
+      // Revert on failure
+      console.error('Error saving store mode:', error);
+      Alert.alert('Erro', 'Falha ao salvar modo de loja padrão.');
+    }
   };
 
   const saveDefaultStore = async (storeId: number | null) => {
-    try { setDefaultStoreId(storeId); await setSetting('defaultStoreId', storeId?.toString() || null); }
-    catch (error) { console.error('Error saving default store:', error); }
+    const previousStoreId = defaultStoreId; // Snapshot previous state
+    try {
+      await setSetting('defaultStoreId', storeId?.toString() || null);
+      // Only update UI state after successful save
+      setDefaultStoreId(storeId);
+    } catch (error) {
+      // Revert on failure
+      console.error('Error saving default store:', error);
+      Alert.alert('Erro', 'Falha ao salvar loja padrão.');
+    }
   };
 
   const getListName = (id: number | null) => {
