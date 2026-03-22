@@ -59,8 +59,11 @@ function AppContent({ navigationRef }: AppContentProps) {
       if (url.startsWith('content://')) {
         const cacheUri = `${FileSystem.cacheDirectory}incoming.json`;
         await FileSystem.copyAsync({ from: url, to: cacheUri });
-        content = await FileSystem.readAsStringAsync(cacheUri);
-        await FileSystem.deleteAsync(cacheUri, { idempotent: true });
+        try {
+          content = await FileSystem.readAsStringAsync(cacheUri);
+        } finally {
+          await FileSystem.deleteAsync(cacheUri, { idempotent: true });
+        }
       } else {
         content = await FileSystem.readAsStringAsync(url);
       }

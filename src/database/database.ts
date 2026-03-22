@@ -1689,6 +1689,15 @@ export const updateProductUnit = async (
   unit: string | null,
   standardPackageSize: number | null
 ): Promise<void> => {
+  // Validate unit and standardPackageSize combinations
+  if (unit === null && standardPackageSize !== null) {
+    throw new Error("Invalid product unit configuration: when unit is null, standardPackageSize must be null");
+  }
+  
+  if (unit !== null && (standardPackageSize === null || standardPackageSize <= 0)) {
+    throw new Error("Invalid product unit configuration: when unit is non-null, standardPackageSize must be a positive number");
+  }
+
   const db = getDb();
   const now = new Date().toISOString();
   try {
@@ -2064,8 +2073,8 @@ export const concludeShoppingForListWithInvoiceV2 = async (
     let total = 0;
     for (const row of checkedItems) {
       const overrides = itemOverrides?.get(row.id);
-      const packageSize = overrides?.packageSize ?? null;
-      const standardPackageSize = overrides?.standardPackageSize ?? null;
+      const packageSize = overrides?.packageSize !== undefined && overrides?.packageSize !== null ? overrides.packageSize : null;
+      const standardPackageSize = overrides?.standardPackageSize !== undefined && overrides?.standardPackageSize !== null ? overrides.standardPackageSize : null;
 
       // unitPrice = price paid per package
       const unitPrice = row.price ?? null;
@@ -2114,7 +2123,7 @@ export const concludeShoppingForListWithInvoiceV2 = async (
         }
       }
 
-      if (overrides?.updateReferencePrice && unitPrice !== null) {
+      if (overrides?.updateReferencePrice && unitPrice !== null && overrides?.packageSize !== null) {
         await db.runAsync(
           `INSERT INTO product_store_prices (productId, storeId, price, packageSize, updatedAt)
            VALUES (?, ?, ?, ?, ?)

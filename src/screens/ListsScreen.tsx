@@ -40,10 +40,17 @@ export default function ListsScreen() {
   const [initialLoading, setInitialLoading] = useState(true);
 
   const loadLists = useCallback(async () => {
-    const result = await getLists();
-    setLists(result);
-    setInitialLoading(false);
-  }, []);
+    try {
+      const result = await getLists();
+      setLists(result);
+    } catch (error) {
+      console.error('Error loading lists:', error);
+      // Optionally set empty array or leave existing state
+      setLists([]);
+    } finally {
+      setInitialLoading(false);
+    }
+  }, [getLists, setLists, setInitialLoading]);
 
   useFocusEffect(
     useCallback(() => {
