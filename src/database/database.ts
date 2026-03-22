@@ -1273,7 +1273,13 @@ export const updateStoreName = async (id: number, name: string): Promise<void> =
 export const deleteStore = async (id: number): Promise<void> => {
   const db = getDb();
   try {
-    await db.runAsync("DELETE FROM stores WHERE id = ?", [id]);
+    await db.withTransactionAsync(async () => {
+      await db.runAsync("DELETE FROM stores WHERE id = ?", [id]);
+      await db.runAsync(
+        "DELETE FROM settings WHERE key = ? AND value = ?",
+        ["defaultStoreId", id.toString()]
+      );
+    });
   } catch (error) {
     console.error("Error deleting store:", error);
     throw error;
