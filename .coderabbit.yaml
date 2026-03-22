@@ -301,7 +301,9 @@ reviews:
     enabled: true
     drafts: false
 
-  finishing_touches: true
+  finishing_touches:
+    enabled: true
+  
   auto_title: true
 
   pr_description_generator:
@@ -325,21 +327,15 @@ reviews:
 
   additional_instructions: |
     IMPORTANT CONTEXT — READ BEFORE REVIEWING:
-    This repository is catching up on ~280 commits of accumulated work via a
-    sequential chain of PRs (master → develop → feature branches → feature/units).
-    Each PR in this chain builds directly on the previous one. You are reviewing
-    one step in that chain, not the final state of the codebase.
+    This is the final PR in a sequential chain of ~280 commits of accumulated work
+    (master → develop → feature branches → feature/units). This PR represents the
+    current production state of the app. Review it as a complete, shipping codebase —
+    not as a work in progress.
 
     Consequences for your review:
-    - Do NOT flag something as incomplete, inconsistent, or half-migrated unless
-      it is clearly a bug in the code added by THIS PR specifically.
-    - If you see a pattern that looks like it will be addressed later (e.g., an old
-      naming convention being phased out, a refactor in progress, a feature partially
-      implemented), note it at most once and do not request changes.
-    - Treat "this will likely be fixed in a later PR" as a valid resolution.
-    - Reserve request-changes-level feedback for genuine bugs or regressions introduced
-      by the delta of this specific PR.
-
+    - Flag real bugs and issues normally — this is the final state.
+    - Context from earlier PRs in the chain is available in the repository history.
+    
     This project is both a production app with real daily users and a technical
     engineering portfolio.
 
