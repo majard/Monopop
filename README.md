@@ -64,7 +64,10 @@ that idea made functional.
   locked in
 - **100% offline** — no account, no internet, no network latency. Data 
   belongs to the user by architecture, not by policy.
-- **List sharing** — export any list as JSON; share via WhatsApp, Telegram, or any app. Importing opens automatically via Android intent filter — no manual file picking.
+- **List sharing** — export any list as typed JSON; share via WhatsApp,
+  Telegram, or any app. Importing opens automatically via Android intent
+  filter — no manual file picking. Cold-start and warm-start deep links
+  both handled.
 
 ---
 
@@ -101,6 +104,13 @@ Two intentionally separate contexts: `ListContext` holds only `listId` +
 `setListId` (navigation selection); `ListDataContext` holds the data 
 dependent on `listId`. Screens that only need the `listId` don't load the 
 data overhead.
+
+`ListDataContext` emerged from a behavioural observation: waiting ~3s on
+HomeScreen before navigating made ShoppingListScreen load in under 1s. The
+cause was SQLite's page cache — inventory queries populated pages that
+ShoppingListScreen also needed. The fix wasn't to warm the cache deliberately;
+it was to share the already-loaded data. `ListDataContext` centralises
+inventory items, categories, stores, and store settings for the active list.
 
 `BottomTabNavigator` receives `key={listId}` — when `listId` changes, the 
 entire navigator remounts. Intentional side effect: local state across all 
@@ -246,6 +256,48 @@ price from Store A has no business pre-filling a session at Store B —
 cross-contamination would silently corrupt the user's price memory, the 
 one thing the app exists to build.
 
+**`moveInventoryItemToList` with merge-on-conflict semantics** — the previous
+implementation was a simple UPDATE. The replacement wraps everything in a
+transaction and handles the conflict case explicitly: when the destination list
+already contains the same `productId`, it merges quantities and notes into the
+destination row, re-parents `inventory_history` and `shopping_list_items`
+foreign keys to the destination `inventoryItemId`, and deletes the source row —
+all atomically. Callers detect the conflict before the move and surface a
+pluralised Portuguese confirmation alert. A simple UPDATE would have silently
+dropped history.
+
+**`useListImportEngine` — import state in refs, not state** — the multi-step
+import flow (parse → exact match → fuzzy confirmation → create-new fallback)
+must pause mid-execution to wait for user input, then resume exactly where it
+left off. Holding that state in `useState` would cause re-renders that destroy
+the async context of the current step. Holding it in refs means the flow can
+yield to the UI without losing position — the interactive confirmation modal is
+just a pause point in a linear sequence, not a separate state machine.
+
+**`useRetroPrompt` as a Promise-based dialog** — when a unit is first configured
+for a product with existing purchase history, the app offers to retroactively
+record a reference price from the last purchase. `useRetroPrompt` exposes this
+as `promptForRetroPackageSize()`, which opens a Dialog and returns a `Promise`
+that resolves with the confirmed atomic value or `null` on dismiss. A `useEffect`
+cleanup resolves any pending Promise with `null` on unmount, preventing leaked
+Promise resolutions if the screen is unmounted mid-prompt.
+
+**`initPromise` cache in `initializeDatabase`** — concurrent calls to
+`initializeDatabase()` (e.g., from multiple screens mounting before init
+completes) are deduplicated via a module-level `initPromise` cache. The first
+call creates the Promise; subsequent calls return the same one. Without this,
+concurrent initialisation races can corrupt the migration sequence on cold
+start.
+
+**`calculateSimilarity` composite strategy** — the similarity function used
+throughout import and search is a weighted blend: token overlap, full-string
+Dice coefficient, containment bonus for substring matches, and Levenshtein
+distance for single-token pairs. The threshold was tuned from 0.8 → 0.55 based
+on real import data. The import flow, fuzzy product matching, and search
+filtering all depend on this function — a naive implementation would produce
+either too many false positives or too many misses on the messy real-world
+product names the app actually sees.
+
 **StorageAccessFramework for backup export** — Android 10+ scoped storage 
 removes direct filesystem access; `WRITE_EXTERNAL_STORAGE` is a no-op on 
 Android 13+. The backup screen uses SAF via StorageAccessFramework 
@@ -329,14 +381,6 @@ elimination using stepped alerts in a release build.
 neither resolved nor rejected; `await Promise.all` hung without entering 
 the catch block. Diagnosis required replacing it with sequential awaits 
 and intermediate alerts to isolate which query was hanging.
-
-**SQLite cache as a useful side effect** — behavioral observation: waiting 
-~3s on HomeScreen before navigating made ShoppingListScreen load in <1s. 
-The hypothesis was "SQLite warm-up", but the real cause was that the 
-inventory queries populated the page cache with pages ShoppingListScreen 
-also needed. Diagnosed through real usage pattern analysis, no external 
-profiler. This led to `ListDataContext`: sharing data between screens 
-instead of duplicate queries against the same tables.
 
 **Silent bug in `saveInventoryHistorySnapshot`** — two coexisting bugs: 
 (1) INSERT ignored `quantityToSave` and always used 
