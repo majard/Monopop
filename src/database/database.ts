@@ -1319,10 +1319,21 @@ export const updateProductCategory = async (productId: number, categoryId: numbe
 export const updateCategoryName = async (id: number, name: string): Promise<void> => {
   const db = getDb();
   const now = new Date().toISOString();
+  const normalized = name.trim();
+  if (!normalized) {
+    throw new Error("Category name is required");
+  }
   try {
+    const duplicateCategory = await db.getFirstAsync<{ id: number }>(
+      `SELECT id FROM categories WHERE name = ? AND id != ?`,
+      [normalized, id]
+    );
+    if (duplicateCategory) {
+      throw new Error("Category name already exists");
+    }
     await db.runAsync(
       `UPDATE categories SET name = ?, updatedAt = ? WHERE id = ?`,
-      [name.trim(), now, id]
+      [normalized, now, id]
     );
   } catch (error) {
     console.error("Error updating category name:", error);
@@ -1342,10 +1353,21 @@ export const deleteCategory = async (id: number): Promise<void> => {
 
 export const updateStoreName = async (id: number, name: string): Promise<void> => {
   const db = getDb();
+  const normalized = normalizeStoreName(name);
+  if (!normalized) {
+    throw new Error("Store name is required");
+  }
   try {
+    const duplicateStore = await db.getFirstAsync<{ id: number }>(
+      `SELECT id FROM stores WHERE name = ? AND id != ?`,
+      [normalized, id]
+    );
+    if (duplicateStore) {
+      throw new Error("Store name already exists");
+    }
     await db.runAsync(
       `UPDATE stores SET name = ? WHERE id = ?`,
-      [normalizeStoreName(name), id]
+      [normalized, id]
     );
   } catch (error) {
     console.error("Error updating store name:", error);
@@ -1356,7 +1378,13 @@ export const updateStoreName = async (id: number, name: string): Promise<void> =
 export const deleteStore = async (id: number): Promise<void> => {
   const db = getDb();
   try {
-    await db.runAsync("DELETE FROM stores WHERE id = ?", [id]);
+    await db.withTransactionAsync(async () => {
+      await db.runAsync("DELETE FROM stores WHERE id = ?", [id]);
+      await db.runAsync(
+        "DELETE FROM settings WHERE key = ? AND value = ?",
+        ["defaultStoreId", id.toString()]
+      );
+    });
   } catch (error) {
     console.error("Error deleting store:", error);
     throw error;

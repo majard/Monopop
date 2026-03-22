@@ -53,6 +53,9 @@ interface PeriodSummary {
   prevLabel: string;
 }
 
+const parseHistoryDate = (value: string) =>
+  value.length === 10 ? new Date(`${value}T12:00:00`) : new Date(value);
+
 export default function HistoryScreen() {
   const { listId } = useListContext();
   const { listName, handleListNameSave, handleListDelete } = useList(listId);
@@ -72,7 +75,7 @@ export default function HistoryScreen() {
 
   const formatCurrency = (value: number) => `R$ ${value.toFixed(2).replace('.', ',')}`;
   const formatDate = (dateString: string) =>
-    format(parseISO(dateString), "dd 'de' MMM yyyy", { locale: ptBR });
+    format(parseHistoryDate(dateString), "dd 'de' MMM yyyy", { locale: ptBR });
 
   const matchedProductIds = useMemo(() => {
     if (!searchQuery.trim()) return null;
@@ -93,7 +96,7 @@ export default function HistoryScreen() {
     if (dateRange.start) {
       const start = startOfDay(dateRange.start);
       const end = endOfDay(dateRange.end ?? dateRange.start);
-      result = result.filter(e => isWithinInterval(parseISO(e.date), { start, end }));
+      result = result.filter(e => isWithinInterval(parseHistoryDate(e.date), { start, end }));
     }
 
     if (matchedProductIds) {
@@ -109,7 +112,6 @@ export default function HistoryScreen() {
     return result;
   }, [events, dateRange, matchedProductIds, searchQuery]);
 
-  // Summary reacts to the current filter
   const summary = useMemo((): PeriodSummary => {
     const purchases = filteredEvents.filter(e => e.type === 'purchase') as Extract<HistoryEvent, { type: 'purchase' }>[];
     const storeCount = new Map<string, number>();
@@ -128,7 +130,6 @@ export default function HistoryScreen() {
 
     const totalSpent = purchases.reduce((s, e) => s + e.total, 0);
 
-    // Determine previous period interval
     let prevStart: Date | null = null;
     let prevEnd: Date | null = null;
 
@@ -138,7 +139,6 @@ export default function HistoryScreen() {
       prevEnd = new Date(startOfDay(dateRange.start).getTime() - 1);
       prevStart = new Date(prevEnd.getTime() - rangeMs);
     } else {
-      // Default: current month vs previous month
       const now = new Date();
       prevStart = startOfMonth(subMonths(now, 1));
       prevEnd = endOfMonth(subMonths(now, 1));
@@ -150,22 +150,14 @@ export default function HistoryScreen() {
 
     const prevPurchases = events.filter(e => {
       if (e.type !== 'purchase') return false;
-      const d = parseISO(e.date);
+      const d = parseHistoryDate(e.date);
       return isWithinInterval(d, { start: prevStart!, end: prevEnd! });
     }) as Extract<HistoryEvent, { type: 'purchase' }>[];
 
     const prevTotal = prevPurchases.reduce((s, e) => s + e.total, 0);
     const trend = prevTotal > 0 ? ((totalSpent - prevTotal) / prevTotal) * 100 : null;
 
-    return {
-      totalSpent,
-      mostUsedStore,
-      purchaseCount: purchases.length,
-      label,
-      trend,
-      prevTotal,
-      prevLabel,
-    };
+    return { totalSpent, mostUsedStore, purchaseCount: purchases.length, label, trend, prevTotal, prevLabel };
   }, [filteredEvents, dateRange, events]);
 
   const loadHistory = useCallback(async () => {
@@ -241,12 +233,12 @@ export default function HistoryScreen() {
         .map(([date, changes], index) => ({
           type: 'inventory' as const,
           id: 1000000 + index,
-          date: date.includes('T') ? date : date + 'T00:00:00',
+          date,
           changes,
         }));
 
       setEvents([...purchaseEvents, ...inventoryEvents].sort(
-        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+        (a, b) => parseHistoryDate(b.date).getTime() - parseHistoryDate(a.date).getTime()
       ));
     } catch (error) {
       console.error('Error loading history:', error);
@@ -408,7 +400,6 @@ export default function HistoryScreen() {
         onListDelete={handleListDelete}
       />
 
-      {/* Summary — reacts to active filter */}
       <Surface style={[localStyles.summaryCard, { backgroundColor: theme.colors.surface }]}>
         <Text style={[localStyles.summaryTitle, { color: theme.colors.onSurfaceVariant }]}>
           {summary.label}
@@ -460,9 +451,7 @@ export default function HistoryScreen() {
         )}
       </Surface>
 
-      {/* Filter bar */}
       <View style={[localStyles.filterRow, { borderBottomColor: theme.colors.outlineVariant }]}>
-
         <Pressable
           onPress={() => setDatePickerVisible(true)}
           style={[localStyles.dateButton, {
@@ -533,8 +522,6 @@ export default function HistoryScreen() {
 }
 
 const localStyles = StyleSheet.create({
-  // TODO: investigate why paddingBottom is needed to prevent content clipping
-
   container: { flex: 1, paddingBottom: -96 },
   summaryCard: {
     margin: 16,
