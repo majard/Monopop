@@ -394,7 +394,7 @@ export const updateInventoryItem = async (
 ): Promise<void> => {
   const db = getDb();
   const now = new Date().toISOString();
-  
+
   let query = `UPDATE inventory_items SET updatedAt = ?`;
   const params: (string | number | boolean | undefined)[] = [now];
 
@@ -1219,6 +1219,13 @@ export const updateCategoryName = async (id: number, name: string): Promise<void
     throw new Error("Category name is required");
   }
   try {
+    const duplicateCategory = await db.getFirstAsync<{ id: number }>(
+      `SELECT id FROM categories WHERE name = ? AND id != ?`,
+      [normalized, id]
+    );
+    if (duplicateCategory) {
+      throw new Error("Category name already exists");
+    }
     await db.runAsync(
       `UPDATE categories SET name = ?, updatedAt = ? WHERE id = ?`,
       [normalized, now, id]
@@ -1246,6 +1253,13 @@ export const updateStoreName = async (id: number, name: string): Promise<void> =
     throw new Error("Store name is required");
   }
   try {
+    const duplicateStore = await db.getFirstAsync<{ id: number }>(
+      `SELECT id FROM stores WHERE name = ? AND id != ?`,
+      [normalized, id]
+    );
+    if (duplicateStore) {
+      throw new Error("Store name already exists");
+    }
     await db.runAsync(
       `UPDATE stores SET name = ? WHERE id = ?`,
       [normalized, id]
