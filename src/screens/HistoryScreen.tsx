@@ -49,6 +49,10 @@ interface MonthSummary {
   purchaseCount: number;
 }
 
+
+const parseHistoryDate = (value: string) =>
+  value.length === 10 ? new Date(`${value}T12:00:00`) : new Date(value);
+
 export default function HistoryScreen() {
   const { listId } = useListContext();
   const { listName, handleListNameSave, handleListDelete } = useList(listId);
@@ -154,7 +158,7 @@ export default function HistoryScreen() {
         .map(([date, changes], index) => ({
           type: 'inventory' as const,
           id: 1000000 + index, // Unique ID for inventory events
-          date: new Date(date).toISOString(),
+          date: date,
           changes,
         }));
 
@@ -215,12 +219,12 @@ export default function HistoryScreen() {
       const currentMonth = now.getMonth();
       const currentYear = now.getFullYear();
       filtered = filtered.filter(e => {
-        const date = new Date(e.date);
+        const date = parseHistoryDate(e.date);
         return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
       });
     } else if (period === 'week') {
       const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      filtered = filtered.filter(e => new Date(e.date) >= oneWeekAgo);
+      filtered = filtered.filter(e => parseHistoryDate(e.date) >= oneWeekAgo);
     }
 
     if (query.trim()) {
@@ -263,7 +267,7 @@ export default function HistoryScreen() {
   const formatCurrency = (value: number) => `R$ ${value.toFixed(2).replace('.', ',')}`;
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
+    const date = parseHistoryDate(dateString);
     return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
   };
 
