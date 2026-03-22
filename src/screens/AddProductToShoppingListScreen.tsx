@@ -102,8 +102,8 @@ export default function AddProductToShoppingListScreen() {
     const unsubscribe = navigation.addListener('beforeRemove', (e) => {
       if (sessionChangesRef.current.size === 0 || confirmedRef.current) return;
 
-      e.preventDefault();
-
+      // Prevent default behavior by not dispatching the action immediately
+      // In React Navigation v6, we show the alert and handle the action manually
       const count = sessionChangesRef.current.size;
       Alert.alert(
         'Sair sem confirmar?',
@@ -143,6 +143,9 @@ export default function AddProductToShoppingListScreen() {
           },
         ]
       );
+      
+      // Return false to prevent the default navigation behavior
+      return false;
     });
     return unsubscribe;
   }, [navigation, shoppingListByInventoryId]);
@@ -186,12 +189,31 @@ export default function AddProductToShoppingListScreen() {
     if (!searchQuery.trim()) return;
     const name = searchQuery.trim();
     const allProducts = await getProducts();
+    
+    // Helper function to get current quantity of a product in the shopping list
+    const getCurrentQuantity = async (productName: string): Promise<number> => {
+      const shoppingListItems = await getShoppingListItemsByListId(listId);
+      const existingItem = shoppingListItems.find(item => 
+        item.productName.toLowerCase() === productName.toLowerCase()
+      );
+      return existingItem ? existingItem.quantity : 1;
+    };
 
     const exact = allProducts.find(
       p => preprocessName(p.name) === preprocessName(name)
     );
     if (exact) {
-      await addShoppingListItem(listId, exact.name, 1);
+      const currentQuantity = await getCurrentQuantity(exact.name);
+      const shoppingListItemId = await addShoppingListItem(listId, exact.name, currentQuantity);
+      // Get the inventory item ID for the newly added item
+      const shoppingListItems = await getShoppingListItemsByListId(listId);
+      const addedItem = shoppingListItems.find(item => item.id === shoppingListItemId);
+      if (addedItem) {
+        updateSessionChanges(addedItem.inventoryItemId, {
+          inventoryItemId: addedItem.inventoryItemId,
+          originalQuantity: null, // null means item didn't exist before this session
+        });
+      }
       setSearchQuery('');
       await loadData();
       return;
@@ -205,14 +227,34 @@ export default function AddProductToShoppingListScreen() {
         [
           {
             text: 'Sim, usar este', onPress: async () => {
-              await addShoppingListItem(listId, similar[0].name, 1);
+              const currentQuantity = await getCurrentQuantity(similar[0].name);
+              const shoppingListItemId = await addShoppingListItem(listId, similar[0].name, currentQuantity);
+              // Get the inventory item ID for the newly added item
+              const shoppingListItems = await getShoppingListItemsByListId(listId);
+              const addedItem = shoppingListItems.find(item => item.id === shoppingListItemId);
+              if (addedItem) {
+                updateSessionChanges(addedItem.inventoryItemId, {
+                  inventoryItemId: addedItem.inventoryItemId,
+                  originalQuantity: null, // null means item didn't exist before this session
+                });
+              }
               setSearchQuery('');
               await loadData();
             }
           },
           {
             text: 'Não, criar novo', onPress: async () => {
-              await addShoppingListItem(listId, name, 1);
+              const currentQuantity = await getCurrentQuantity(name);
+              const shoppingListItemId = await addShoppingListItem(listId, name, currentQuantity);
+              // Get the inventory item ID for the newly added item
+              const shoppingListItems = await getShoppingListItemsByListId(listId);
+              const addedItem = shoppingListItems.find(item => item.id === shoppingListItemId);
+              if (addedItem) {
+                updateSessionChanges(addedItem.inventoryItemId, {
+                  inventoryItemId: addedItem.inventoryItemId,
+                  originalQuantity: null, // null means item didn't exist before this session
+                });
+              }
               setSearchQuery('');
               await loadData();
             }
@@ -223,10 +265,20 @@ export default function AddProductToShoppingListScreen() {
       return;
     }
 
-    await addShoppingListItem(listId, name, 1);
+    const currentQuantity = await getCurrentQuantity(name);
+    const shoppingListItemId = await addShoppingListItem(listId, name, currentQuantity);
+    // Get the inventory item ID for the newly added item
+    const shoppingListItems = await getShoppingListItemsByListId(listId);
+    const addedItem = shoppingListItems.find(item => item.id === shoppingListItemId);
+    if (addedItem) {
+      updateSessionChanges(addedItem.inventoryItemId, {
+        inventoryItemId: addedItem.inventoryItemId,
+        originalQuantity: null, // null means item didn't exist before this session
+      });
+    }
     setSearchQuery('');
     await loadData();
-  }, [searchQuery, listId, loadData]);
+  }, [searchQuery, listId, loadData, updateSessionChanges]);
 
   const handlePlus = useCallback(async (item: InventoryItem) => {
     try {

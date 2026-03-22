@@ -61,14 +61,16 @@ export default function BackupScreen() {
 
     if (pending) {
       engine.startListImport(pending);
+      navigation.setParams({ pendingListImport: undefined });
     } else if (pendingBackup) {
       setImportData(pendingBackup);
       setImportFileName('arquivo recebido');
       setConfirmEnabled(false);
       setConfirmTimer(3);
       setImportDialogVisible(true);
+      navigation.setParams({ pendingBackupImport: undefined });
     }
-  }, [route.params]);
+  }, [route.params, navigation]);
 
   // ─── Full backup countdown timers ─────────────────────────────────────────
   useEffect(() => {
