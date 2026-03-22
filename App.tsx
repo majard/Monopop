@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Alert } from 'react-native';
 import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -87,39 +87,45 @@ function AppContent({ navigationRef }: AppContentProps) {
     }
   };
 
-  useEffect(() => {
-    const initializeApp = async () => {
-      try {
-        await migrateOldDatabase();
-        await initializeDatabase();
+  const initializeApp = async () => {
+    try {
+      await migrateOldDatabase();
+      await initializeDatabase();
 
-        const [listMode, lastOpenedListId, defaultListId] = await Promise.all([
-          getSetting('defaultListMode'),
-          getSetting('lastOpenedListId'),
-          getSetting('defaultListId'),
-        ]);
+      const [listMode, lastOpenedListId, defaultListId] = await Promise.all([
+        getSetting('defaultListMode'),
+        getSetting('lastOpenedListId'),
+        getSetting('defaultListId'),
+      ]);
 
-        if (listMode) {
-          let targetListId: number | null = null;
-          if (listMode === 'last' && lastOpenedListId) {
-            targetListId = parseInt(lastOpenedListId);
-          } else if (listMode === 'fixed' && defaultListId) {
-            targetListId = parseInt(defaultListId);
-          }
-          if (targetListId) {
-            setInitialRoute('MainTabs');
-            setInitialParams({ listId: targetListId });
-          }
+      if (listMode) {
+        let targetListId: number | null = null;
+        if (listMode === 'last' && lastOpenedListId) {
+          targetListId = parseInt(lastOpenedListId);
+        } else if (listMode === 'fixed' && defaultListId) {
+          targetListId = parseInt(defaultListId);
         }
-
-        setIsReady(true);
-      } catch (error) {
-        setInitError(error as Error);
-        setIsReady(true);
-        console.error('Error initializing app:', error);
+        if (targetListId) {
+          setInitialRoute('MainTabs');
+          setInitialParams({ listId: targetListId });
+        }
       }
-    };
 
+      setIsReady(true);
+    } catch (error) {
+      setInitError(error as Error);
+      setIsReady(true);
+      console.error('Error initializing app:', error);
+    }
+  };
+
+  const handleRetryInitialization = useCallback(() => {
+    setInitError(null);
+    setIsReady(false);
+    initializeApp();
+  }, []);
+
+  useEffect(() => {
     initializeApp();
   }, []);
 
@@ -148,7 +154,7 @@ function AppContent({ navigationRef }: AppContentProps) {
             </Text>
             <Button
               mode="contained"
-              onPress={() => { setInitError(null); setIsReady(false); }}
+              onPress={handleRetryInitialization}
             >
               Tentar novamente
             </Button>

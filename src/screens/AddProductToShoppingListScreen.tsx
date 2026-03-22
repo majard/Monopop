@@ -102,7 +102,7 @@ export default function AddProductToShoppingListScreen() {
     const unsubscribe = navigation.addListener('beforeRemove', (e) => {
       if (sessionChangesRef.current.size === 0 || confirmedRef.current) return;
 
-      // Prevent default behavior by not dispatching the action immediately
+      // Prevent default behavior by returning false
       // In React Navigation v6, we show the alert and handle the action manually
       const count = sessionChangesRef.current.size;
       Alert.alert(
