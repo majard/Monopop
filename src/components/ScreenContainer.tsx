@@ -2,10 +2,11 @@ import React from 'react';
 import { View, StyleSheet, ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from 'react-native-paper';
+import { StyleProp } from 'react-native';
 
 interface Props {
   children: React.ReactNode;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
   withBottomInset?: boolean; // Útil para desativar se a tela tiver abas
 }
 

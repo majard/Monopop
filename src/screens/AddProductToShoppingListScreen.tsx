@@ -11,6 +11,7 @@ import {
   addShoppingListItem,
   updateShoppingListItem,
   deleteShoppingListItem,
+  getProducts,
 } from '../database/database';
 import { RootStackParamList } from '../types/navigation';
 import { InventoryItem } from '../database/models';
@@ -18,7 +19,7 @@ import { createHomeScreenStyles } from '../styles/HomeScreenStyles';
 import SearchBar from '../components/SearchBar';
 import { SortMenu } from '../components/SortMenu';
 import { sortInventoryItems, SortOrder } from '../utils/sortUtils';
-import { preprocessName, calculateSimilarity } from '../utils/similarityUtils';
+import { preprocessName, calculateSimilarity, findSimilarProducts } from '../utils/similarityUtils';
 import { useListContext } from '../context/ListContext';
 import { ProductSearchRow } from '../components/ProductSearchRow';
 import { ScreenContainer } from '../components/ScreenContainer';
@@ -73,9 +74,9 @@ export default function AddProductToShoppingListScreen() {
         getShoppingListItemsByListId(listId),
         getInventoryItems(listId),
       ]);
-      
+
       setInventoryItems(inventory);
-      
+
       const shoppingMap = new Map<number, { id: number; quantity: number }>();
       shopping.forEach(item => {
         shoppingMap.set(item.inventoryItemId, {
@@ -101,8 +102,8 @@ export default function AddProductToShoppingListScreen() {
     const unsubscribe = navigation.addListener('beforeRemove', (e) => {
       if (sessionChangesRef.current.size === 0 || confirmedRef.current) return;
 
-      e.preventDefault();
-
+      // Prevent default behavior by returning false
+      // In React Navigation v6, we show the alert and handle the action manually
       const count = sessionChangesRef.current.size;
       Alert.alert(
         'Sair sem confirmar?',
@@ -142,6 +143,9 @@ export default function AddProductToShoppingListScreen() {
           },
         ]
       );
+      
+      // Return false to prevent the default navigation behavior
+      return false;
     });
     return unsubscribe;
   }, [navigation, shoppingListByInventoryId]);
@@ -184,23 +188,96 @@ export default function AddProductToShoppingListScreen() {
   const handleAddNewProduct = useCallback(async () => {
     if (!searchQuery.trim()) return;
     const name = searchQuery.trim();
-    setSearchQuery('');
-    try {
-      await addShoppingListItem(listId, name, 1);
-      // Reload inventory since a new inventory item might have been created
-      const freshInventory = await loadData();
-      const newItem = freshInventory.find(
-        item => preprocessName(item.productName) === preprocessName(name)
+    const allProducts = await getProducts();
+    
+    // Helper function to get current quantity of a product in the shopping list
+    const getCurrentQuantity = async (productName: string): Promise<number> => {
+      const shoppingListItems = await getShoppingListItemsByListId(listId);
+      const existingItem = shoppingListItems.find(item => 
+        item.productName.toLowerCase() === productName.toLowerCase()
       );
-      if (newItem && !sessionChangesRef.current.has(newItem.id)) {
-        updateSessionChanges(newItem.id, {
-          inventoryItemId: newItem.id,
-          originalQuantity: null,
+      return existingItem ? existingItem.quantity : 1;
+    };
+
+    const exact = allProducts.find(
+      p => preprocessName(p.name) === preprocessName(name)
+    );
+    if (exact) {
+      const currentQuantity = await getCurrentQuantity(exact.name);
+      const shoppingListItemId = await addShoppingListItem(listId, exact.name, currentQuantity);
+      // Get the inventory item ID for the newly added item
+      const shoppingListItems = await getShoppingListItemsByListId(listId);
+      const addedItem = shoppingListItems.find(item => item.id === shoppingListItemId);
+      if (addedItem) {
+        updateSessionChanges(addedItem.inventoryItemId, {
+          inventoryItemId: addedItem.inventoryItemId,
+          originalQuantity: null, // null means item didn't exist before this session
         });
       }
-    } catch (error) {
-      console.error('Erro ao adicionar novo produto:', error);
+      setSearchQuery('');
+      await loadData();
+      return;
     }
+
+    const similar = findSimilarProducts(name, allProducts);
+    if (similar.length > 0) {
+      Alert.alert(
+        'Produto similar encontrado',
+        `Já existe "${similar[0].name}". É o mesmo produto?`,
+        [
+          {
+            text: 'Sim, usar este', onPress: async () => {
+              const currentQuantity = await getCurrentQuantity(similar[0].name);
+              const shoppingListItemId = await addShoppingListItem(listId, similar[0].name, currentQuantity);
+              // Get the inventory item ID for the newly added item
+              const shoppingListItems = await getShoppingListItemsByListId(listId);
+              const addedItem = shoppingListItems.find(item => item.id === shoppingListItemId);
+              if (addedItem) {
+                updateSessionChanges(addedItem.inventoryItemId, {
+                  inventoryItemId: addedItem.inventoryItemId,
+                  originalQuantity: null, // null means item didn't exist before this session
+                });
+              }
+              setSearchQuery('');
+              await loadData();
+            }
+          },
+          {
+            text: 'Não, criar novo', onPress: async () => {
+              const currentQuantity = await getCurrentQuantity(name);
+              const shoppingListItemId = await addShoppingListItem(listId, name, currentQuantity);
+              // Get the inventory item ID for the newly added item
+              const shoppingListItems = await getShoppingListItemsByListId(listId);
+              const addedItem = shoppingListItems.find(item => item.id === shoppingListItemId);
+              if (addedItem) {
+                updateSessionChanges(addedItem.inventoryItemId, {
+                  inventoryItemId: addedItem.inventoryItemId,
+                  originalQuantity: null, // null means item didn't exist before this session
+                });
+              }
+              setSearchQuery('');
+              await loadData();
+            }
+          },
+          { text: 'Cancelar', style: 'cancel' },
+        ]
+      );
+      return;
+    }
+
+    const currentQuantity = await getCurrentQuantity(name);
+    const shoppingListItemId = await addShoppingListItem(listId, name, currentQuantity);
+    // Get the inventory item ID for the newly added item
+    const shoppingListItems = await getShoppingListItemsByListId(listId);
+    const addedItem = shoppingListItems.find(item => item.id === shoppingListItemId);
+    if (addedItem) {
+      updateSessionChanges(addedItem.inventoryItemId, {
+        inventoryItemId: addedItem.inventoryItemId,
+        originalQuantity: null, // null means item didn't exist before this session
+      });
+    }
+    setSearchQuery('');
+    await loadData();
   }, [searchQuery, listId, loadData, updateSessionChanges]);
 
   const handlePlus = useCallback(async (item: InventoryItem) => {
@@ -305,22 +382,6 @@ export default function AddProductToShoppingListScreen() {
     );
   }, [shoppingListByInventoryId, handlePlus, handleMinus]);
 
-  const renderInventoryRowForSection = useCallback(({ item }: { item: InventoryItem }) => {
-    const listInfo = shoppingListByInventoryId.get(item.id);
-    const isOnList = !!listInfo;
-
-    return (
-      <ProductSearchRow
-        productName={item.productName}
-        stockQuantity={item.quantity}
-        listQuantity={listInfo?.quantity}
-        isOnList={isOnList}
-        onPlus={() => handlePlus(item)}
-        onMinus={() => handleMinus(item)}
-      />
-    );
-  }, [shoppingListByInventoryId, handlePlus, handleMinus]);
-
   return (
     <ScreenContainer>
       <View style={styles.header}>
@@ -339,7 +400,7 @@ export default function AddProductToShoppingListScreen() {
                 paddingHorizontal: 16,
                 gap: 12,
               }}>
-                <Chip icon="plus" mode="outlined" onPress={handleAddNewProduct}>
+                <Chip icon="plus" mode="outlined">
                   Criar "{searchQuery.trim()}"
                 </Chip>
                 <Text style={{ color: theme.colors.onSurfaceVariant, fontSize: 13 }}>
@@ -382,7 +443,7 @@ export default function AddProductToShoppingListScreen() {
             data: collapsedCategories.has(s.title) ? [] : s.data,
           }))}
           keyExtractor={(item) => item.id.toString()}
-          renderItem={renderInventoryRowForSection}
+          renderItem={renderInventoryRow}
           renderSectionHeader={({ section }) => {
             const fullCount = categorySections.find(s => s.title === section.title)?.data.length ?? 0;
             const isCollapsed = collapsedCategories.has(section.title);

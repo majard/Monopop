@@ -43,3 +43,7 @@ credentials.json
 
 
 changes
+
+coverage/
+
+resize-icon.js

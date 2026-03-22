@@ -1,0 +1,369 @@
+# .coderabbit.yaml
+# Monopop — CodeRabbit configuration v2
+# https://docs.coderabbit.ai/guides/configure-coderabbit
+
+language: "en-US"
+
+reviews:
+  profile: "chill"
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: true
+  review_status: true
+  collapse_walkthrough: false
+
+  path_filters:
+    - "!**/node_modules/**"
+    - "!**/android/app/build/**"
+    - "!**/android/app/.cxx/**"
+    - "!**/android/build/**"
+    - "!**/.gradle/**"
+    - "!**/package-lock.json"
+    - "!**/yarn.lock"
+    - "!docs/**"
+    - "!**/*.gif"
+    - "!**/*.png"
+    - "!**/*.jpg"
+    - "!**/*.webp"
+    - "!src/__tests__/**"
+    - "!specs/**"
+
+  path_instructions:
+
+    # --- Database: migrations ---
+    - path: "src/database/migrations/**"
+      instructions: |
+        Versioned migration system tracked via PRAGMA user_version. Currently at V10
+        in production. Each migration runs exactly once on existing devices.
+
+        Rules:
+        - Migrations must be strictly additive and idempotent. Never suggest DROP,
+          RENAME COLUMN, or any destructive operation on existing installs.
+        - Destructive changes require a new migration version, never an edit to an existing one.
+        - PRAGMA foreign_keys cannot run inside withTransactionAsync in expo-sqlite —
+          must run outside the transaction, with re-enable in finally. Known constraint,
+          not a bug.
+        - Indexes were added in V8 after profiling: getLowestPriceForProducts dropped
+          from 1287ms to 5ms. New index suggestions are welcome but require a specific
+          query justification.
+
+    # --- Database: queries ---
+    - path: "src/database/database.ts"
+      instructions: |
+        Central query file. expo-sqlite with New Architecture (JSI) — no JSON bridge.
+        WAL mode with explicit PRAGMAs: synchronous=NORMAL, temp_store=memory,
+        cache_size=-8000.
+
+        Focus on:
+        - N+1 patterns: batch functions (getLowestPriceForProducts,
+          getLastUnitPricesForProductsAtStore, getLastUnitPricesForProducts) return
+          Map<productId, value> for O(1) lookup. New multi-item queries should follow
+          this pattern.
+        - Write operations on multiple tables must be wrapped in transactions.
+        - SQLite coerces empty string to NULL. Where the distinction matters
+          (user explicitly cleared vs never set), use a sentinel value like '__blank__'
+          and translate at read time. Flag any new string column that might need it.
+        - YYYY-MM-DD dates from SQLite are UTC midnight in JS. Fix: append T00:00:00
+          before parseISO (date-fns) to force local interpretation. Flag any new date
+          handling that doesn't follow this pattern.
+
+    # --- Database: repositories ---
+    - path: "src/database/repositories/**"
+      instructions: |
+        Thin repository layer over database.ts. Business logic belongs in hooks.
+        Flag any repository method containing conditional logic beyond query building.
+
+    # --- Database: models ---
+    - path: "src/database/models/**"
+      instructions: |
+        TypeScript types for database rows. SQLite has no strict types — models must
+        accurately reflect nullable fields. Casting without null checks is a common
+        silent bug here.
+
+    # --- Units: utils ---
+    - path: "src/utils/units.ts"
+      instructions: |
+        Core unit conversion. All values stored in atomic units (grams, ml, units)
+        throughout the app. Display conversion happens only at the UI boundary via a
+        factor system. Never suggest storing display values or converting at the DB layer.
+
+        Precision rules (critical):
+        - pricePaid + packageSize are the invariants (directly observed by the user).
+        - pricePerUnit is always derived, never stored as source of truth.
+        - An earlier version stored pricePerUnit as canonical — floating point drift
+          made the problem visible immediately (user typed R$14.00, got R$14.0000000003).
+          This was a deliberate architecture fix. Do not suggest reverting it.
+        - Flag any new computation that uses a derived value as input to another
+          derivation — this is how drift compounds.
+
+    # --- Units: PriceTriangle ---
+    - path: "src/components/PriceTriangle.tsx"
+      instructions: |
+        Constraint satisfaction UI: three mutually dependent fields (price per package,
+        package size, price per unit) where editing any two derives the third in real time.
+
+        Do not suggest removing or simplifying these patterns:
+        - Dual-track lastTouched: ref for synchronous constraint math + state for React's
+          visual derived-field indicator. Required under React 18's concurrent renderer.
+        - Under New Architecture (Fabric), state updaters can run during render. Calling
+          another component's setState inside a setCents updater throws. Pattern: track
+          cents in a ref alongside state, compute at handler top level, call both setters
+          sequentially — never nested.
+        - embedded prop on SearchablePickerDialog: nested Modal inside Modal breaks on
+          Android. embedded mode renders without its own Portal/Modal, using ScrollView +
+          map instead of FlatList (FlatList collapses without explicit height inside
+          another Modal). Intentional.
+
+    # --- Context ---
+    - path: "src/context/**"
+      instructions: |
+        Two intentionally separate contexts — do not suggest merging:
+        - ListContext: listId + setListId only. Screens that only need selection don't
+          pay the data overhead.
+        - ListDataContext: data dependent on listId.
+
+        BottomTabNavigator receives key={listId} — intentional: remounting the navigator
+        on list switch clears all tab local state without explicit reset logic.
+
+    # --- Hooks ---
+    - path: "src/hooks/**"
+      instructions: |
+        Primary state layer. Own the async lifecycle between SQLite and UI.
+
+        Focus on:
+        - useEffect/useCallback/useMemo deps: incomplete = stale closures,
+          excessive = unnecessary re-runs.
+        - Mounted/loading refs: loadingRef and mountedRef guard against dirty tracking
+          firing on mount or during async loads. Without loadingRef, setState inside
+          loadAll triggered dirty tracking before load finished, marking screens as
+          modified on open. Flag async hooks that don't guard against this.
+        - Cleanup: hooks with subscriptions, intervals, or async operations must return
+          a cleanup function. Flag missing cleanups.
+        - Dependency cycles: if two useCallback functions reference each other through
+          dep arrays, fix by storing both in refs (updated each render, read
+          imperatively). Pattern exists in codebase — flag new cycles.
+        - Cohesion: one concern per hook. Flag hooks mixing unrelated state or UI + data.
+
+    - path: "src/hooks/useInventoryItem.ts"
+      instructions: |
+        Optimistic updates: saves quantity to DB immediately for responsive +/− controls.
+        EditInventoryItemScreen uses initialQuantityRef to revert on discard — not
+        batching the save, which would break HomeScreen behavior. Do not suggest
+        changing to a deferred save pattern.
+
+    - path: "src/hooks/useImportEngine.ts"
+      instructions: |
+        Exposes injectable callbacks (applyMatch, applyNew) instead of fixed behavior.
+        Reused for both inventory and shopping list imports with different behaviors —
+        zero component duplication. Do not suggest inlining or splitting.
+
+    - path: "src/hooks/useListImportEngine.ts"
+      instructions: |
+        List-specific import engine, uses the same injectable callback pattern as
+        useImportEngine. Keep consistent with that pattern.
+
+    - path: "src/hooks/useRetroPrompt.tsx"
+      instructions: |
+        Handles first-time unit configuration: triggers retroactive reference price
+        calculation from purchase history. User confirms package size of last purchase;
+        historically accurate reference price created with zero data loss. Complex by
+        necessity — do not suggest simplifications that lose historical data.
+
+    # --- Screens ---
+    - path: "src/screens/**"
+      instructions: |
+        React Native Paper (MD3) + React Navigation. Bare workflow.
+
+        Focus on:
+        - Business logic in hooks or db layer, not in screens.
+        - Objects/arrays as props without useMemo/useCallback cause re-renders in lists.
+        - SafeAreaView uses explicit edges (['top', 'left', 'right']) — bottom tabs
+          manage the bottom safe area. Do not suggest removing this pattern.
+
+    - path: "src/screens/ShoppingListScreen.tsx"
+      instructions: |
+        Two-phase loading is intentional:
+        - Phase 1: main data via single JOIN — list interactive immediately.
+        - Phase 2: getLowestPriceForProducts in background via .then() — informational,
+          not blocking.
+        Do not suggest a single load or a global loading state that blocks interaction.
+
+        manualPrices ref: protects manually edited prices across store switches.
+        Critical UX — do not suggest removing.
+
+        Price suggestion lookup is strictly store-scoped:
+        store-specific ref → base ref → last invoice at that store → null.
+        Never falls back across stores. Cross-store contamination silently corrupts
+        price memory — the core value of the app.
+
+        isFirstLoad ref: without it, useFocusEffect resets the selected store every
+        time the user returns from another tab. Do not suggest removing.
+
+    - path: "src/screens/EditInventoryItemScreen.tsx"
+      instructions: |
+        Dirty tracking guarded by loadingRef and mountedRef.
+        initialQuantityRef handles optimistic save from useInventoryItem.
+        Derived stats (avg weekly consumption, 90-day avg/low price) are intentional
+        product decisions — not scope creep.
+
+    # --- Components ---
+    - path: "src/components/**"
+      instructions: |
+        Focus on:
+        - React.memo: ShoppingListItemCard does granular field-by-field comparison to
+          avoid re-renders on background price load. New list item components should
+          follow this pattern.
+        - MaterialCommunityIcons instead of Paper Checkbox: Paper has overflow:hidden
+          on Android causing icon clipping. Using the icon directly is intentional.
+        - ConfirmationModal is in its own file deliberately: defined inside parent,
+          React recreated it on every re-render, resetting modal state mid-flow. Silent
+          production bug. Do not suggest inlining it.
+
+    - path: "src/components/InventoryList.tsx"
+      instructions: |
+        Detects sortOrder==='category' internally and switches between DraggableFlatList
+        and SectionList without exposing it to HomeScreen. Encapsulation is intentional:
+        drag across categories would implicitly change a product's categoryId.
+        Do not suggest lifting sort logic to HomeScreen.
+
+    - path: "src/components/SearchablePickerDialog.tsx"
+      instructions: |
+        Has embedded mode for use inside another Modal (Android nested Modal behavior
+        is problematic). In embedded mode: no Portal/Modal, ScrollView + map instead
+        of FlatList. FlatList collapses without explicit height inside another Modal
+        on Android. Do not suggest using FlatList in embedded mode.
+
+    # --- Navigation ---
+    - path: "src/navigation/**"
+      instructions: |
+        React Navigation Stack + Bottom Tabs.
+        BottomTabNavigator key={listId} — intentional remount on list switch.
+        Route params should be validated — no runtime type safety from React Navigation.
+
+    # --- Utils ---
+    - path: "src/utils/importParsers.ts"
+      instructions: |
+        Fuzzy text import for real-world messy input. Intentionally permissive —
+        generates per-product suggestions the user confirms, including bulk acceptance.
+        Do not suggest stricter matching that would require clean input.
+
+    - path: "src/utils/listImportUtils.ts"
+      instructions: |
+        List import utilities. Same permissive matching philosophy as importParsers.ts.
+
+    - path: "src/utils/similarityUtils.ts"
+      instructions: |
+        Similarity scoring for product name matching. Runs against the full product
+        list on every import parse — performance matters. Flag O(n²) patterns or
+        unnecessary string allocations.
+
+    - path: "src/utils/sortUtils.ts"
+      instructions: |
+        User-configurable sort. Flag any sort that isn't stable or that changes
+        reference equality of unchanged items (causes re-renders in memoized lists).
+
+    # --- Styles ---
+    - path: "src/styles/**"
+      instructions: |
+        StyleSheet objects only. Flag any style defined inline inside a FlatList
+        renderItem — creates new object references on every render, defeating React.memo.
+
+    # --- Types ---
+    - path: "src/types/**"
+      instructions: |
+        Navigation types. Route params should be exhaustive. Flag any screen using
+        useRoute without typed params.
+
+    # --- Android ---
+    - path: "android/**"
+      instructions: |
+        Bare workflow, Windows, Expo SDK 54, New Architecture enabled.
+
+        gradlew clean is intentionally broken (CMake + Reanimated v4 + New Architecture
+        on Windows). Workaround: manually delete android/app/.cxx, android/app/build,
+        android/build. Do NOT suggest fixing the clean task — upstream issue.
+
+        ABI splits: arm64 (~38MB), armeabi-v7a legacy (~30MB).
+        versionCode must stay in sync between app.json and build.gradle — mismatch
+        caused a rejected Play Store submission previously.
+
+        Two applicationIds on device:
+        - com.mahjard.monopop (release)
+        - com.mahjard.monopop.dev (debug, applicationIdSuffix)
+
+    # --- Expo config ---
+    - path: "app.json"
+      instructions: |
+        No app.config.js — intentional. Do not suggest migrating without a concrete
+        dynamic config requirement. versionCode must stay in sync with build.gradle.
+
+  auto_review:
+    enabled: true
+    drafts: false
+
+  finishing_touches:
+    enabled: true
+  
+  auto_title_placeholder: "@coderabbitai"
+
+
+  high_level_summary_instructions: |
+    Generate a PR description with the following structure:
+
+    ## What changed
+    One paragraph summary of what this PR does, written for a technical audience.
+    Focus on the why, not just the what.
+
+    ## Key decisions
+    Bullet list of non-obvious technical decisions made in this PR.
+    Skip trivial changes.
+
+    ## Testing notes
+    What to verify manually when reviewing. Be specific — name screens, flows,
+    or edge cases worth checking.
+
+    Keep the tone direct and technical. No fluff.
+
+additional_instructions: |
+  IMPORTANT CONTEXT — READ BEFORE REVIEWING:
+  This is the final PR in a sequential chain of ~280 commits of accumulated work
+  (master → develop → feature branches → feature/units). This PR represents the
+  current production state of the app. Review it as a complete, shipping codebase —
+  not as a work in progress.
+
+  Consequences for your review:
+  - Flag real bugs and issues normally — this is the final state.
+  - Context from earlier PRs in the chain is available in the repository history.
+
+  This project is both a production app with real daily users and a technical
+  engineering portfolio.
+
+  At the end of EVERY PR review, include this section:
+
+  ## 🧠 Technical highlights (for README / portfolio)
+
+  List up to 5 decisions from this PR that a senior engineer would consider
+  non-obvious or worth noting. Use precise English technical terminology.
+
+  Format:
+  **[Technique/Pattern]** — [what was done, one sentence] — [why the approach
+  is non-trivial or which trade-off it resolves]
+
+  Worth noting:
+  - Performance decisions with measurable impact
+  - Non-conventional state management with clear justification
+  - Explicit trade-offs (e.g., referential stability via useCallback vs readability)
+  - Non-obvious bugs fixed (e.g., behavior differs between debug and release builds)
+  - Architectural decisions that prevent future problems
+
+  Not worth noting:
+  - Trivial refactors or renames
+  - Obvious TypeScript type additions
+  - Style or formatting changes
+  - Anything already documented in the README
+
+  If the PR contains nothing technically notable, write only:
+  "No technical highlights in this PR."
+
+chat:
+  auto_reply: true

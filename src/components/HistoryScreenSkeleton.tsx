@@ -1,21 +1,11 @@
-import React, { useEffect, useRef } from 'react';
+import React from 'react';
 import { View, StyleSheet, Animated } from 'react-native';
 import { Surface, useTheme } from 'react-native-paper';
+import { useSkeletonOpacity } from '../hooks/useSkeletonOpacity';
 
 export default function HistoryScreenSkeleton() {
   const theme = useTheme();
-  const opacityAnim = useRef(new Animated.Value(0.4)).current;
-
-  useEffect(() => {
-    const pulse = Animated.loop(
-      Animated.sequence([
-        Animated.timing(opacityAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
-        Animated.timing(opacityAnim, { toValue: 0.4, duration: 1000, useNativeDriver: true }),
-      ])
-    );
-    pulse.start();
-    return () => pulse.stop();
-  }, [opacityAnim]);
+  const opacity = useSkeletonOpacity();
 
   const bar = (width: number | string, height: number, style?: object) => (
     <View style={[{ width, height, borderRadius: 4, backgroundColor: theme.colors.surfaceVariant }, style]} />
@@ -39,8 +29,7 @@ export default function HistoryScreenSkeleton() {
   );
 
   return (
-    <Animated.View style={{ opacity: opacityAnim, padding: 16, gap: 10 }}>
-      {/* Summary card skeleton */}
+    <Animated.View style={{ opacity, padding: 16, gap: 10 }}>
       <Surface style={[s.summaryCard, { backgroundColor: theme.colors.surface }]}>
         {bar('30%', 12, { marginBottom: 14 })}
         <View style={s.summaryRow}>

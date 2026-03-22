@@ -17,10 +17,11 @@ interface SearchablePickerDialogProps {
   items: { id: number; name: string }[];
   selectedId: number | null;
   onSelect: (id: number) => void;
-  onCreateNew: (name: string) => void;
+  onCreateNew: (name: string) => void | Promise<void>;
   title: string;
   placeholder?: string;
   embedded?: boolean;
+  selectedName?: string | null; // fallback when selectedId is null
 }
 
 export function SearchablePickerDialog({
@@ -33,6 +34,7 @@ export function SearchablePickerDialog({
   title,
   placeholder = "Buscar...",
   embedded = false,
+  selectedName,
 }: SearchablePickerDialogProps) {
   const theme = useTheme();
   const [searchText, setSearchText] = useState("");
@@ -46,11 +48,16 @@ export function SearchablePickerDialog({
   const normalizedInput = searchText.trim().toLowerCase();
 
   const filteredItems = useMemo(() => {
-    if (!normalizedInput) return items;
-    return items.filter((item) =>
-      item.name.toLowerCase().includes(normalizedInput)
-    );
-  }, [items, normalizedInput]);
+    const list = !normalizedInput
+      ? items
+      : items.filter(item => item.name.toLowerCase().includes(normalizedInput));
+
+    return [...list].sort((a, b) => {
+      if (a.id === selectedId) return -1;
+      if (b.id === selectedId) return 1;
+      return 0;
+    });
+  }, [items, normalizedInput, selectedId]);
 
   const exactMatch = useMemo(() => {
     if (!normalizedInput) return false;
@@ -68,10 +75,17 @@ export function SearchablePickerDialog({
     }
   };
 
-  const handleCreateNew = () => {
-    onCreateNew(searchText.trim());
-    if (!embedded) {
-      onDismiss();
+  const handleCreateNew = async () => {
+    try {
+      await onCreateNew(searchText.trim());
+      if (!embedded) {
+        onDismiss();
+      } else {
+        setSearchText(''); // clear so full list shows
+      }
+    } catch (error) {
+      console.error('Error creating new item:', error);
+      // Keep modal open on error so user can try again or cancel
     }
   };
 
@@ -80,7 +94,8 @@ export function SearchablePickerDialog({
       title={item.name}
       onPress={() => handleSelectItem(item.id)}
       right={(props) =>
-        selectedId === item.id && <List.Icon {...props} icon="check" />
+        (selectedId === item.id || (!selectedId && selectedName === item.name))
+        && <List.Icon {...props} icon="check" />
       }
     />
   );
@@ -108,15 +123,30 @@ export function SearchablePickerDialog({
     }
 
     if (embedded) {
+      const newStoreEntry = selectedName && !items.find(i => i.name === selectedName)
+        ? { id: -1, name: selectedName }
+        : null;
+
       return (
         <ScrollView style={styles.listContainer}>
+          {newStoreEntry && (
+            <List.Item
+              key="new-store"
+              title={newStoreEntry.name}
+              right={(props) => <List.Icon {...props} icon="check" />}
+              titleStyle={{ color: theme.colors.primary }}
+              left={(props) => <List.Icon {...props} icon="store-plus" />}
+            />
+          )}
           {filteredItems.map((item) => (
             <List.Item
               key={item.id}
               title={item.name}
               onPress={() => handleSelectItem(item.id)}
               right={(props) =>
-                selectedId === item.id && <List.Icon {...props} icon="check" />
+                (selectedId === item.id || selectedName === item.name)
+                  ? <List.Icon {...props} icon="check" />
+                  : null
               }
             />
           ))}

@@ -29,9 +29,22 @@ interface ConfirmInvoiceModalProps {
   loading?: boolean;
   updateReferencePrices?: boolean;
 }
+
+export const ConfirmInvoiceModal: React.FC<ConfirmInvoiceModalProps> = ({
+  visible,
+  stores,
+  defaultStoreName,
+  total,
+  onConfirm,
+  onDismiss,
+  loading = false,
+  updateReferencePrices = true,
+}) => {
+  const theme = useTheme();
+  const [storeName, setStoreName] = useState('');
   const [date, setDate] = useState(new Date());
   const [datePickerVisible, setDatePickerVisible] = useState(false);
-  const [updateRef, setUpdateRef] = useState(true);
+  const [updateRef, setUpdateRef] = useState(updateReferencePrices);
 
   useEffect(() => {
     if (visible) {
@@ -69,6 +82,7 @@ interface ConfirmInvoiceModalProps {
             visible={visible}
             items={stores}
             selectedId={stores.find(s => s.name === storeName)?.id ?? null}
+            selectedName={storeName || null}
             onSelect={handleStoreSelect}
             onCreateNew={handleCreateNew}
             title="Selecionar loja"

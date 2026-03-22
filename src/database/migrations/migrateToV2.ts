@@ -147,7 +147,11 @@ export async function migrateToV2(db: SQLite.SQLiteDatabase) {
   const qhOldExists = (await db.getFirstAsync(`SELECT name FROM sqlite_master WHERE type='table' AND name='quantity_history_old_v1';`)) !== null;
 
   if (qhOldExists && historyPopulated === 0) {
-    await db.runAsync(`
+    // Record COUNT(*) from quantity_history_old_v1 before performing INSERT
+    const originalCount = (await db.getFirstAsync<{'COUNT(*)': number}>(`SELECT COUNT(*) FROM quantity_history_old_v1;`))?.['COUNT(*)'] ?? 0;
+    
+    // Execute the INSERT into the new table
+    const insertResult = await db.runAsync(`
       INSERT OR IGNORE INTO inventory_history (inventoryItemId, date, quantity, createdAt)
       SELECT
         ii.id,
@@ -159,6 +163,14 @@ export async function migrateToV2(db: SQLite.SQLiteDatabase) {
       JOIN products np ON pov.name = np.name
       JOIN inventory_items ii ON ii.productId = np.id;
     `);
+
+    // Verify the number of rows inserted equals the original count
+    const insertedCount = insertResult.changes ?? 0;
+    const targetCount = (await db.getFirstAsync<{'COUNT(*)': number}>(`SELECT COUNT(*) FROM inventory_history;`))?.['COUNT(*)'] ?? 0;
+
+    if (insertedCount !== originalCount || targetCount !== originalCount) {
+      throw new Error(`Row count mismatch during quantity_history migration: original=${originalCount}, inserted=${insertedCount}, target=${targetCount}. Transaction rolled back.`);
+    }
   }
 
   // --- 4. Clean up old tables ---

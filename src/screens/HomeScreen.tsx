@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { View, Alert, Modal, Pressable, StyleSheet } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import {
@@ -28,9 +28,12 @@ import { SortMenu } from "../components/SortMenu";
 import { AddItemButton } from "../components/AddItemButton";
 import InventoryList from "../components/InventoryList";
 import ContextualHeader from "../components/ContextualHeader";
-import { deleteInventoryItem } from "../database/database";
+import { deleteInventoryItem, getLists, getSetting } from "../database/database";
 import { useListContext } from "../context/ListContext";
 import { ActionMenuButton } from "../components/ActionMenuButton";
+import InventoryListSkeleton from "../components/InventoryListSkeleton";
+import { useMoveToList } from "../hooks/useMoveToList";
+import { ItemPickerDialog } from "../components/ItemPickerDialog";
 
 type HomeScreenNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
@@ -44,12 +47,16 @@ export default function HomeScreen() {
   const theme = useTheme();
   const styles = createHomeScreenStyles(theme);
 
-  const [sortOrder, setSortOrder] = useState<SortOrder>("custom");
+  const [sortOrder, setSortOrder] = useState<SortOrder>('category');
   const [isImportModalVisible, setIsImportModalVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [actionsVisible, setActionsVisible] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [moveListPickerVisible, setMoveListPickerVisible] = useState(false);
+  const [lists, setLists] = useState<{ id: number; name: string }[]>([]);
+
 
   const {
     inventoryItems,
@@ -61,6 +68,7 @@ export default function HomeScreen() {
 
   const { listName, handleListNameSave, handleListDelete } = useList(listId);
 
+  const { moveItems } = useMoveToList(loadInventoryItems);
   const handleImportButtonClick = useCallback(() => {
     setIsImportModalVisible(true);
   }, []);
@@ -85,6 +93,32 @@ export default function HomeScreen() {
     setSelectedIds([]);
   }, []);
 
+
+  // load lists on mount
+  useEffect(() => {
+    getLists().then(setLists);
+  }, []);
+
+  const handleMoveSelected = useCallback(() => {
+    if (selectedIds.length === 0) return;
+    setMoveListPickerVisible(true);
+  }, [selectedIds]);
+
+  const handleMoveConfirm = useCallback(async (targetListId: number) => {
+    setMoveListPickerVisible(false);
+    const targetList = lists.find(l => l.id === targetListId);
+    if (!targetList) return;
+    const itemsToMove = inventoryItems.filter(i => selectedIds.includes(i.id));
+    await moveItems(
+      itemsToMove.map(i => ({ id: i.id, productId: i.productId, productName: i.productName })),
+      targetList,
+    );
+    handleExitSelectionMode();
+  }, [selectedIds, lists, inventoryItems, moveItems, handleExitSelectionMode]);
+
+
+
+
   const saveStockList = useCallback(async () => {
     try {
       for (const inventoryItem of inventoryItems) {
@@ -99,7 +133,8 @@ export default function HomeScreen() {
 
   const copyStockList = useCallback(async () => {
     try {
-      const text = generateStockListText(inventoryItems);
+      const copyMessage = await getSetting('copyMessage');
+      const text = generateStockListText(inventoryItems, copyMessage);
       await Clipboard.setStringAsync(text);
       Alert.alert(
         "Lista copiada!",
@@ -141,19 +176,22 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      loadInventoryItems();
+      loadInventoryItems().finally(() => setInitialLoading(false));
     }, [sortOrder, loadInventoryItems])
   );
 
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ContextualHeader 
-        listName={listName} 
+    <SafeAreaView
+      style={styles.container}
+      edges={['top', 'left', 'right']} // exclui bottom — tab navigator já cuida
+    >
+      <ContextualHeader
+        listName={listName}
         onListNameSave={handleListNameSave}
         onListDelete={handleListDelete}
       />
-      
+
       <View style={[homeStyles.topRow, { borderBottomColor: theme.colors.outlineVariant }]}>
         <View style={homeStyles.searchWrapper}>
           <SearchBar searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
@@ -176,6 +214,11 @@ export default function HomeScreen() {
           </Text>
           <View style={{ flexDirection: 'row' }}>
             <IconButton
+              icon="swap-horizontal"
+              onPress={handleMoveSelected}
+              disabled={selectedIds.length === 0}
+            />
+            <IconButton
               icon="delete"
               iconColor={theme.colors.error}
               onPress={handleDeleteSelected}
@@ -189,16 +232,24 @@ export default function HomeScreen() {
         </View>
       )}
 
-      <InventoryList
-        inventoryItems={filteredInventoryItems}
-        handleInventoryItemOrderChange={handleProductOrderChange}
-        onInventoryItemUpdated={loadInventoryItems}
-        isSelectionMode={isSelectionMode}
-        selectedIds={selectedIds}
-        onToggleSelect={handleToggleSelect}
-        onLongPressStart={handleEnterSelectionMode}
-        sortOrder={sortOrder}
-      />
+
+      {
+        initialLoading ? (
+          <InventoryListSkeleton />
+        ) : (
+          <InventoryList
+            inventoryItems={filteredInventoryItems}
+            handleInventoryItemOrderChange={handleProductOrderChange}
+            onInventoryItemUpdated={loadInventoryItems}
+            isSelectionMode={isSelectionMode}
+            selectedIds={selectedIds}
+            onToggleSelect={handleToggleSelect}
+            onLongPressStart={handleEnterSelectionMode}
+            sortOrder={sortOrder}
+          />
+
+        )
+      }
       <AddItemButton
         onPress={() => navigation.navigate("AddInventoryItem", { listId })}
         label="Adicionar ao Inventário"
@@ -208,6 +259,14 @@ export default function HomeScreen() {
         setIsImportModalVisible={setIsImportModalVisible}
         loadItems={loadInventoryItems}
         listId={listId}
+      />
+      <ItemPickerDialog
+        visible={moveListPickerVisible}
+        onDismiss={() => setMoveListPickerVisible(false)}
+        items={lists.filter(l => l.id !== listId)} // exclude current list
+        selectedId={null}
+        onSelect={handleMoveConfirm}
+        title="Mover para lista"
       />
       <Modal
         visible={actionsVisible}
@@ -229,7 +288,7 @@ export default function HomeScreen() {
               paddingTop: 12,
               elevation: 8,
             }}
-            onPress={() => {}}
+            onPress={() => { }}
           >
             <View style={{
               width: 40, height: 4, borderRadius: 2,
@@ -278,7 +337,7 @@ export default function HomeScreen() {
           </Pressable>
         </Pressable>
       </Modal>
-    </SafeAreaView>
+    </SafeAreaView >
   );
 }
 
