@@ -39,5 +39,7 @@ package-lock.json
 
 android/app/keystore.jks
 android/app/keystore.properties
+credentials.json
+
 
 changes
