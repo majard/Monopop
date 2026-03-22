@@ -458,8 +458,8 @@ export default function EditInventoryItem() {
       }
       if (shoppingListItem?.id === -1 && !originalSli) {
         await addShoppingListItem(
-          inventoryItem.listId,
-          inventoryItem.productName,
+          selectedListId !== inventoryItem.listId ? selectedListId : inventoryItem.listId,
+          name,
           slQuantity ?? 1,
           slPrice,
         );

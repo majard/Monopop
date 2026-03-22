@@ -500,7 +500,7 @@ export default function BackupScreen() {
           onAcceptAllSuggestions={engine.handleAcceptAll}
           onAddToExisting={engine.handleUseExisting}
           onCreateNew={engine.handleCreateNew}
-          onSkipImport={engine.handleCancel}
+          onSkipImport={engine.handleSkipCurrent}
           onCancelAllImports={engine.handleCancel}
           onUpdateCurrentItem={(item) => {
             engine.setCurrentMatchItem({

@@ -108,13 +108,13 @@ export default function HomeScreen() {
     setMoveListPickerVisible(false);
     const targetList = lists.find(l => l.id === targetListId);
     if (!targetList) return;
-    const itemsToMove = filteredInventoryItems.filter(i => selectedIds.includes(i.id));
+    const itemsToMove = inventoryItems.filter(i => selectedIds.includes(i.id));
     await moveItems(
       itemsToMove.map(i => ({ id: i.id, productId: i.productId, productName: i.productName })),
       targetList,
     );
     handleExitSelectionMode();
-  }, [selectedIds, lists, filteredInventoryItems, moveItems, handleExitSelectionMode]);
+  }, [selectedIds, lists, inventoryItems, moveItems, handleExitSelectionMode]);
 
 
 

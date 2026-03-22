@@ -38,6 +38,7 @@ export interface UseListImportEngineResult {
   handleUseExisting: () => Promise<void>;
   handleCreateNew: () => Promise<void>;
   handleAcceptAll: () => Promise<void>;
+  handleSkipCurrent: () => Promise<void>;
   handleCancel: () => void;
   summaryVisible: boolean;
   summaryResult: ListImportResult | null;
@@ -307,6 +308,18 @@ export function useListImportEngine(onSuccess: () => Promise<void>): UseListImpo
     });
   }, [currentMatchItem, findCandidates, finishImport, createProduct, handleGuardedResume]);
 
+  const handleSkipCurrent = useCallback(async () => {
+    if (!currentMatchItem) return;
+    await handleGuardedResume(async () => {
+      // Skip current item without adding any resolution
+      if (mountedRef.current) {
+        setConfirmationVisible(false);
+        setCurrentMatchItem(null);
+      }
+      await processNext(currentMatchItem.remaining, allProductsRef.current);
+    });
+  }, [currentMatchItem, processNext, handleGuardedResume]);
+
   const handleCancel = useCallback(() => {
     setConfirmationVisible(false);
     setCurrentMatchItem(null);
@@ -325,6 +338,7 @@ export function useListImportEngine(onSuccess: () => Promise<void>): UseListImpo
     handleUseExisting,
     handleCreateNew,
     handleAcceptAll,
+    handleSkipCurrent,
     handleCancel,
     summaryVisible,
     summaryResult,
