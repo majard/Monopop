@@ -37,7 +37,6 @@ export default function useInventory(listId: number, sortOrder: SortOrder, searc
   const loadInventoryItems = useCallback(async () => {
     try {
       const loaded = await getInventoryItems(listId);
-      console.log("Produtos carregados:", loaded);
       setInventoryItems(loaded);
     } catch (err) {
       console.error("Erro ao carregar produtos:", err);

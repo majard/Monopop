@@ -35,7 +35,7 @@ export const useList = (listId: number) => {
         style: "destructive",
         onPress: async () => {
           await deleteList(listId);
-          navigation.goBack();
+          navigation.navigate("MainTabs", { screen: "Lists", listId: undefined });
         },
       },
     ]);

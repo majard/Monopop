@@ -1,7 +1,7 @@
 import { InventoryItem, Product } from '../database/models';
 
 export type RootStackParamList = {
-  MainTabs: { listId?: number };
+  MainTabs: { listId?: number, screen?: keyof BottomTabParamList };
   AddProduct: {listId: number};
   AddInventoryItem: {listId: number};
   EditProduct: { product: Product };

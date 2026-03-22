@@ -38,7 +38,6 @@ export default function useProducts(listId: number, sortOrder: SortOrder, search
   const loadProducts = useCallback(async () => {
     try {
       const loaded = await getInventoryItems(listId);
-      console.log("Produtos carregados:", loaded);
       setProducts(loaded);
     } catch (err) {
       console.error("Erro ao carregar produtos:", err);

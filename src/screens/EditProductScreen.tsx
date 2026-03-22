@@ -70,7 +70,6 @@ export default function EditProductScreen() {
     if (product?.name) { // Ensure product and id exist before calling
       try {
         const data = await getInventoryHistory(product.name.toString());
-        console.log('\n\ndata', data);
         setHistory(data || []); 
       } catch (error) {
         console.error("Erro ao carregar histórico:", error);

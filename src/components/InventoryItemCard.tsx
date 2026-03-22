@@ -13,7 +13,7 @@ import { InventoryItem } from '../database/models';
 import { RootStackParamList } from '../types/navigation';
 import { createHomeScreenStyles } from '../styles/HomeScreenStyles';
 import { getEmojiForProduct } from '../utils/stringUtils';
-import { useProduct } from '../hooks/useProduct';
+import { useInventoryItem } from '../hooks/useInventoryItem';
 
 type ProductCardNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
@@ -24,24 +24,26 @@ interface InventoryItemCardProps {
   inventoryItem: InventoryItem;
   drag: () => void;
   isActive: boolean;
+  onInventoryItemUpdated?: () => void;
 }
 
 export const InventoryItemCard = ({
   inventoryItem,
   drag,
   isActive,
+  onInventoryItemUpdated,
 }: InventoryItemCardProps) => {
-  const navigation = useNavigation<InventoryItemCardNavigationProp>();
+  const navigation = useNavigation<ProductCardNavigationProp>();
   const theme = useTheme();
   const styles = createHomeScreenStyles(theme);
 
   const {
     quantity,
     updateInventoryItemQuantity,
-    confirmRemoveProduct,
+    confirmRemoveInventoryItem,
     startContinuousAdjustment,
     stopContinuousAdjustment,
-  } = useProduct({ productId: inventoryItem.id, initialQuantity: inventoryItem.quantity });
+  } = useInventoryItem({ inventoryItemId: inventoryItem.id, initialQuantity: inventoryItem.quantity, onInventoryItemUpdated });
 
 
   return (
@@ -70,7 +72,7 @@ export const InventoryItemCard = ({
               <IconButton
                 icon="delete"
                 size={20}
-                onPress={confirmRemoveProduct}
+                onPress={confirmRemoveInventoryItem}
                 iconColor={theme.colors.error}
                 testID={`delete-button-${inventoryItem.id}`}
               />

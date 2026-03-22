@@ -1,8 +1,8 @@
+import React, { useCallback } from 'react';
 import DraggableFlatList, {
     ScaleDecorator,
 } from "react-native-draggable-flatlist";
 import { InventoryItemCard } from './InventoryItemCard';
-import { useCallback } from 'react';
 import { createHomeScreenStyles } from '../styles/HomeScreenStyles';
 import { useTheme } from 'react-native-paper';
 import { InventoryItem } from '../database/models';
@@ -10,9 +10,10 @@ import { InventoryItem } from '../database/models';
 interface InventoryListProps {
     inventoryItems: InventoryItem[];
     handleInventoryItemOrderChange: (newOrder: InventoryItem[]) => void;
+    onInventoryItemUpdated?: () => void;
 }
 
-export default function InventoryList({  inventoryItems, handleInventoryItemOrderChange }: InventoryListProps) {
+export default function InventoryList({  inventoryItems, handleInventoryItemOrderChange, onInventoryItemUpdated }: InventoryListProps) {
     const theme = useTheme();
     const styles = createHomeScreenStyles(theme);
 
@@ -32,6 +33,7 @@ export default function InventoryList({  inventoryItems, handleInventoryItemOrde
                     inventoryItem={item}
                     drag={drag}
                     isActive={isActive}
+                    onInventoryItemUpdated={onInventoryItemUpdated}
                 />
             </ScaleDecorator>
         ),
