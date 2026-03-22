@@ -95,14 +95,19 @@ export default function ShoppingListScreen() {
     try {
       await concludeShoppingForListWithInvoice(listId, storeName);
       
-      // Save used store to defaultStoreId
-      const store = stores.find(s => s.name === storeName);
-      if (store) {
-        await setSetting('defaultStoreId', store.id.toString());
-      }
-      
       setConfirmVisible(false);
       await loadData();
+      
+      // Best-effort save of last used store (non-blocking)
+      const store = stores.find(s => s.name === storeName);
+      if (store) {
+        try {
+          await setSetting('lastUsedStoreId', store.id.toString());
+        } catch (error) {
+          console.error('Failed to save last used store:', error);
+          // Don't rethrow - checkout success should not be affected
+        }
+      }
     } catch (error) {
       console.error('Erro ao concluir compras:', error);
     } finally {
