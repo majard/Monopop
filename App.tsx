@@ -4,7 +4,8 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { PaperProvider, MD3LightTheme } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { Text, Button } from 'react-native-paper';
 import { initializeDatabase, getSetting } from './src/database/database';
 import MainScreen from './src/screens/MainScreen';
 import AddProductScreen from './src/screens/AddProductScreen';
@@ -40,12 +41,14 @@ function AppContent() {
   const [initialRoute, setInitialRoute] = useState<'Lists' | 'MainTabs'>('Lists');
   const [initialParams, setInitialParams] = useState<any>({});
   const [isReady, setIsReady] = useState(false);
+  const [initError, setInitError] = useState<Error | null>(null);
+
 
   useEffect(() => {
     const initializeApp = async () => {
       try {
         await initializeDatabase();
-        
+
         // Read settings to determine initial route
         const [openLastList, listMode, lastOpenedListId, defaultListId] = await Promise.all([
           getSetting('openLastList'),
@@ -69,15 +72,41 @@ function AppContent() {
             setInitialParams({ listId: targetListId });
           }
         }
-        
+
         setIsReady(true);
       } catch (error) {
+        setInitError(error as Error);
+        setIsReady(true);
         console.error('Error initializing app:', error);
       }
     };
 
     initializeApp();
   }, []);
+
+  if (initError) {
+    return (
+      <SafeAreaProvider>
+        <PaperProvider theme={theme}>
+          <View style={styles.errorContainer}>
+            <Text variant="headlineSmall">Erro ao inicializar</Text>
+            <Text variant="bodyMedium" style={styles.errorMessage}>
+              {initError.message}
+            </Text>
+            <Button
+              mode="contained"
+              onPress={() => { setInitError(null); setIsReady(false); }}
+            >
+              Tentar novamente
+            </Button>
+            <Text variant="bodySmall" style={styles.errorMessage}>
+              Se o problema persistir, reinstale o aplicativo
+            </Text>
+          </View>
+        </PaperProvider>
+      </SafeAreaProvider>
+    );
+  }
 
   if (!isReady) return null;
 
@@ -95,36 +124,36 @@ function AppContent() {
         },
       }}
     >
-      <Stack.Screen 
-        name="Lists" 
+      <Stack.Screen
+        name="Lists"
         component={ListsScreen}
         options={{ title: 'Suas Listas', headerShown: false }}
       />
-      <Stack.Screen 
-        name="MainTabs" 
+      <Stack.Screen
+        name="MainTabs"
         component={MainScreen}
         options={{ headerShown: false }}
         initialParams={initialParams}
       />
-      
-      <Stack.Screen 
-        name="AddProduct" 
-        component={AddProductScreen} 
+
+      <Stack.Screen
+        name="AddProduct"
+        component={AddProductScreen}
         options={{ title: 'Adicionar Produto', headerShown: false }}
       />
-      <Stack.Screen 
-        name="EditInventoryItem" 
-        component={EditInventoryItemScreen}  
+      <Stack.Screen
+        name="EditInventoryItem"
+        component={EditInventoryItemScreen}
         options={{ title: 'Editar Produto', headerShown: false }}
       />
       <Stack.Screen
         name="AddList"
-        options={{title: 'Adicionar Lista'}}
+        options={{ title: 'Adicionar Lista' }}
         component={AddListScreen}
       />
       <Stack.Screen
         name="AddInventoryItem"
-        options={{title: 'Adicionar Produto ao Estoque', headerShown: false}}
+        options={{ title: 'Adicionar Produto ao Estoque', headerShown: false }}
         component={AddInventoryItemScreen}
       />
       <Stack.Screen
@@ -200,5 +229,16 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+    gap: 16,
+  },
+  errorMessage: {
+    textAlign: 'center',
+    opacity: 0.7,
   },
 });
