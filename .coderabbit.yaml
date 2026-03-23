@@ -297,6 +297,38 @@ reviews:
         No app.config.js — intentional. Do not suggest migrating without a concrete
         dynamic config requirement. versionCode must stay in sync with build.gradle.
 
+    - path: "**/*"
+      instructions: |
+        This project is both a production app with real daily users and a technical
+        engineering portfolio.
+
+        At the end of EVERY PR review, include this section:
+
+        ## 🧠 Technical highlights (for README / portfolio)
+
+        List up to 5 decisions from this PR that a senior engineer would consider
+        non-obvious or worth noting. Use precise English technical terminology.
+
+        Format:
+        **[Technique/Pattern]** — [what was done, one sentence] — [why the approach
+        is non-trivial or which trade-off it resolves]
+
+        Worth noting:
+        - Performance decisions with measurable impact
+        - Non-conventional state management with clear justification
+        - Explicit trade-offs (e.g., referential stability via useCallback vs readability)
+        - Non-obvious bugs fixed (e.g., behavior differs between debug and release builds)
+        - Architectural decisions that prevent future problems
+
+        Not worth noting:
+        - Trivial refactors or renames
+        - Obvious TypeScript type additions
+        - Style or formatting changes
+        - Anything already documented in the README
+
+        If the PR contains nothing technically notable, write only:
+        "No technical highlights in this PR."
+
   auto_review:
     enabled: true
     drafts: false
@@ -323,47 +355,6 @@ reviews:
     or edge cases worth checking.
 
     Keep the tone direct and technical. No fluff.
-
-additional_instructions: |
-  IMPORTANT CONTEXT — READ BEFORE REVIEWING:
-  This is the final PR in a sequential chain of ~280 commits of accumulated work
-  (master → develop → feature branches → feature/units). This PR represents the
-  current production state of the app. Review it as a complete, shipping codebase —
-  not as a work in progress.
-
-  Consequences for your review:
-  - Flag real bugs and issues normally — this is the final state.
-  - Context from earlier PRs in the chain is available in the repository history.
-
-  This project is both a production app with real daily users and a technical
-  engineering portfolio.
-
-  At the end of EVERY PR review, include this section:
-
-  ## 🧠 Technical highlights (for README / portfolio)
-
-  List up to 5 decisions from this PR that a senior engineer would consider
-  non-obvious or worth noting. Use precise English technical terminology.
-
-  Format:
-  **[Technique/Pattern]** — [what was done, one sentence] — [why the approach
-  is non-trivial or which trade-off it resolves]
-
-  Worth noting:
-  - Performance decisions with measurable impact
-  - Non-conventional state management with clear justification
-  - Explicit trade-offs (e.g., referential stability via useCallback vs readability)
-  - Non-obvious bugs fixed (e.g., behavior differs between debug and release builds)
-  - Architectural decisions that prevent future problems
-
-  Not worth noting:
-  - Trivial refactors or renames
-  - Obvious TypeScript type additions
-  - Style or formatting changes
-  - Anything already documented in the README
-
-  If the PR contains nothing technically notable, write only:
-  "No technical highlights in this PR."
 
 chat:
   auto_reply: true
