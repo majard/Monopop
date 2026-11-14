@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, Alert, Platform } from 'react-native';
 import { Appbar, Card, Text, useTheme, Button, Divider, Portal, Dialog, ActivityIndicator, List } from 'react-native-paper';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -383,9 +383,11 @@ export default function BackupScreen() {
             <Text style={styles.description}>
               Exporta todos os seus dados. Use para fazer backup ou migrar para outro dispositivo.
             </Text>
-            <Button mode="contained" onPress={handleSaveToDevice} icon="download" style={styles.button}>
-              Salvar no dispositivo
-            </Button>
+            {Platform.OS === 'android' && (
+              <Button mode="contained" onPress={handleSaveToDevice} icon="download" style={styles.button}>
+                Salvar no dispositivo
+              </Button>
+            )}
             <Button mode="outlined" onPress={handleShare} icon="share-variant" style={styles.shareButton}>
               Compartilhar
             </Button>
