@@ -15,7 +15,7 @@ that idea made functional.
 
 ![Demo](docs/demo.gif)
 
-[⬇️ Download APK](https://github.com/majard/listai/releases) — requires Android. Enable "Install unknown apps" for your browser or file manager if prompted.
+[⬇️ Download APK](https://github.com/majard/Monopop/releases) — requires Android. Enable "Install unknown apps" for your browser or file manager if prompted.
 
 ---
 
@@ -463,7 +463,17 @@ src/
 ---
 
 ## Local build (Android)
+
+Install Node.js, npm, JDK 17+ and the Android SDK. For a signed release,
+create `android/app/keystore.properties` locally with `storeFile`,
+`storePassword`, `keyAlias` and `keyPassword`. Set `storeFile` to an
+absolute path or a path relative to `android/app`. Keep the keystore and
+its signing properties out of version control.
+
+From the repository root:
+
 ```bash
+npm install
 cd android
 ./gradlew assembleRelease
 
@@ -472,5 +482,4 @@ cd android
 # android/app/build/outputs/apk/release/monopop-1.7.0-legacy.apk  (armeabi-v7a)
 ```
 
-APK at `android/app/build/outputs/apk/release/`. Requires JDK 17+ and 
-Android SDK. `gradlew clean` needed after native changes.
+After changing native code, run `./gradlew clean` from `android` before rebuilding.
