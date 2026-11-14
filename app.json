@@ -15,6 +15,7 @@
       "**/*"
     ],
     "ios": {
+      "bundleIdentifier": "com.mahjard.monopop",
       "supportsTablet": true,
       "buildNumber": "5"
     },
